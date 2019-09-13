@@ -1,4 +1,4 @@
-from encoder.preprocess import preprocess_librispeech, preprocess_voxceleb1, preprocess_voxceleb2
+from encoder.preprocess import preprocess_librispeech, preprocess_voxceleb1, preprocess_voxceleb2, preprocess_vctk, preprocess_slr, preprocess_commonvoice
 from utils.argutils import print_args
 from pathlib import Path
 import argparse
@@ -7,7 +7,7 @@ import argparse
 if __name__ == "__main__":
     class MyFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionHelpFormatter):
         pass
-    
+
     parser = argparse.ArgumentParser(
         description="Preprocesses audio files from datasets, encodes them as mel spectrograms and "
                     "writes them to the disk. This will allow you to train the encoder. The "
@@ -29,7 +29,7 @@ if __name__ == "__main__":
     parser.add_argument("-o", "--out_dir", type=Path, default=argparse.SUPPRESS, help=\
         "Path to the output directory that will contain the mel spectrograms. If left out, "
         "defaults to <datasets_root>/SV2TTS/encoder/")
-    parser.add_argument("-d", "--datasets", type=str, 
+    parser.add_argument("-d", "--datasets", type=str,
                         default="librispeech_other,voxceleb1,voxceleb2", help=\
         "Comma-separated list of the name of the datasets you want to preprocess. Only the train "
         "set of these datasets will be used. Possible names: librispeech_other, voxceleb1, "
@@ -45,15 +45,23 @@ if __name__ == "__main__":
         args.out_dir = args.datasets_root.joinpath("SV2TTS", "encoder")
     assert args.datasets_root.exists()
     args.out_dir.mkdir(exist_ok=True, parents=True)
-    
+
     # Preprocess the datasets
     print_args(args, parser)
     preprocess_func = {
         "librispeech_other": preprocess_librispeech,
         "voxceleb1": preprocess_voxceleb1,
         "voxceleb2": preprocess_voxceleb2,
+        "vctk": preprocess_vctk,
     }
     args = vars(args)
     for dataset in args.pop("datasets"):
         print("Preprocessing %s" % dataset)
-        preprocess_func[dataset](**args)
+        if dataset[0:3] == "slr":
+            args["slr_dataset"] = dataset
+            preprocess_slr(**args)
+        elif dataset[0:2] == "cv":
+            args["lang"] = dataset[3:]
+            preprocess_commonvoice(**args)
+        else:
+            preprocess_func[dataset](**args)
