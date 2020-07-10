@@ -6,8 +6,12 @@ import csv
 import codecs
 import subprocess
 import random
+from multiprocess.pool import ThreadPool
+from shutil import rmtree
 
 # english
+# min=4 =  20,443 speakers
+# min=5 =  18,949 speakers
 # min=10 = 10,884 speakers
 # min=12 =  9,621 speakers
 # min=14 =  8,460 speakers
@@ -15,7 +19,7 @@ import random
 
 parser = argparse.ArgumentParser(description='Process common voice dataset for a language.')
 parser.add_argument('--lang', help='Language to process', type=str)
-parser.add_argument('--min', help='Minimum number of files per speaker', type=int, default=12)
+parser.add_argument('--min', help='Minimum number of files per speaker', type=int, default=5)
 parser.add_argument('--max', help='Maximum number of files per speaker', type=int, default=40)
 args = parser.parse_args()
 
@@ -52,7 +56,11 @@ print("Reduced speaker pool to {}".format(len(speaker_hash)))
 # sort the speaker_id/client_id by
 sorted_speakers = sorted(speaker_hash.keys())
 
-for si, speaker in enumerate(tqdm(sorted_speakers)):
+# if we have a speakers directory, remove it!
+if base_dir.joinpath("speakers").is_dir() == True:
+    rmtree(base_dir.joinpath("speakers"))
+
+def process_speaker(speaker):
     # print("Processing: i: {0} - {1}".format(si, speaker))
     speaker_paths = speaker_hash[speaker]
     if len(speaker_paths) > args.max:
@@ -63,7 +71,8 @@ for si, speaker in enumerate(tqdm(sorted_speakers)):
 
     for speaker_path in speaker_paths:
         source_path = clips_dir.joinpath(speaker_path)
-        dest_path = base_dir.joinpath("speakers", str(si))
+        # dest_path = base_dir.joinpath("speakers", str(si))
+        dest_path = base_dir.joinpath("speakers", speaker[:20])
 
         new_name = speaker_path.replace(".mp3", "") + ".wav"
         dest_file = dest_path.joinpath(new_name)
@@ -80,12 +89,24 @@ for si, speaker in enumerate(tqdm(sorted_speakers)):
             "-i",
             str(source_path),
             "-ar",
-            "24000",
+            # "24000",
+            "16000",
             str(dest_file)
         ]
         s = subprocess.call(convert_args)
 
-    #     break
-    # break
+
+with ThreadPool(8) as pool:
+    list(
+        tqdm(
+            pool.imap(
+                process_speaker,
+                sorted_speakers
+            ),
+            args.lang,
+            len(sorted_speakers),
+            unit="speakers"
+        )
+    )
 
 print("Done, thanks for playing...")
