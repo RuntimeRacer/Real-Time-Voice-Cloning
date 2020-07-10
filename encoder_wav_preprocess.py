@@ -1,4 +1,4 @@
-from encoder.preprocess import preprocess_librispeech, preprocess_voxceleb1, preprocess_voxceleb2, preprocess_vctk, preprocess_slr, preprocess_commonvoice, preprocess_nasjonal, preprocess_timit, preprocess_tedlium
+from encoder_wav.preprocess import preprocess_librispeech, preprocess_libritts, preprocess_voxceleb1, preprocess_voxceleb2, preprocess_vctk, preprocess_slr, preprocess_commonvoice, preprocess_nasjonal, preprocess_timit, preprocess_tedlium
 from utils.argutils import print_args
 from pathlib import Path
 import argparse
@@ -50,6 +50,7 @@ if __name__ == "__main__":
     print_args(args, parser)
     preprocess_func = {
         "librispeech_other": preprocess_librispeech,
+        "libritts_other": preprocess_libritts,
         "voxceleb1": preprocess_voxceleb1,
         "voxceleb2": preprocess_voxceleb2,
         "vctk": preprocess_vctk,
