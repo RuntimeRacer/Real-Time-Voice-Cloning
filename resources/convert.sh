@@ -25,8 +25,18 @@ run_with_lock(){
     )&
 }            
 
+total=$(find . -name "*.m4a" | wc -l)
+skipped=0
+converted=0
+
 N=32 # number of vCPU
 open_sem $N
 for f in $(find . -name "*.m4a"); do 
+    if [ -f "${f%.*}.wav" ]; then
+        let skipped=skipped+1
+        continue
+    fi
     run_with_lock ffmpeg -loglevel panic -i "$f" -ar 16000 "${f%.*}.wav"
+    let converted=converted+1
+    echo -ne "Total files: $total. Skipped $skipped already converted files; converted $converted new files."\\r
 done
