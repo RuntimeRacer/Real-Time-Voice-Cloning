@@ -1,6 +1,7 @@
 from encoder.preprocess import preprocess_librispeech, preprocess_voxceleb1, preprocess_voxceleb2
 from utils.argutils import print_args
 from pathlib import Path
+from config.config import system_config
 import argparse
 
 if __name__ == "__main__":
@@ -38,6 +39,7 @@ if __name__ == "__main__":
         "interrupted.")
     parser.add_argument("--no_trim", action="store_true", help=\
         "Preprocess audio without trimming silences (not recommended).")
+    parser.add_argument("-t", "--threads", type=int, default=system_config["threadpool_size"])
     args = parser.parse_args()
 
     # Verify webrtcvad is available
