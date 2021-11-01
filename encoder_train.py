@@ -20,7 +20,9 @@ if __name__ == "__main__":
     parser.add_argument("-m", "--models_dir", type=Path, default="encoder/saved_models/", help=\
         "Path to the output directory that will contain the saved model weights, as well as "
         "backups of those weights and plots generated during training.")
-    parser.add_argument("-v", "--vis_every", type=int, default=10, help= \
+    parser.add_argument("-v", "--vis_every", type=int, default=20, help= \
+        "Number of steps between updates of the loss and the plots.")
+    parser.add_argument("-p", "--profile_every", type=int, default=20, help= \
         "Number of steps between updates of the loss and the plots.")
     parser.add_argument("-u", "--umap_every", type=int, default=100, help= \
         "Number of steps between updates of the umap projection. Set to 0 to never update the "
@@ -36,6 +38,11 @@ if __name__ == "__main__":
     parser.add_argument("--visdom_server", type=str, default="http://localhost")
     parser.add_argument("--no_visdom", action="store_true", help= \
         "Disable visdom.")
+    parser.add_argument("-t", "--threads", type=int, default=8)
+    parser.add_argument("-bs", "--batch_size", type=int, default=64)
+    parser.add_argument("-ut", "--utterances", type=int, default=10)
+    parser.add_argument("-e", "--end_after", type=int, help= \
+        "Amount of steps to end training after; saving the model.")
     args = parser.parse_args()
     
     # Process the arguments

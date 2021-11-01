@@ -40,3 +40,20 @@ for f in $(find . -name "*.m4a"); do
     let converted=converted+1
     echo -ne "Total files: $total. Skipped $skipped already converted files; converted $converted new files."\\r
 done
+
+echo "Done converting audio files. Cleaning up..."
+
+find . -name "*.m4a" -delete
+echo Deleted $total files which were converted successfully.
+
+
+
+# deleted=0
+
+# for f in $(find . -name "*.m4a"); do 
+#     if [ -f "${f%.*}.wav" ]; then
+#         run_with_lock rm "$f"
+#         let deleted=deleted+1
+#     fi
+#     echo -ne "Total files: $total. Deleted $deleted files which were converted successfully."\\r
+# done

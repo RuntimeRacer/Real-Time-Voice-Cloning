@@ -13,15 +13,15 @@ def sync(device: torch.device):
     
 
 def train(run_id: str, clean_data_root: Path, models_dir: Path, umap_every: int, save_every: int,
-          backup_every: int, vis_every: int, force_restart: bool, visdom_server: str,
-          no_visdom: bool):
+          backup_every: int, vis_every: int, profile_every: int, force_restart: bool, visdom_server: str,
+          no_visdom: bool, threads: int, batch_size: int, utterances: int, end_after: int):
     # Create a dataset and a dataloader
     dataset = SpeakerVerificationDataset(clean_data_root)
     loader = SpeakerVerificationDataLoader(
         dataset,
-        speakers_per_batch,
-        utterances_per_speaker,
-        num_workers=8,
+        speakers_per_batch=batch_size,
+        utterances_per_speaker=utterances,
+        num_workers=threads,
     )
     
     # Setup the device on which to run the forward pass and the loss. These can be different, 
@@ -63,7 +63,7 @@ def train(run_id: str, clean_data_root: Path, models_dir: Path, umap_every: int,
     vis.log_implementation({"Device": device_name})
     
     # Training loop
-    profiler = Profiler(summarize_every=10, disabled=False)
+    profiler = Profiler(summarize_every=profile_every, disabled=False)
     for step, speaker_batch in enumerate(loader, init_step):
         profiler.tick("Blocking, waiting for batch (threaded)")
         
@@ -74,7 +74,7 @@ def train(run_id: str, clean_data_root: Path, models_dir: Path, umap_every: int,
         embeds = model(inputs)
         sync(device)
         profiler.tick("Forward pass")
-        embeds_loss = embeds.view((speakers_per_batch, utterances_per_speaker, -1)).to(loss_device)
+        embeds_loss = embeds.view((batch_size, utterances, -1)).to(loss_device)
         loss, eer = model.loss(embeds_loss)
         sync(loss_device)
         profiler.tick("Loss")
@@ -97,7 +97,7 @@ def train(run_id: str, clean_data_root: Path, models_dir: Path, umap_every: int,
             backup_dir.mkdir(exist_ok=True)
             projection_fpath = backup_dir.joinpath("%s_umap_%06d.png" % (run_id, step))
             embeds = embeds.detach().cpu().numpy()
-            vis.draw_projections(embeds, utterances_per_speaker, step, projection_fpath)
+            vis.draw_projections(embeds, utterances, step, projection_fpath)
             vis.save()
 
         # Overwrite the latest version of the model
@@ -121,3 +121,13 @@ def train(run_id: str, clean_data_root: Path, models_dir: Path, umap_every: int,
             }, backup_fpath)
             
         profiler.tick("Extras (visualizations, saving)")
+
+        # End training
+        if end_after != 0 and step % end_after == 0:
+            print("Step %d processed. Ending training." % step)
+            torch.save({
+                "step": step + 1,
+                "model_state": model.state_dict(),
+                "optimizer_state": optimizer.state_dict(),
+            }, state_fpath)
+            break
