@@ -39,8 +39,6 @@ if __name__ == "__main__":
     parser.add_argument("--no_visdom", action="store_true", help= \
         "Disable visdom.")
     parser.add_argument("-t", "--threads", type=int, default=8)
-    parser.add_argument("-bs", "--batch_size", type=int, default=64)
-    parser.add_argument("-ut", "--utterances", type=int, default=10)
     parser.add_argument("-e", "--end_after", type=int, help= \
         "Amount of steps to end training after; saving the model.")
     args = parser.parse_args()
