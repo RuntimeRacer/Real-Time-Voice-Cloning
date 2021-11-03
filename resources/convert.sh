@@ -36,7 +36,7 @@ for f in $(find . -name "*.m4a"); do
         let skipped=skipped+1
         continue
     fi
-    run_with_lock ffmpeg -loglevel panic -i "$f" -ar 24000 "${f%.*}.wav"
+    run_with_lock ffmpeg -loglevel panic -i "$f" -ar 16000 "${f%.*}.wav"
     let converted=converted+1
     echo -ne "Total files: $total. Skipped $skipped already converted files; converted $converted new files."\\r
 done
