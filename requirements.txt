@@ -13,4 +13,6 @@ inflect
 PyQt5
 multiprocess
 numba
-webrtcvad; platform_system != "Windows"
+ # If webrtcvad does not work, you'll need ffmpeg & visual C++ tools installed: 
+ # https://stackoverflow.com/questions/40018405/cannot-open-include-file-io-h-no-such-file-or-directory/50210015#50210015
+webrtcvad
