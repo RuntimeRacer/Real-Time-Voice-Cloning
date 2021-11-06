@@ -63,3 +63,14 @@ or
 `python demo_toolbox.py`  
 
 depending on whether you downloaded any datasets. If you are running an X-server or if you have the error `Aborted (core dumped)`, see [this issue](https://github.com/CorentinJ/Real-Time-Voice-Cloning/issues/11#issuecomment-504733590).
+
+## Wiki
+- **How it all works** (WIP - [stub](https://github.com/CorentinJ/Real-Time-Voice-Cloning/wiki/How-it-all-works), you might be better off reading my thesis until it's done)
+- [**Training models yourself**](https://github.com/CorentinJ/Real-Time-Voice-Cloning/wiki/Training)
+- **Training with other data/languages** (WIP - see [here](https://github.com/CorentinJ/Real-Time-Voice-Cloning/issues/30#issuecomment-507864097) for now)
+- [**TODO and planned features**](https://github.com/CorentinJ/Real-Time-Voice-Cloning/wiki/TODO-&-planned-features) 
+
+## Contribution
+Feel free to open issues or PRs for any problem you may encounter, typos that you see or aspects that are confusing. Contributions are welcome, open an issue or email me if you have something you want to work on. I will ignore emails regarding technical assistance, please make an issue instead.
+
+I'm working full-time as of June 2019, so I can't maintain this repo as much as I wish I could - but I try to reply to every issue.

@@ -1,0 +1,74 @@
+FROM python:3.6-buster
+
+WORKDIR "/workspace"
+
+RUN apt-get clean \
+        && apt-get update \
+        && apt-get install -y wget \
+          automake autoconf sox libtool subversion libatlas3-base gfortran \
+        && apt-get -y autoremove
+
+# ADD requirements.txt requirements.txt
+# RUN pip install -r requirements.txt
+
+# kaldi (specific version!)
+ENV KALDI_VERSION=094d22746b604fd20c2b8730966c9d0bc9f2170b
+RUN cd /opt && \
+  git clone https://github.com/kaldi-asr/kaldi.git && \
+  cd kaldi && \
+  git checkout $KALDI_VERSION && \
+  cd tools && \
+  make -j $(NPROC) && \
+  make openblas && \
+  cd ../src && \
+  ./configure --shared --openblas-root=/opt/kaldi/tools/OpenBLAS/install && \
+  make depend -j $(NPROC) && \
+  make -j 4
+
+
+# OpenGrm-Ngram
+ENV OPENGRM_NGRAM=1.3.4
+RUN cd /opt && \
+  wget "http://www.opengrm.org/twiki/pub/GRM/NGramDownload/opengrm-ngram-$OPENGRM_NGRAM.tar.gz" && \
+  tar -xf "opengrm-ngram-$OPENGRM_NGRAM.tar.gz" && \
+  rm "opengrm-ngram-$OPENGRM_NGRAM.tar.gz" && \
+  cd "opengrm-ngram-$OPENGRM_NGRAM" && \
+  export LD_LIBRARY_PATH=/opt/kaldi/tools/openfst/lib && \
+  export CPLUS_INCLUDE_PATH=/opt/kaldi/tools/openfst/src/include && \
+  ./configure --prefix=`pwd`/install && \
+  make -j 4 && \
+  make install
+
+# Phonetisaurus
+ENV PHONETISAURUS_VERSION=64719ca40c17cb70d810fffadac52c97984ca539
+RUN cd /opt && \
+  git clone https://github.com/AdolfVonKleist/Phonetisaurus.git && \
+  cd Phonetisaurus && \
+  git checkout $PHONETISAURUS_VERSION && \
+  ./configure \
+    --enable-static=no \
+    --with-openfst-includes=/opt/kaldi/tools/openfst/include \
+    --with-openfst-libs=/opt/kaldi/tools/openfst/lib && \
+    make -j 4
+
+# aligner
+ENV MONTREAL_ALIGNER_VERSION=1.0.1
+RUN cd /opt && \
+  git clone https://github.com/MontrealCorpusTools/Montreal-Forced-Aligner.git && \
+  cd Montreal-Forced-Aligner && \
+  python thirdparty/kaldi_binaries.py /opt/kaldi && \
+  python thirdparty/opengrm_ngram_binaries.py /opt/opengrm-ngram-$OPENGRM_NGRAM && \
+  python thirdparty/phonetisaurus_binaries.py /opt/Phonetisaurus && \
+  pip install -r requirements.txt && \
+  mkdir pretrained_models && \
+  cd pretrained_models && \
+  wget https://github.com/MontrealCorpusTools/Montreal-Forced-Aligner/raw/dc09bb3d7302bc66eb8fdef543b44aa0fab61b07/pretrained_models/english.zip && \
+  cd ../ && \
+  python freezing/freeze.py
+
+WORKDIR "/opt/Montreal-Forced-Aligner/dist/montreal-forced-aligner"
+
+# only requirement is TextGridTools
+RUN pip install tgt
+
+CMD ["/bin/bash"]

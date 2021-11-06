@@ -1,4 +1,4 @@
-from synthesizer.preprocess import preprocess_dataset
+from synthesizer.preprocess import preprocess_libritts # TODO evaluate this one
 from synthesizer.hparams import hparams
 from utils.argutils import print_args
 from pathlib import Path
@@ -56,4 +56,5 @@ if __name__ == "__main__":
     # Preprocess the dataset
     print_args(args, parser)
     args.hparams = hparams.parse(args.hparams)
-    preprocess_dataset(**vars(args))
+    # TODO evaluate this one
+    preprocess_libritts(**vars(args))
