@@ -24,8 +24,6 @@ if __name__ == "__main__":
         "interrupted.")
     parser.add_argument("--hparams", type=str, default="", help=\
         "Hyperparameter overrides as a comma-separated list of name-value pairs")
-    parser.add_argument("--no_trim", action="store_true", help=\
-        "Preprocess audio without trimming silences (not recommended).")
     parser.add_argument("--no_alignments", action="store_true", help=\
         "Use this option when dataset does not include alignments\
         (these are used to split long audio files into sub-utterances.)")
@@ -44,14 +42,12 @@ if __name__ == "__main__":
     args.out_dir.mkdir(exist_ok=True, parents=True)
 
     # Verify webrtcvad is available
-    if not args.no_trim:
-        try:
-            import webrtcvad
-        except:
-            raise ModuleNotFoundError("Package 'webrtcvad' not found. This package enables "
-                "noise removal and is recommended. Please install and try again. If installation fails, "
-                "use --no_trim to disable this error message.")
-    del args.no_trim
+    try:
+        import webrtcvad
+    except:
+        raise ModuleNotFoundError("Package 'webrtcvad' not found. This package enables "
+            "noise removal and is recommended. Please install and try again. If installation fails, "
+            "use --no_trim to disable this error message.")
 
     # Preprocess the dataset
     print_args(args, parser)

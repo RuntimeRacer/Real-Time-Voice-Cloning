@@ -7,23 +7,23 @@ from pathlib import Path
 import torch
 
 def sync(device: torch.device):
+    # FIXME
+    return
     # For correct profiling (cuda operations are async)
     if device.type == "cuda":
-        torch.cuda.synchronize()
-    else:
         torch.cuda.synchronize(device)
-    
 
 def train(run_id: str, clean_data_root: Path, models_dir: Path, umap_every: int, save_every: int,
-          backup_every: int, vis_every: int, profile_every: int, force_restart: bool, visdom_server: str,
-          no_visdom: bool, threads: int, end_after: int):
+          backup_every: int, vis_every: int, force_restart: bool, visdom_server: str,
+          no_visdom: bool):
     # Create a dataset and a dataloader
     dataset = SpeakerVerificationDataset(clean_data_root)
     loader = SpeakerVerificationDataLoader(
         dataset,
         speakers_per_batch,
         utterances_per_speaker,
-        num_workers=threads,
+        # num_workers=8,
+        num_workers=2,
     )
 
     # Setup the device on which to run the forward pass and the loss. These can be different,
@@ -31,7 +31,8 @@ def train(run_id: str, clean_data_root: Path, models_dir: Path, umap_every: int,
     # hyperparameters) faster on the CPU.
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # FIXME: currently, the gradient is None if loss_device is cuda
-    loss_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    loss_device = torch.device("cpu")
+    # loss_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Create the model and the optimizer
     model = SpeakerEncoder(device, loss_device)
@@ -65,7 +66,7 @@ def train(run_id: str, clean_data_root: Path, models_dir: Path, umap_every: int,
     vis.log_implementation({"Device": device_name})
 
     # Training loop
-    profiler = Profiler(summarize_every=profile_every, disabled=False)
+    profiler = Profiler(summarize_every=10, disabled=False)
     for step, speaker_batch in enumerate(loader, init_step):
         profiler.tick("Blocking, waiting for batch (threaded)")
 
@@ -123,13 +124,3 @@ def train(run_id: str, clean_data_root: Path, models_dir: Path, umap_every: int,
             }, backup_fpath)
 
         profiler.tick("Extras (visualizations, saving)")
-
-        # End training
-        if end_after != 0 and step % end_after == 0:
-            print("Step %d processed. Ending training." % step)
-            torch.save({
-                "step": step + 1,
-                "model_state": model.state_dict(),
-                "optimizer_state": optimizer.state_dict(),
-            }, state_fpath)
-            break
