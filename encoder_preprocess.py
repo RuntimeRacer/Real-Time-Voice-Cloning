@@ -1,4 +1,4 @@
-from encoder.preprocess import preprocess_librispeech, preprocess_voxceleb1, preprocess_voxceleb2, preprocess_vctk, preprocess_slr, preprocess_commonvoice, preprocess_nasjonal, preprocess_timit, preprocess_tedlium
+from encoder.preprocess import preprocess_librispeech, preprocess_voxceleb1, preprocess_voxceleb2, preprocess_libritts, preprocess_vctk, preprocess_slr, preprocess_commonvoice, preprocess_nasjonal, preprocess_timit, preprocess_tedlium
 from utils.argutils import print_args
 from pathlib import Path
 import argparse
@@ -36,20 +36,16 @@ if __name__ == "__main__":
     parser.add_argument("-s", "--skip_existing", action="store_true", help=\
         "Whether to skip existing output files with the same name. Useful if this script was "
         "interrupted.")
-    parser.add_argument("--no_trim", action="store_true", help=\
-        "Preprocess audio without trimming silences (not recommended).")
     parser.add_argument("-t", "--threads", type=int, default=8)
     args = parser.parse_args()
 
     # Verify webrtcvad is available
-    if not args.no_trim:
-        try:
-            import webrtcvad
-        except:
-            raise ModuleNotFoundError("Package 'webrtcvad' not found. This package enables "
-                "noise removal and is recommended. Please install and try again. If installation fails, "
-                "use --no_trim to disable this error message.")
-    del args.no_trim
+    try:
+        import webrtcvad
+    except:
+        raise ModuleNotFoundError("Package 'webrtcvad' not found. This package enables "
+            "noise removal and is recommended. Please install and try again. If installation fails, "
+            "use --no_trim to disable this error message.")
 
     # Process the arguments
     args.datasets = args.datasets.split(",")
@@ -62,8 +58,9 @@ if __name__ == "__main__":
     print_args(args, parser)
     preprocess_func = {
         "librispeech_other": preprocess_librispeech,
+        "libritts_other": preprocess_libritts,
         "voxceleb1": preprocess_voxceleb1,
-        "voxceleb2": preprocess_voxceleb2,
+        "voxceleb2": preprocess_voxceleb2,        
         "vctk": preprocess_vctk,
         "timit": preprocess_timit,
         "tedlium": preprocess_tedlium
@@ -71,14 +68,16 @@ if __name__ == "__main__":
     args = vars(args)
     for dataset in args.pop("datasets"):
         print("Preprocessing %s" % dataset)
-        if dataset[0:3] == "slr":
-            args["slr_dataset"] = dataset
-            preprocess_slr(**args)
-        elif dataset[0:2] == "cv":
-            args["lang"] = dataset[3:]
-            preprocess_commonvoice(**args)
-        elif dataset[0:8] == "nasjonal":
-            args["lang"] = dataset[9:]
-            preprocess_nasjonal(**args)
-        else:
-            preprocess_func[dataset](**args)
+        preprocess_func[dataset](**args)
+        # FIXME: Code for language based preprocessing, probably not needed.
+        # if dataset[0:3] == "slr":
+        #     args["slr_dataset"] = dataset
+        #     preprocess_slr(**args)
+        # elif dataset[0:2] == "cv":
+        #     args["lang"] = dataset[3:]
+        #     preprocess_commonvoice(**args)
+        # elif dataset[0:8] == "nasjonal":
+        #     args["lang"] = dataset[9:]
+        #     preprocess_nasjonal(**args)
+        # else:
+        #     preprocess_func[dataset](**args)

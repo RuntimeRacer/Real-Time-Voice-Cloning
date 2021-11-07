@@ -1,4 +1,4 @@
-from encoder_lang.data_objects.speaker_verification_dataset import SpeakerVerificationDataset
+from encoder.data_objects.speaker_verification_dataset import SpeakerVerificationDataset
 from datetime import datetime
 from time import perf_counter as timer
 
@@ -413,8 +413,8 @@ class Visualizations:
     def log_params(self):
         if self.disabled:
             return
-        from encoder_lang import params_data
-        from encoder_lang import params_model
+        from encoder import params_data
+        from encoder import params_model
         param_string = "<b>Model parameters</b>:<br>"
         for param_name in (p for p in dir(params_model) if not p.startswith("__")):
             value = getattr(params_model, param_name)
@@ -531,34 +531,6 @@ class Visualizations:
             self.projection_win = self.vis.matplot(plt, win=self.projection_win)
         if out_fpath is not None:
             plt.savefig(out_fpath, bbox_inches='tight', pad_inches=0.01)
-        plt.close()
-        plt.clf()
-    def draw_projections_lang(self, embeds, target, n_targets, step):
-        # max_speakers = min(max_speakers, len(colormap))
-        colors = [colormap[i] for i in target]
-
-        reducer = umap.UMAP(min_dist=0.0)
-        # reducer = umap.UMAP()
-        projected = reducer.fit_transform(embeds)
-        # projected = embeds
-        plt.figure(figsize=(10, 10), dpi=80)
-        plt.scatter(projected[:, 0], projected[:, 1], c=colors, alpha=0.6)
-
-        # plot limits
-        plt.gca().set_aspect("equal", "datalim")
-        # plt.xlim(-20, 20)
-        # plt.ylim(-20, 20)
-
-        # plot title
-        plt.title("Language projection (step {}, languages: {})".format(step, n_targets))
-
-        # does this work?
-        plt.tight_layout()
-
-        if not self.disabled:
-            self.lang_projection_win = self.vis.matplot(plt, win=self.lang_projection_win)
-        # if out_fpath is not None:
-        #     plt.savefig(out_fpath, bbox_inches='tight', pad_inches=0.01)
         plt.close()
         plt.clf()
 

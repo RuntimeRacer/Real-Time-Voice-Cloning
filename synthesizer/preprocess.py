@@ -9,16 +9,11 @@ from tqdm import tqdm
 import numpy as np
 import librosa
 import sys
-# import nltk
 
-# download punkt
-# nltk.download('punkt')
-
-def preprocess_librispeech(datasets_root: Path, out_dir: Path, n_processes: int, skip_existing: bool, hparams):
+def preprocess_dataset(datasets_root: Path, out_dir: Path, n_processes: int, skip_existing: bool, hparams, no_alignments: bool, datasets_name: str, subfolders: str):
     # Gather the input directories
-    dataset_root = datasets_root.joinpath("LibriSpeech")
-    input_dirs = [dataset_root.joinpath("train-clean-100"),
-                  dataset_root.joinpath("train-clean-360")]
+    dataset_root = datasets_root.joinpath(datasets_name)
+    input_dirs = [dataset_root.joinpath(subfolder.strip()) for subfolder in subfolders.split(",")]
     print("\n    ".join(map(str, ["Using data from:"] + input_dirs)))
     assert all(input_dir.exists() for input_dir in input_dirs)
 
@@ -32,8 +27,7 @@ def preprocess_librispeech(datasets_root: Path, out_dir: Path, n_processes: int,
 
     # Preprocess the dataset
     speaker_dirs = list(chain.from_iterable(input_dir.glob("*") for input_dir in input_dirs))
-    func = partial(preprocess_speaker, out_dir=out_dir, skip_existing=skip_existing,
-                   hparams=hparams)
+    func = partial(preprocess_speaker, out_dir=out_dir, skip_existing=skip_existing, hparams=hparams, no_alignments=no_alignments)
     job = Pool(n_processes).imap(func, speaker_dirs)
     for speaker_metadata in tqdm(job, datasets_name, len(speaker_dirs), unit="speakers"):
         for metadatum in speaker_metadata:
@@ -53,46 +47,7 @@ def preprocess_librispeech(datasets_root: Path, out_dir: Path, n_processes: int,
     print("Max mel frames length: %d" % max(int(m[4]) for m in metadata))
     print("Max audio timesteps length: %d" % max(int(m[3]) for m in metadata))
 
-def preprocess_libritts(datasets_root: Path, out_dir: Path, n_processes: int, skip_existing: bool, hparams):
-    # Gather the input directories
-    # input_dirs = [datasets_root.joinpath("dev-clean")]
-    input_dirs = [datasets_root.joinpath("train-clean-100"),
-                  datasets_root.joinpath("train-clean-360")]
-    print("\n    ".join(map(str, ["Using data from:"] + input_dirs)))
-    assert all(input_dir.exists() for input_dir in input_dirs)
-
-    # Create the output directories for each output file type
-    out_dir.joinpath("mels").mkdir(exist_ok=True)
-    out_dir.joinpath("audio").mkdir(exist_ok=True)
-
-    # Create a metadata file
-    metadata_fpath = out_dir.joinpath("train.txt")
-    metadata_file = metadata_fpath.open("a" if skip_existing else "w", encoding="utf-8")
-
-    # Preprocess the dataset
-    speaker_dirs = list(chain.from_iterable(input_dir.glob("*") for input_dir in input_dirs))
-    func = partial(preprocess_speaker, out_dir=out_dir, skip_existing=skip_existing,
-                   hparams=hparams, audio_extension=".wav")
-    job = Pool(n_processes).imap(func, speaker_dirs)
-    for speaker_metadata in tqdm(job, "LibriTTS", len(speaker_dirs), unit="speakers"):
-        for metadatum in speaker_metadata:
-            metadata_file.write("|".join(str(x) for x in metadatum) + "\n")
-    metadata_file.close()
-
-    # Verify the contents of the metadata file
-    with metadata_fpath.open("r", encoding="utf-8") as metadata_file:
-        metadata = [line.split("|") for line in metadata_file]
-    mel_frames = sum([int(m[4]) for m in metadata])
-    timesteps = sum([int(m[3]) for m in metadata])
-    sample_rate = hparams.sample_rate
-    hours = (timesteps / sample_rate) / 3600
-    print("The dataset consists of %d utterances, %d mel frames, %d audio timesteps (%.2f hours)." %
-          (len(metadata), mel_frames, timesteps, hours))
-    print("Max input length (text chars): %d" % max(len(m[5]) for m in metadata))
-    print("Max mel frames length: %d" % max(int(m[4]) for m in metadata))
-    print("Max audio timesteps length: %d" % max(int(m[3]) for m in metadata))
-
-def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, hparams, no_alignments: bool):
+def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, hparams, no_alignments: bool, audio_extension=".flac"):
     metadata = []
     for book_dir in speaker_dir.glob("*"):
         if no_alignments:
@@ -126,60 +81,35 @@ def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, hparams,
         else:
             # Process alignment file (LibriSpeech support)
             # Gather the utterance audios and texts
+            # Gather the utterance audios and texts
             try:
                 alignments_fpath = next(book_dir.glob("*.alignment.txt"))
-                with alignments_fpath.open("r") as alignments_file:
+                with alignments_fpath.open("r", encoding='utf-8') as alignments_file:
                     alignments = [line.rstrip().split(" ") for line in alignments_file]
             except StopIteration:
                 # A few alignment files will be missing
                 continue
 
             # Iterate over each entry in the alignments file
-            for wav_fname, words, end_times in alignments:
-                wav_fpath = book_dir.joinpath(wav_fname + ".flac")
+            for alignment in alignments:
+                # expand the alignment
+                # wav_fname, words, end_times
+                wav_fname = alignment[0]
+                words = alignment[1]
+                end_times = alignment[2]
+                transcript = " ".join(alignment[3:])
+
+                wav_fpath = book_dir.joinpath(wav_fname + audio_extension)
                 assert wav_fpath.exists()
                 words = words.replace("\"", "").split(",")
                 end_times = list(map(float, end_times.replace("\"", "").split(",")))
 
                 # Process each sub-utterance
-                wavs, texts = split_on_silences(wav_fpath, words, end_times, hparams)
+                wavs, texts = split_on_silences(wav_fpath, words, end_times, hparams, transcript)
                 for i, (wav, text) in enumerate(zip(wavs, texts)):
                     sub_basename = "%s_%02d" % (wav_fname, i)
                     metadata.append(process_utterance(wav, text, out_dir, sub_basename,
-                                                      skip_existing, hparams))
-    
-def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, hparams, audio_extension=".flac"):
-    metadata = []
-    for book_dir in speaker_dir.glob("*"):
-        # Gather the utterance audios and texts
-        try:
-            alignments_fpath = next(book_dir.glob("*.alignment.txt"))
-            with alignments_fpath.open("r", encoding='utf-8') as alignments_file:
-                alignments = [line.rstrip().split(" ") for line in alignments_file]
-        except StopIteration:
-            # A few alignment files will be missing
-            continue
-
-        # Iterate over each entry in the alignments file
-        for alignment in alignments:
-            # expand the alignment
-            # wav_fname, words, end_times
-            wav_fname = alignment[0]
-            words = alignment[1]
-            end_times = alignment[2]
-            transcript = " ".join(alignment[3:])
-
-            wav_fpath = book_dir.joinpath(wav_fname + audio_extension)
-            assert wav_fpath.exists()
-            words = words.replace("\"", "").split(",")
-            end_times = list(map(float, end_times.replace("\"", "").split(",")))
-
-            # Process each sub-utterance
-            wavs, texts = split_on_silences(wav_fpath, words, end_times, hparams, transcript)
-            for i, (wav, text) in enumerate(zip(wavs, texts)):
-                sub_basename = "%s_%02d" % (wav_fname, i)
-                metadata.append(process_utterance(wav, text, out_dir, sub_basename,
-                                                  skip_existing, hparams))
+                                                    skip_existing, hparams))      
 
     return [m for m in metadata if m is not None]
 

@@ -13,7 +13,6 @@ class SpeakerEncoder(nn.Module):
     def __init__(self, device, loss_device):
         super().__init__()
         self.loss_device = loss_device
-        # self.loss_device = device
 
         # Network defition
         self.lstm = nn.LSTM(input_size=mel_n_channels,
@@ -25,8 +24,6 @@ class SpeakerEncoder(nn.Module):
         self.relu = torch.nn.ReLU().to(device)
 
         # Cosine similarity scaling (with fixed initial parameter values)
-        # self.similarity_weight = nn.Parameter(torch.tensor([10.])).to(loss_device)
-        # self.similarity_bias = nn.Parameter(torch.tensor([-5.])).to(loss_device)
         self.similarity_weight = nn.Parameter(torch.tensor([10.]).to(loss_device))
         self.similarity_bias = nn.Parameter(torch.tensor([-5.]).to(loss_device))
 
@@ -86,8 +83,7 @@ class SpeakerEncoder(nn.Module):
         # Similarity matrix. The cosine similarity of already 2-normed vectors is simply the dot
         # product of these vectors (which is just an element-wise multiplication reduced by a sum).
         # We vectorize the computation for efficiency.
-        sim_matrix = torch.zeros(speakers_per_batch, utterances_per_speaker,
-                                 speakers_per_batch).to(self.loss_device)
+        sim_matrix = torch.zeros(speakers_per_batch, utterances_per_speaker, speakers_per_batch).to(self.loss_device)
 
         mask_matrix = 1 - np.eye(speakers_per_batch, dtype=np.int)
         for j in range(speakers_per_batch):

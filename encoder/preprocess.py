@@ -89,7 +89,8 @@ def _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir,
         # get all the audio files
         source_files = list(speaker_dir.glob("**/*.%s" % extension))
 
-        # cap at 75?
+        # cap at 75? 
+        # FIXME: Add a feature to normalize amount of files per speaker, based on average amount of files per speaker in the dataset, rather than an arbitrary value.
         if len(source_files) > 75:
             source_files = source_files[:75]
 
@@ -100,16 +101,12 @@ def _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir,
             if skip_existing and out_fname in existing_fnames:
                 continue
 
-            # Load and preprocess the waveform
+            # Load and preprocess the waveform, discard those that are too short
             wav = audio.preprocess_wav(in_fpath)
             if len(wav) < partials_n_frames:
                 continue
 
-            # Create the mel spectrogram, discard those that are too short
-            # frames = audio.wav_to_mel_spectrogram(wav)
-            # if len(frames) < partials_n_frames:
-            #     continue
-
+            # Create the mel spectrogram
             out_fpath = speaker_out_dir.joinpath(out_fname)
             np.save(out_fpath, wav)
             logger.add_sample(duration=len(wav) / sampling_rate)
@@ -136,18 +133,6 @@ def preprocess_librispeech(datasets_root: Path, out_dir: Path, skip_existing=Fal
         speaker_dirs = list(dataset_root.glob("*"))
         _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir, "flac",
                                  skip_existing, threads, logger)
-
-def preprocess_libritts(datasets_root: Path, out_dir: Path, skip_existing=False):
-    for dataset_name in libritts_datasets["train"]["clean"]:
-        # Initialize the preprocessing
-        dataset_root, logger = _init_preprocess_dataset(dataset_name, datasets_root, out_dir)
-        if not dataset_root:
-            return
-
-        # Preprocess all speakers
-        speaker_dirs = list(dataset_root.glob("*"))
-        _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir, "wav",
-                                 skip_existing, logger)
 
 def preprocess_voxceleb1(datasets_root: Path, out_dir: Path, skip_existing=False, threads=8):
     # Initialize the preprocessing
@@ -201,10 +186,10 @@ def preprocess_libritts(datasets_root: Path, out_dir: Path, skip_existing=False,
         
         # Preprocess all speakers
         speaker_dirs = list(dataset_root.glob("*"))
-        _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir, "flac",
+        _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir, "wav",
                                  skip_existing, threads, logger)
 
-def preprocess_vctk(datasets_root: Path, out_dir: Path, skip_existing=False):
+def preprocess_vctk(datasets_root: Path, out_dir: Path, skip_existing=False, threads=8):
     # Initialize the preprocessing
     dataset_name = "VCTK-Corpus"
     dataset_root, logger = _init_preprocess_dataset(dataset_name, datasets_root, out_dir)
@@ -216,9 +201,9 @@ def preprocess_vctk(datasets_root: Path, out_dir: Path, skip_existing=False):
     speaker_dirs = list(dataset_root.joinpath("wav48").glob("*"))
 
     _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir, "wav",
-                             skip_existing, logger)
+                             skip_existing, threads, logger)
 
-def preprocess_slr(datasets_root: Path, out_dir: Path, slr_dataset=None, skip_existing=False):
+def preprocess_slr(datasets_root: Path, out_dir: Path, slr_dataset=None, skip_existing=False, threads=8):
     for dataset_name in slr_datasets[slr_dataset]:
         # Initialize the preprocessing
         dataset_root, logger = _init_preprocess_dataset(dataset_name, datasets_root, out_dir)
@@ -228,9 +213,9 @@ def preprocess_slr(datasets_root: Path, out_dir: Path, slr_dataset=None, skip_ex
         # Preprocess all speakers
         speaker_dirs = list(dataset_root.glob("*"))
         _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir, "wav",
-                                 skip_existing, logger)
+                                 skip_existing, threads, logger)
 
-def preprocess_commonvoice(datasets_root: Path, out_dir: Path, lang=None, skip_existing=False):
+def preprocess_commonvoice(datasets_root: Path, out_dir: Path, lang=None, skip_existing=False, threads=8):
     # simple dataset path
     dataset_name = "CommonVoice/{0}/speakers".format(lang)
 
@@ -250,9 +235,9 @@ def preprocess_commonvoice(datasets_root: Path, out_dir: Path, lang=None, skip_e
     # speaker_dirs = speaker_dirs[9000:] (in-progress)
 
     _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir, "wav",
-                             skip_existing, logger)
+                             skip_existing, threads, logger)
 
-def preprocess_nasjonal(datasets_root: Path, out_dir: Path, lang=None, skip_existing=False):
+def preprocess_nasjonal(datasets_root: Path, out_dir: Path, lang=None, skip_existing=False, threads=8):
     # simple dataset path
     dataset_name = "nasjonal-bank/{0}/speakers".format(lang)
 
@@ -265,9 +250,9 @@ def preprocess_nasjonal(datasets_root: Path, out_dir: Path, lang=None, skip_exis
     speaker_dirs = sorted(list(dataset_root.glob("*")))
 
     _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir, "wav",
-                             skip_existing, logger)
+                             skip_existing, threads, logger)
 
-def preprocess_timit(datasets_root: Path, out_dir: Path, skip_existing=False):
+def preprocess_timit(datasets_root: Path, out_dir: Path, skip_existing=False, threads=8):
     # simple dataset path
     dataset_name = "TIMIT/speakers"
 
@@ -280,9 +265,9 @@ def preprocess_timit(datasets_root: Path, out_dir: Path, skip_existing=False):
     speaker_dirs = sorted(list(dataset_root.glob("*")))
 
     _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir, "wav",
-                             skip_existing, logger)
+                             skip_existing, threads, logger)
 
-def preprocess_tedlium(datasets_root: Path, out_dir: Path, skip_existing=False):
+def preprocess_tedlium(datasets_root: Path, out_dir: Path, skip_existing=False, threads=8):
     # simple dataset path
     dataset_name = "TEDLIUM_release-3/data/speakers_verified"
 
@@ -295,4 +280,4 @@ def preprocess_tedlium(datasets_root: Path, out_dir: Path, skip_existing=False):
     speaker_dirs = sorted(list(dataset_root.glob("*")))
 
     _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir, "wav",
-                             skip_existing, logger)
+                             skip_existing, threads, logger)

@@ -40,7 +40,6 @@ class Speaker:
         a = None
         with np.load(self.root.joinpath('combined.npz')) as data:
             utterances = self.utterance_cycler.sample(count)
-
             a = [(u,) + u.random_partial(n_frames, data) for u in utterances]
 
         return a
