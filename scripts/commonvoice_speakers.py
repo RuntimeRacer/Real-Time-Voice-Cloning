@@ -118,11 +118,11 @@ if out_dir != None:
 def process_speaker(speaker):
     # print("Processing: i: {0} - {1}".format(si, speaker))
     speaker_paths = speaker_hash[speaker]
-    if len(speaker_paths) > args.max:
+    #if len(speaker_paths) > args.max:
         # shuffle
-        random.shuffle(speaker_paths)
+    #    random.shuffle(speaker_paths)
 
-        speaker_paths = speaker_paths[0:args.max]
+    #    speaker_paths = speaker_paths[0:args.max]
 
     for source_path in speaker_paths:
         dest_path = out_dir.joinpath("speakers", speaker)
