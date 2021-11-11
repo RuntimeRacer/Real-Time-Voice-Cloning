@@ -12,7 +12,7 @@ from shutil import rmtree
 
 # Functions
 # _parse_speaker_data fetches validated speaker information from a .tsv file
-def _parse_speaker_data(dir: Path, clips_dir: Path, lang: str) -> (Dict):
+def _parse_speaker_data(dir: Path, clips_dir: Path, lang: str, min: int, max: int) -> (Dict):
     print("Reading Validated.tsv file for language {0}...".format(lang))
     speaker_hash = {}
     with codecs.open(dir.joinpath("validated.tsv"), "r", "utf-8") as val_in:
@@ -26,6 +26,19 @@ def _parse_speaker_data(dir: Path, clips_dir: Path, lang: str) -> (Dict):
 
             speaker_hash[client_id].append(clips_dir.joinpath(row["path"]))
     print("  - Found {0} total speakers for language {1}.".format(len(speaker_hash), lang))
+
+    # Filter speakers with too small dataset
+    speakers_to_remove = []
+    for speaker_id in speaker_hash:
+        if len(speaker_hash[speaker_id]) < min:
+            speakers_to_remove.append(speaker_id)
+
+    print("  - Pruning {0} speakers with less than {1} files...".format(len(speakers_to_remove), min))
+    for id in speakers_to_remove:
+        del speaker_hash[id]
+
+    print("  - Reduced speaker pool for language {0} to {1}.".format(lang, len(speaker_hash)))
+
     return speaker_hash
 
 # english CV 2
@@ -67,7 +80,7 @@ if args.lang != None:
     clips_dir = base_dir.joinpath("clips")
 
     # speaker data
-    speaker_hash = _parse_speaker_data(base_dir, clips_dir, args.lang)
+    speaker_hash = _parse_speaker_data(base_dir, clips_dir, args.lang, args.min, args.max)
 
     # stats
     language_count += 1
@@ -82,7 +95,7 @@ else:
         clips_dir = sub_dir.joinpath("clips")
 
         # speaker data
-        speakers = _parse_speaker_data(sub_dir, clips_dir, lang)
+        speakers = _parse_speaker_data(sub_dir, clips_dir, lang, args.min, args.max)
         speaker_hash = {**speaker_hash, **speakers}
 
         # stats
@@ -90,19 +103,6 @@ else:
 
 speaker_count = len(speaker_hash)
 print("Found {0} speakers across {1} languages.".format(speaker_count, language_count))
-
-# Filter speakers with too small dataset
-print("Pruning speakers with less than {0} files...".format(args.min))
-speakers_to_remove = []
-for speaker_id in speaker_hash:
-    if len(speaker_hash[speaker_id]) < args.min:
-        speakers_to_remove.append(speaker_id)
-
-print("  - Pruning {0} speakers...".format(len(speakers_to_remove)))
-for id in speakers_to_remove:
-    del speaker_hash[id]
-
-print("Reduced speaker pool to {0}".format(len(speaker_hash)))
 
 # sort the speaker_id/client_id by
 sorted_speakers = sorted(speaker_hash.keys())
