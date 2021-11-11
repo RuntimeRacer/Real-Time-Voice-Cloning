@@ -163,7 +163,6 @@ def preprocess_voxceleb1(datasets_root: Path, out_dir: Path, skip_existing=False
     _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir, "wav",
                              skip_existing, threads, logger)
 
-
 def preprocess_voxceleb2(datasets_root: Path, out_dir: Path, skip_existing=False, threads=8):
     # Initialize the preprocessing
     dataset_name = "voxceleb/VoxCeleb2"

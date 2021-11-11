@@ -32,7 +32,7 @@ voxceleb_datasets = {
         "test": ["voxceleb/VoxCeleb1/test_wav"]
     },
     "voxceleb2" : {
-        "train": ["voxceleb/VoxCeleb2/dev/aac"],
+        "train": ["voxceleb/VoxCeleb2/dev/wav"],
         "test": ["voxceleb/VoxCeleb2/test_wav"]
     }
 }
@@ -42,6 +42,7 @@ slr_datasets = {
     "slr42": ["slr42/km_kh_male/wavs"],
     "slr43": ["slr43/ne_np_female/wavs"],
     "slr44": ["slr44/su_id_male/wavs", "slr44/su_id_female/wavs"],
+    "slr51": [], # TED-LIUM v3
     "slr61": ["slr61/es_ar_male", "slr61/es_ar_female"],
     "slr63": ["slr63/ml_in_male", "slr63/ml_in_female"],
     "slr64": ["slr64/mr_in_female"],
@@ -59,7 +60,9 @@ slr_datasets = {
     "slr78": ["slr78/gu_in_male", "slr78/gu_in_female"],
     "slr79": ["slr79/kn_in_male", "slr79/kn_in_female"],
     "slr80": ["slr80/my_mm_female"],
-    "slr82": ["slr82/CN-Celeb/data"]
+    "slr82": ["slr82/CN-Celeb/data"],
+    "slr96": [],
+    "slr100": []
 }
 
 other_datasets = [

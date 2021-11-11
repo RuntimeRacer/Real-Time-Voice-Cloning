@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Small helper Script to convert files to .wav format.
-# Needs to be put into <path-to-VoxCeleb2>/raw/dev/aac
+# Small helper Script to convert files to .wav / .flac format.
+# Needs to be put into <path-to-VoxCeleb2>/raw/dev/aac or top level layer of datasets containing folder respectively
 #
 # TODO: Make this part of bootstrap
 #
@@ -25,26 +25,22 @@ run_with_lock(){
     )&
 }            
 
-total=$(find . -name "*.m4a" | wc -l)
+found=$(find . -iname "*.m4a" -o -iname "*.mp3" -o -iname "*.wav")
+total=$($found | wc -l)
 skipped=0
-converted=0
+deleted=0
 
-N=32 # number of vCPU
+N=8 # number of vCPU
 open_sem $N
-for f in $(find . -name "*.m4a"); do 
-    if [ -f "${f%.*}.wav" ]; then
+for f in $found; do 
+    if [ -f "${f%.*}.flac" ]; then
+        let deleted=deleted+1
+        run_with_lock rm "${f%.*}.flac"
+    else
         let skipped=skipped+1
-        continue
     fi
-    run_with_lock ffmpeg -loglevel panic -i "$f" -ar 16000 "${f%.*}.wav"
-    let converted=converted+1
-    echo -ne "Total files: $total. Skipped $skipped already converted files; converted $converted new files."\\r
+    echo -ne "Total files: $total. Skipped $skipped not converted files; deleted $deleted already converted files."\\r
 done
-
-echo "Done converting audio files. Cleaning up..."
-
-find . -name "*.m4a" -delete
-echo Deleted $total files which were converted successfully.
 
 
 
