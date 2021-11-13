@@ -1,4 +1,5 @@
-from encoder.preprocess import preprocess_librispeech, preprocess_voxceleb1, preprocess_voxceleb2, preprocess_libritts, preprocess_vctk, preprocess_slr, preprocess_commonvoice, preprocess_nasjonal, preprocess_timit, preprocess_tedlium
+from encoder import config
+from encoder.preprocess import encoder_preprocess_dataset, preprocess_librispeech_other, preprocess_voxceleb1, preprocess_voxceleb2, preprocess_libritts_other, preprocess_vctk, preprocess_slr, preprocess_commonvoice, preprocess_nasjonal, preprocess_timit, preprocess_tedlium
 from utils.argutils import print_args
 from pathlib import Path
 import argparse
@@ -29,10 +30,8 @@ if __name__ == "__main__":
         "Path to the output directory that will contain the mel spectrograms. If left out, "
         "defaults to <datasets_root>/SV2TTS/encoder/")
     parser.add_argument("-d", "--datasets", type=str,
-                        default="librispeech_other,voxceleb1,voxceleb2", help=\
-        "Comma-separated list of the name of the datasets you want to preprocess. Only the train "
-        "set of these datasets will be used. Possible names: librispeech_other, voxceleb1, "
-        "voxceleb2.")
+                        default="libritts_other:wav,voxceleb1:wav,voxceleb2:wav", help=\
+        "Comma-separated list of the name of the datasets you want to preprocess; plus the file type to be expected by the pre-processor.")
     parser.add_argument("-s", "--skip_existing", action="store_true", help=\
         "Whether to skip existing output files with the same name. Useful if this script was "
         "interrupted.")
@@ -48,27 +47,69 @@ if __name__ == "__main__":
             "use --no_trim to disable this error message.")
 
     # Process the arguments
+    # List of datasets
     args.datasets = args.datasets.split(",")
+
+    # Output dir for processed audio files
     if not hasattr(args, "out_dir"):
         args.out_dir = args.datasets_root.joinpath("SV2TTS", "encoder")
     assert args.datasets_root.exists()
     args.out_dir.mkdir(exist_ok=True, parents=True)
 
-    # Preprocess the datasets
+    # Print the arguments
     print_args(args, parser)
-    preprocess_func = {
-        "librispeech_other": preprocess_librispeech,
-        "libritts_other": preprocess_libritts,
-        "voxceleb1": preprocess_voxceleb1,
-        "voxceleb2": preprocess_voxceleb2,        
-        "vctk": preprocess_vctk,
+
+    # Helper function for dataset merge TODO: Move this out of here and into a generic function
+    def merge_datasets_paths(datasets: dict):
+        result = []
+        for l in datasets.values():
+            result = result.extend(l)
+        return result
+
+    # Mapping of datasets to config values. TODO: Make this more dynamic
+    dataset_mapping = {
+        "librispeech_other": config.librispeech_datasets["train"]["other"],
+        "libritts_other": config.libritts_datasets["train"]["other"],
+        "voxceleb1": config.voxceleb_datasets["voxceleb1"]["train"],
+        "voxceleb2": config.voxceleb_datasets["voxceleb2"]["train"],
+        "vctk": config.other_datasets["VCTK"],
         "timit": preprocess_timit,
-        "tedlium": preprocess_tedlium
+        "tedlium": preprocess_tedlium,
+        "commonvoice_all": config.commonvoice_datasets["commonvoice-7"]["all"],
+        "slr_all": merge_datasets_paths(config.slr_datasets)
     }
-    args = vars(args)
+
+    # Process each dataset
     for dataset in args.pop("datasets"):
-        print("Preprocessing %s" % dataset)
-        preprocess_func[dataset](**args)
+        # Get details
+        dataset_details = dataset.split(":")
+        if len(dataset_details) == 1:
+            dataset_details.extend("wav")
+        elif len(dataset_details) != 2:
+            print("Error: Invalid data for dataset '{0}'. Aborting..." % dataset)
+            exit()
+
+        # Name and filetype
+        dataset_name = dataset_details[0]
+        file_type = dataset_details[1]
+
+        # check if we have a mapping
+        # add defined dataset folders as 'dataset_paths' and filetype as 'file_type':
+        if dataset_name not in dataset_mapping:
+            print("Error: No mapping found for dataset '{0}'. Aborting..." % dataset_name)
+            exit()
+        else:
+            args.dataset_paths = dataset_mapping[dataset_name]
+            args.file_type = file_type
+
+        # Convert args object to param dict for function
+        args = vars(args)
+        
+        # Start preprocessing
+        encoder_preprocess_dataset(**args)
+
+
+        # preprocess_func[dataset](**args)
         # FIXME: Code for language based preprocessing, probably not needed.
         # if dataset[0:3] == "slr":
         #     args["slr_dataset"] = dataset

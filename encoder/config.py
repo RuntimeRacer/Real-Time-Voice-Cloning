@@ -65,9 +65,17 @@ slr_datasets = {
     "slr100": []
 }
 
-other_datasets = [
-    "LJSpeech-1.1",
-    "VCTK-Corpus/wav48",
-]
+commonvoice_datasets = {
+    "commonvoice-7": {
+        "all": ["cv-corpus-7.0/speakers"],
+        "en": ["cv-corpus-7.0/en/speakers"]
+        # TODO: other ndividual languages
+    },
+}
+
+other_datasets = {
+    "LJSpeech-1.1": [],
+    "VCTK": ["VCTK-Corpus/wav48"],
+}
 
 anglophone_nationalites = ["australia", "canada", "ireland", "uk", "usa"]
