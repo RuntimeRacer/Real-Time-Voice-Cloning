@@ -75,7 +75,7 @@ commonvoice_datasets = {
 
 other_datasets = {
     "LJSpeech-1.1": [],
-    "VCTK": ["VCTK-Corpus/wav48"],
+    "VCTK": ["VCTK-Corpus/wav48_silence_trimmed"],
 }
 
 anglophone_nationalites = ["australia", "canada", "ireland", "uk", "usa"]

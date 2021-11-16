@@ -8,7 +8,6 @@ import codecs
 import subprocess
 import random
 from multiprocess.pool import ThreadPool
-from shutil import rmtree
 
 # Functions
 # _parse_speaker_data fetches validated speaker information from a .tsv file

@@ -37,7 +37,20 @@ python scripts/commonvoice_speakers.py <source-dir>/datasets/cv-corpus-7.0-2021-
 python scripts/commonvoice_speakers.py <source-dir>/datasets/cv-corpus-7.0-2021-07-21/ -o <target-dir>/cv-corpus-7.0-2021-07-21/ -ar 16000 -t 32 --lang en
 ```
 
+## VCTK-Corpus
+Available here: https://datashare.ed.ac.uk/handle/10283/3443
 
+Used Version: 0.92; November 2021
+
+Applicable versions: N/A
+
+### What I did
+I created a way less complex file copy script based on the CommonVoice pre-pre-processing one, which copies over the `_mic1` recordings into the target dir and limits the amount of files copied. Since there are only 110 Speakers in this dataset, this greatly reduced the occupied disk space for this dataset. Also there is no file format conversion involved, since the files are already in compressed wav (.flac) format.
+
+*Moving over up to 40 files for each speaker to the target directory*
+```
+python scripts/vctk_speakers.py /media/dominik/Project-M1nk/datasets/VCTK-Corpus/wav48_silence_trimmed/ -o /media/dominik/Project-M1nk/datasets-eval/VCTK-Corpus/wav48_silence_trimmed/ -t 32 --min 12
+```
 
 
 ## Copyright notes

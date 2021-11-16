@@ -73,17 +73,6 @@ def _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir,
         speaker_out_dir.mkdir(exist_ok=True)
         sources_fpath = speaker_out_dir.joinpath("_sources.txt")
 
-        # There's a possibility that the preprocessing was interrupted earlier, check if
-        # there already is a sources file.
-        if sources_fpath.exists():
-            try:
-                with sources_fpath.open("r") as sources_file:
-                    existing_fnames = {line.split(",")[0] for line in sources_file}
-            except:
-                existing_fnames = {}
-        else:
-            existing_fnames = {}
-
         # Gather all audio files for that speaker recursively
         sources_file = sources_fpath.open("a" if skip_existing else "w")
 
@@ -99,6 +88,7 @@ def _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir,
         outpath = speaker_out_dir.joinpath("{0}_combined.npz".format(speaker_name))
         npz_data = {}
         try:
+            # Try to load the existing combined file
             npz_data = np.load(outpath)
         except FileNotFoundError:
             print("No existing .npz file found for speaker {0}".format(speaker_name))
@@ -109,8 +99,9 @@ def _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir,
             # Check if the target output file already exists
             out_fname = "_".join(in_fpath.relative_to(speaker_dir).parts)
             out_fname = out_fname.replace(".%s" % extension, ".npy")
-            #if skip_existing and out_fname in existing_fnames:
-                #continue
+            if skip_existing and out_fname in npz_data:
+                sources_file.write("%s,%s\n" % (out_fname, in_fpath))
+                continue
 
             # Load and preprocess the waveform, discard those that are too short
             wav = audio.preprocess_wav(in_fpath)
