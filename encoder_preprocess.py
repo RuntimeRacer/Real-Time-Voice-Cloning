@@ -63,7 +63,7 @@ if __name__ == "__main__":
     def merge_datasets_paths(datasets: dict):
         result = []
         for l in datasets.values():
-            result = result.extend(l)
+            result += l
         return result
 
     # Mapping of datasets to config values. TODO: Make this more dynamic
@@ -78,6 +78,9 @@ if __name__ == "__main__":
         "commonvoice_all": config.commonvoice_datasets["commonvoice-7"]["all"],
         "slr_all": merge_datasets_paths(config.slr_datasets)
     }
+
+    # Convert args object to param dict for function
+    args = vars(args)
 
     # Process each dataset
     for dataset in args.pop("datasets"):
@@ -99,11 +102,8 @@ if __name__ == "__main__":
             print("Error: No mapping found for dataset '{0}'. Aborting..." % dataset_name)
             exit()
         else:
-            args.dataset_paths = dataset_mapping[dataset_name]
-            args.file_type = file_type
-
-        # Convert args object to param dict for function
-        args = vars(args)
+            args["dataset_paths"] = dataset_mapping[dataset_name]
+            args["file_type"] = file_type
         
         # Start preprocessing
         encoder_preprocess_dataset(**args)

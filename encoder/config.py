@@ -67,8 +67,8 @@ slr_datasets = {
 
 commonvoice_datasets = {
     "commonvoice-7": {
-        "all": ["cv-corpus-7.0/speakers"],
-        "en": ["cv-corpus-7.0/en/speakers"]
+        "all": ["cv-corpus-7.0-2021-07-21/speakers"],
+        "en": ["cv-corpus-7.0-2021-07-21/en/speakers"]
         # TODO: other ndividual languages
     },
 }

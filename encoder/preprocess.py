@@ -95,12 +95,22 @@ def _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir,
         if len(source_files) > 75:
             source_files = source_files[:75]
 
+        # Define npz output file and dict for the utterance data
+        outpath = speaker_out_dir.joinpath("{0}_combined.npz".format(speaker_name))
+        npz_data = {}
+        try:
+            npz_data = np.load(outpath)
+        except FileNotFoundError:
+            print("No existing .npz file found for speaker {0}".format(speaker_name))
+            pass
+
+        # Iterate through the source files and add them to the NPZ file 
         for in_fpath in source_files:
             # Check if the target output file already exists
             out_fname = "_".join(in_fpath.relative_to(speaker_dir).parts)
             out_fname = out_fname.replace(".%s" % extension, ".npy")
-            if skip_existing and out_fname in existing_fnames:
-                continue
+            #if skip_existing and out_fname in existing_fnames:
+                #continue
 
             # Load and preprocess the waveform, discard those that are too short
             wav = audio.preprocess_wav(in_fpath)
@@ -108,11 +118,14 @@ def _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir,
                 continue
 
             # Create the mel spectrogram
-            out_fpath = speaker_out_dir.joinpath(out_fname)
-            np.save(out_fpath, wav)
+            # out_fpath = speaker_out_dir.joinpath(out_fname)
+            # np.save(out_fpath, wav)
+            npz_data[out_fname] = wav
             logger.add_sample(duration=len(wav) / sampling_rate)
             sources_file.write("%s,%s\n" % (out_fname, in_fpath))
 
+        # Write npz and sources file
+        np.savez(outpath, **npz_data)
         sources_file.close()
 
     # Process the utterances for each speaker
