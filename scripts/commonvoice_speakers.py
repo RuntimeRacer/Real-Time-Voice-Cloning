@@ -58,7 +58,7 @@ parser.add_argument("-ar", "--audio_rate", type=int, default=16000, help=\
     "Bitrate of the output audio files. Default is 16 kHz.")
 parser.add_argument('--lang', type=str, default=None, help=\
     'Language to process')
-parser.add_argument('--min', type=int, default=5, help=\
+parser.add_argument('--min', type=int, default=12, help=\
     'Minimum number of files per speaker')
 parser.add_argument('--max', type=int, default=40, help=\
     'Maximum number of files per speaker')

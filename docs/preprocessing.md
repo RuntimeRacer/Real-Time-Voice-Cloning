@@ -10,7 +10,11 @@ This format is valid for the following Datasets out of the box:
 - VoxCeleb 1 & 2
 - LibriTTS
 
-For other Datasets you may need additional pre-processing. Here I'll share what to do for those that I have been used for encoder training:
+For other Datasets you may need additional pre-processing. Here I'll share what to do for those that I have been used for encoder training.
+
+Hints on thread counts in the following commands:
+- Since I was handling the biggest portion of the data on a HDD, copy operations with more than 8 threads tended to block each other, so I kept the amount of threads low on scripts which are just copying.
+- However, when there was some file format conversion involved, the 32 cores of the Ryzen Threadripper have been put to good use, since the I/O operations are only a fraction of what's actually happening there.
 
 ## Mozilla CommonVoice
 Available here: https://commonvoice.mozilla.org/en/datasets
@@ -49,8 +53,130 @@ I created a way less complex file copy script based on the CommonVoice pre-pre-p
 
 *Moving over up to 40 files for each speaker to the target directory*
 ```
-python scripts/vctk_speakers.py /media/dominik/Project-M1nk/datasets/VCTK-Corpus/wav48_silence_trimmed/ -o /media/dominik/Project-M1nk/datasets-eval/VCTK-Corpus/wav48_silence_trimmed/ -t 32 --min 12
+python scripts/vctk_speakers.py /media/dominik/Project-M1nk/datasets/VCTK-Corpus/wav48_silence_trimmed/ -o /media/dominik/Project-M1nk/datasets-eval/VCTK-Corpus/wav48_silence_trimmed/ -t 8 --min 12
 ```
+
+## SLR82 (CN-Celeb 1 & 2) Datasets
+Available here: http://www.openslr.org/82/
+
+Used Version: 1 & 2; November 2021
+
+Applicable versions: 1 & 2
+
+### What I did
+This is using almost the same pre-pre-processing scrip as `VCTK`; main focus here is to reduce the amount of files that are being used per speaker to reduce filesystem storage requirements for encoder training files. 
+
+*CN-Celeb 1: Moving over up to 40 files for each speaker to the target directory*
+```
+python scripts/slr82_speakers.py /media/dominik/Project-M1nk/datasets/slr82/CN-Celeb_flac/data/ -o /media/dominik/Project-M1nk/datasets-eval/slr82/CN-Celeb_flac/data/ -t 8 --min 12
+```
+
+*CN-Celeb 2: Moving over up to 40 files for each speaker to the target directory*
+```
+python scripts/slr82_speakers.py /media/dominik/Project-M1nk/datasets/slr82/CN-Celeb2_flac/data/ -o /media/dominik/Project-M1nk/datasets-eval/slr82/CN-Celeb2_flac/data/ -t 8 --min 12
+```
+
+
+## Various generic SLR TTS Datasets
+Available here: http://www.openslr.org/resources.php
+
+Used Version: N/A; November 2021
+
+Applicable versions: 41, 42, 43, 44, 61, 63, 64, 65, 66, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80
+
+### What I did
+Script file based on the VCTK-Corpus one. Since these SLR-Datasets so not group the speakers by folders, it is required to detect the speaker ID from the filename. This script puts them in per-speaker folders in the target directory though, so the encoder preprocessor can distinguish them.
+
+```
+# SLR41
+python scripts/slr_speakers.py /media/dominik/Project-M1nk/datasets/slr41/ -o /media/dominik/Project-M1nk/datasets-eval/slr41/speakers/ --min 12 -t 8
+
+# SLR42
+python scripts/slr_speakers.py /media/dominik/Project-M1nk/datasets/slr42/ -o /media/dominik/Project-M1nk/datasets-eval/slr42/speakers/ --min 12 -t 8
+
+# SLR43
+python scripts/slr_speakers.py /media/dominik/Project-M1nk/datasets/slr43/ -o /media/dominik/Project-M1nk/datasets-eval/slr43/speakers/ --min 12 -t 8
+
+# SLR44
+python scripts/slr_speakers.py /media/dominik/Project-M1nk/datasets/slr44/ -o /media/dominik/Project-M1nk/datasets-eval/slr44/speakers/ --min 12 -t 8
+
+# SLR61
+python scripts/slr_speakers.py /media/dominik/Project-M1nk/datasets/slr61/ -o /media/dominik/Project-M1nk/datasets-eval/slr61/speakers/ --min 12 -t 8
+
+# SLR63
+python scripts/slr_speakers.py /media/dominik/Project-M1nk/datasets/slr63/ -o /media/dominik/Project-M1nk/datasets-eval/slr63/speakers/ --min 12 -t 8
+
+# SLR64
+python scripts/slr_speakers.py /media/dominik/Project-M1nk/datasets/slr64/ -o /media/dominik/Project-M1nk/datasets-eval/slr64/speakers/ --min 12 -t 8
+
+# SLR65
+python scripts/slr_speakers.py /media/dominik/Project-M1nk/datasets/slr65/ -o /media/dominik/Project-M1nk/datasets-eval/slr65/speakers/ --min 12 -t 8
+
+# SLR66
+python scripts/slr_speakers.py /media/dominik/Project-M1nk/datasets/slr66/ -o /media/dominik/Project-M1nk/datasets-eval/slr66/speakers/ --min 12 -t 8
+
+# SLR69
+python scripts/slr_speakers.py /media/dominik/Project-M1nk/datasets/slr69/ -o /media/dominik/Project-M1nk/datasets-eval/slr69/speakers/ --min 12 -t 8
+
+# SLR70
+python scripts/slr_speakers.py /media/dominik/Project-M1nk/datasets/slr70/ -o /media/dominik/Project-M1nk/datasets-eval/slr70/speakers/ --min 12 -t 8
+
+# SLR71
+python scripts/slr_speakers.py /media/dominik/Project-M1nk/datasets/slr71/ -o /media/dominik/Project-M1nk/datasets-eval/slr71/speakers/ --min 12 -t 8
+
+# SLR72
+python scripts/slr_speakers.py /media/dominik/Project-M1nk/datasets/slr72/ -o /media/dominik/Project-M1nk/datasets-eval/slr72/speakers/ --min 12 -t 8
+
+# SLR73
+python scripts/slr_speakers.py /media/dominik/Project-M1nk/datasets/slr73/ -o /media/dominik/Project-M1nk/datasets-eval/slr73/speakers/ --min 12 -t 8
+
+# SLR74
+python scripts/slr_speakers.py /media/dominik/Project-M1nk/datasets/slr74/ -o /media/dominik/Project-M1nk/datasets-eval/slr74/speakers/ --min 12 -t 8
+
+# SLR75
+python scripts/slr_speakers.py /media/dominik/Project-M1nk/datasets/slr75/ -o /media/dominik/Project-M1nk/datasets-eval/slr75/speakers/ --min 12 -t 8
+
+# SLR76
+python scripts/slr_speakers.py /media/dominik/Project-M1nk/datasets/slr76/ -o /media/dominik/Project-M1nk/datasets-eval/slr76/speakers/ --min 12 -t 8
+
+# SLR77
+python scripts/slr_speakers.py /media/dominik/Project-M1nk/datasets/slr77/ -o /media/dominik/Project-M1nk/datasets-eval/slr77/speakers/ --min 12 -t 8
+
+# SLR78
+python scripts/slr_speakers.py /media/dominik/Project-M1nk/datasets/slr78/ -o /media/dominik/Project-M1nk/datasets-eval/slr78/speakers/ --min 12 -t 8
+
+# SLR79
+python scripts/slr_speakers.py /media/dominik/Project-M1nk/datasets/slr79/ -o /media/dominik/Project-M1nk/datasets-eval/slr79/speakers/ --min 12 -t 8
+
+# SLR80
+python scripts/slr_speakers.py /media/dominik/Project-M1nk/datasets/slr80/ -o /media/dominik/Project-M1nk/datasets-eval/slr80/speakers/ --min 12 -t 8
+
+```
+
+# SLR 51 (TED-LIUM Release 3) Dataset
+Available here: http://www.openslr.org/51/
+
+Used Version: 3; November 2021
+
+Applicable versions: 3
+
+### What I did
+Building on top of a pre-existing script from Sberryman, I added additional arguments to the speaker conversion script and changed it so the Talks are being converted from `.sph` format to `.wav` file format properly. The Splitting based on the STM files has just been kept mainly as it was implemented already. However, I changed the code so it now has multithreading capability.
+
+*Moving over up to 40 files for each speaker to the target directory*
+```
+python scripts/tedlium_speakers.py /media/dominik/Project-M1nk/datasets/TEDLIUM_release-3/data/ -o /media/dominik/Project-M1nk/datasets-eval/TEDLIUM_release-3/speakers -t 8 --min 12
+```
+
+# Nasjonalbank Dataset
+Available here:
+- https://www.nb.no/sprakbanken/show?serial=oai%3Anb.no%3Asbr-16&lang=en
+- https://www.nb.no/sprakbanken/show?serial=oai%3Anb.no%3Asbr-13&lang=en
+- https://www.nb.no/sprakbanken/show?serial=oai%3Anb.no%3Asbr-19&lang=en
+
+Used Version: N/A; November 2021
+
+Applicable versions: N/A
 
 
 ## Copyright notes
