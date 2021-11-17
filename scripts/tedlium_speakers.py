@@ -13,7 +13,7 @@ parser.add_argument("datasets_root", type=Path, help=\
     "Path to the directory containing your CommonVoice datasets.")
 parser.add_argument("-o", "--out_dir", type=Path, default=argparse.SUPPRESS, help=\
     "Path to the ouput directory for this preprocessing script")
-parser.add_argument('--min', type=int, default=5, help=\
+parser.add_argument('--min', type=int, default=12, help=\
     'Minimum number of files per speaker')
 parser.add_argument('--max', type=int, default=40, help=\
     'Maximum number of files per speaker')
@@ -50,6 +50,7 @@ def process_file(file):
 
     if len(stm_segments) < args.min:
         print("Skipping speaker {0} due to too few recordings.".format(speaker_id))
+        return
 
     if len(stm_segments) > args.max:
         # shuffle

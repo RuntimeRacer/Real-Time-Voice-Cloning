@@ -42,7 +42,7 @@ slr_datasets = {
     "slr42": ["slr42/speakers"],
     "slr43": ["slr43/speakers"],
     "slr44": ["slr44/speakers"],
-    "slr51": ["TEDLIUM_release3/speakers"], # TED-LIUM v3
+    "slr51": ["TEDLIUM_release-3/speakers"], # TED-LIUM v3
     "slr61": ["slr61/speakers"],
     "slr63": ["slr63/speakers"],
     "slr64": ["slr64/speakers"],
@@ -85,6 +85,7 @@ commonvoice_datasets = {
 other_datasets = {
     "LJSpeech-1.1": [],
     "VCTK": ["VCTK-Corpus/wav48_silence_trimmed"],
+    "nasjonalbank": ["nasjonal-bank/speakers"]
 }
 
 anglophone_nationalites = ["australia", "canada", "ireland", "uk", "usa"]

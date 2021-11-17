@@ -47,6 +47,7 @@ def process_file(file):
 
     if len(vtt_segments) < args.min:
         print("Skipping speaker {0} due to too few recordings.".format(file_name))
+        return
 
     if len(vtt_segments) > args.max:
         # shuffle

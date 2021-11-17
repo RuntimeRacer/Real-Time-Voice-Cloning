@@ -59,7 +59,7 @@ def _init_preprocess_dataset(dataset_name, datasets_root, out_dir) -> (Path, Dat
     return dataset_root, DatasetLog(out_dir, dataset_name)
 
 
-def _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir, extension, skip_existing, threads, logger):
+def _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir, extension, skip_existing, min, max, threads, logger):
     print("%s: Preprocessing data for %d speakers." % (dataset_name, len(speaker_dirs)))
 
     # Function to preprocess utterances for one speaker
@@ -67,22 +67,26 @@ def _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir,
         # Give a name to the speaker that includes its dataset
         speaker_name = "_".join(speaker_dir.relative_to(datasets_root).parts)
 
-        # Create an output directory with that name, as well as a txt file containing a
-        # reference to each source file.
-        speaker_out_dir = out_dir.joinpath(speaker_name)
-        speaker_out_dir.mkdir(exist_ok=True)
-        sources_fpath = speaker_out_dir.joinpath("_sources.txt")
-
-        # Gather all audio files for that speaker recursively
-        sources_file = sources_fpath.open("a" if skip_existing else "w")
-
         # get all the audio files
         source_files = list(speaker_dir.glob("**/*.%s" % extension))
 
-        # cap at 75? 
-        # FIXME: Add a feature to normalize amount of files per speaker, based on average amount of files per speaker in the dataset, rather than an arbitrary value.
-        if len(source_files) > 75:
-            source_files = source_files[:75]
+        # Skip speakers with too few files
+        if len(source_files) < min:
+            print("Skipping speaker {0} due to too few recordings.".format(speaker_name))
+            return
+
+        # Create an output directory with that name, as well as a txt file containing a
+        # reference to each source file. 
+        speaker_out_dir = out_dir.joinpath(speaker_name)
+        speaker_out_dir.mkdir(exist_ok=True)
+        sources_fpath = speaker_out_dir.joinpath("_sources.txt")      
+        # Gather all audio files for that speaker recursively.  
+        sources_file = sources_fpath.open("a" if skip_existing else "w")
+
+        # Limit amount of speaker files if too many
+        if len(source_files) > max:
+            random.shuffle(source_files)
+            source_files = source_files[:max]
 
         # Define npz output file and dict for the utterance data
         outpath = speaker_out_dir.joinpath("{0}_combined.npz".format(speaker_name))
@@ -91,7 +95,7 @@ def _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir,
             # Try to load the existing combined file
             npz_data = np.load(outpath)
         except FileNotFoundError:
-            print("No existing .npz file found for speaker {0}".format(speaker_name))
+            # print("No existing .npz file found for speaker {0}".format(speaker_name))
             pass
 
         # Iterate through the source files and add them to the NPZ file 
@@ -100,7 +104,7 @@ def _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir,
             out_fname = "_".join(in_fpath.relative_to(speaker_dir).parts)
             out_fname = out_fname.replace(".%s" % extension, ".npy")
             if skip_existing and out_fname in npz_data:
-                sources_file.write("%s,%s\n" % (out_fname, in_fpath))
+                #sources_file.write("%s,%s\n" % (out_fname, in_fpath))
                 continue
 
             # Load and preprocess the waveform, discard those that are too short
@@ -115,6 +119,17 @@ def _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir,
             logger.add_sample(duration=len(wav) / sampling_rate)
             sources_file.write("%s,%s\n" % (out_fname, in_fpath))
 
+        # Ensure there aren't too many files in npz on second run
+        kill_amount = len(npz_data) - max
+        if kill_amount > 0:
+            # Delete random file keys
+            file_keys = list(npz_data.keys())
+            random.shuffle(file_keys)
+            while kill_amount > 0:
+                for key in file_keys:
+                    del npz_data[key]
+                    kill_amount-=1
+        
         # Write npz and sources file
         np.savez(outpath, **npz_data)
         sources_file.close()
@@ -129,13 +144,17 @@ def _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir,
 # encoder_preprocess_dataset is intended to simplify the handling of dataset preprocessing. 
 # Since we got pre-pre-processing scripts which do the heavy lifting towards getting all data into the expected format,
 # this function works for anything that follows LibriSpeech / LibriTTS conventions or has been pre-pre-processed to match them.
-def encoder_preprocess_dataset(datasets_root: Path, out_dir: Path, dataset_paths: set, file_type="wav", skip_existing=False, threads=8):
+def encoder_preprocess_dataset(
+    datasets_root: Path, out_dir: Path, dataset_paths: set, file_type="wav", skip_existing=False, 
+    min=12, max=40, threads=8
+    ):
     for dataset_name in dataset_paths:
         # Initialize the preprocessing
         dataset_root, logger = _init_preprocess_dataset(dataset_name, datasets_root, out_dir)
         if not dataset_root:
-            return
+            # Skip this folder since it is missing, but try nex tone
+            continue
 
         # Preprocess all speakers
         speaker_dirs = list(dataset_root.glob("*"))
-        _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir, file_type, skip_existing, threads, logger)
+        _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir, file_type, skip_existing, min, max, threads, logger)
