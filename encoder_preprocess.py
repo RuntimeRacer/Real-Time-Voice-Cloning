@@ -1,5 +1,5 @@
 from encoder import config
-from encoder.preprocess import encoder_preprocess_dataset, preprocess_librispeech_other, preprocess_voxceleb1, preprocess_voxceleb2, preprocess_libritts_other, preprocess_vctk, preprocess_slr, preprocess_commonvoice, preprocess_nasjonal, preprocess_timit, preprocess_tedlium
+from encoder.preprocess import encoder_preprocess_dataset
 from utils.argutils import print_args
 from pathlib import Path
 import argparse
@@ -35,6 +35,10 @@ if __name__ == "__main__":
     parser.add_argument("-s", "--skip_existing", action="store_true", help=\
         "Whether to skip existing output files with the same name. Useful if this script was "
         "interrupted.")
+    parser.add_argument('--min', type=int, default=12, help=\
+        'Minimum number of files per speaker')
+    parser.add_argument('--max', type=int, default=40, help=\
+        'Maximum number of files per speaker')
     parser.add_argument("-t", "--threads", type=int, default=8)
     args = parser.parse_args()
 
@@ -73,10 +77,12 @@ if __name__ == "__main__":
         "voxceleb1": config.voxceleb_datasets["voxceleb1"]["train"],
         "voxceleb2": config.voxceleb_datasets["voxceleb2"]["train"],
         "vctk": config.other_datasets["VCTK"],
-        "timit": preprocess_timit,
-        "tedlium": preprocess_tedlium,
         "commonvoice_all": config.commonvoice_datasets["commonvoice-7"]["all"],
-        "slr_all": merge_datasets_paths(config.slr_datasets)
+        "slr_all": merge_datasets_paths(config.slr_datasets),
+        "slr_66": config.slr_datasets["slr66"],
+        "slr_82": config.slr_datasets["slr82"],
+        "slr_100": config.slr_datasets["slr100"],
+        "nasjonalbank": config.other_datasets["nasjonalbank"]
     }
 
     # Convert args object to param dict for function
