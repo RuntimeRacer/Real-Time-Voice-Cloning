@@ -45,7 +45,7 @@ print("  - Found: {}".format(len(source_files)))
 # group files based on speaker id r0000000
 speaker_hash = {}
 for file in source_files:
-    client_id = "{0}_{1}".format(file.parts[-2], file.parts[-1])
+    client_id = "{0}_{1}".format(file.parts[-3], file.parts[-2])
 
     if client_id not in speaker_hash:
         speaker_hash[client_id] = []
