@@ -79,6 +79,7 @@ if __name__ == "__main__":
         "vctk": config.other_datasets["VCTK"],
         "commonvoice_all": config.commonvoice_datasets["commonvoice-7"]["all"],
         "slr_wav": merge_datasets_paths(config.slr_datasets_wav),
+        "slr_100": config.slr_datasets_wav["slr100"],
         "slr_flac": merge_datasets_paths(config.slr_datasets_flac),
         "nasjonalbank": config.other_datasets["nasjonalbank"]
     }

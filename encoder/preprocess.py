@@ -5,6 +5,7 @@ from datetime import datetime
 from encoder import audio
 from pathlib import Path
 from tqdm import tqdm
+import zipfile
 import numpy as np
 import random
 
@@ -91,10 +92,13 @@ def _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir,
         outpath = speaker_out_dir.joinpath("combined.npz")
         npz_data = {}
         try:
-            # Try to load the existing combined file
-            npz_data = np.load(outpath)
+            # First: Check if it is actually a zip file.
+            # Otherwise it will throw hundreds of uncatchable exceptions
+            if zipfile.is_zipfile(outpath):
+                # Try to load the existing combined file
+                npz_data = np.load(outpath)
         except FileNotFoundError:
-            # print("No existing .npz file found for speaker {0}".format(speaker_name))
+            print("No existing .npz file found for speaker {0}".format(speaker_name))
             pass
 
         # Iterate through the source files and add them to the NPZ file 
@@ -120,6 +124,8 @@ def _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir,
             # Create the mel spectrogram, discard those that are too short
             frames = audio.wav_to_mel_spectrogram(wav)
             if len(frames) < partials_n_frames:
+                # FIXME: This is a problem; was not logged before. Training data could be too narrow...
+                # print("Skipping audio file {0} because it is too short...".format(in_fpath))
                 continue
 
             # out_fpath = speaker_out_dir.joinpath(out_fname)

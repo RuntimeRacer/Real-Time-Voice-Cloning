@@ -34,7 +34,12 @@ def preprocess_wav(fpath_or_wav: Union[str, Path, np.ndarray],
     # Load the wav from disk if needed
     if isinstance(fpath_or_wav, str) or isinstance(fpath_or_wav, Path):
         # print("Loading: {0}".format(fpath_or_wav))
-        wav, source_sr = librosa.load(fpath_or_wav, sr=None)
+        try:
+            wav, source_sr = librosa.load(fpath_or_wav, sr=None)
+        except ValueError as err:
+            # Unable to load.
+            print("Unable to load audio file {0}: {1}".format(fpath_or_wav, err))
+            return []
     else:
         wav = fpath_or_wav
 
@@ -43,9 +48,9 @@ def preprocess_wav(fpath_or_wav: Union[str, Path, np.ndarray],
         try:
             wav = librosa.resample(wav, source_sr, sampling_rate)
         except ValueError as err:
-            # Unable to resample. Just return it, since it will be discarded anyway.
+            # Unable to resample.
             print("Unable to resample audio file {0}: {1}".format(fpath_or_wav, err))
-            return wav
+            return []
 
     # Apply the preprocessing: normalize volume and shorten long silences
     wav = normalize_volume(wav, audio_norm_target_dBFS, increase_only=True)
