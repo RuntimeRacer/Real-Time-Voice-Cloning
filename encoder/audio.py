@@ -3,6 +3,7 @@ from encoder.params_data import *
 from pathlib import Path
 from typing import Optional, Union
 from warnings import warn
+from audioread.exceptions import NoBackendError
 import numpy as np
 import librosa
 import struct
@@ -36,7 +37,7 @@ def preprocess_wav(fpath_or_wav: Union[str, Path, np.ndarray],
         # print("Loading: {0}".format(fpath_or_wav))
         try:
             wav, source_sr = librosa.load(fpath_or_wav, sr=None)
-        except ValueError as err:
+        except (ValueError, RuntimeError, NoBackendError) as err:
             # Unable to load.
             print("Unable to load audio file {0}: {1}".format(fpath_or_wav, err))
             return []
