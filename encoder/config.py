@@ -60,11 +60,7 @@ slr_datasets_wav = {
     "slr78": ["slr78/speakers"],
     "slr79": ["slr79/speakers"],
     "slr80": ["slr80/speakers"],
-    "slr96": ["slr96/train/audio"]
-}
-
-slr_datasets_flac = {
-    "slr82": ["slr82/CN-Celeb_flac/data", "slr82/CN-Celeb2_flac/data"],
+    "slr96": ["slr96/train/audio"],
     "slr100": [ # Multilingual TEDx (without translations)
         "mtedx/ar-ar/data/train",
         "mtedx/de-de/data/train",
@@ -75,6 +71,10 @@ slr_datasets_flac = {
         "mtedx/pt-pt/data/train",
         "mtedx/ru-ru/data/train"
     ]
+}
+
+slr_datasets_flac = {
+    "slr82": ["slr82/CN-Celeb_flac/data", "slr82/CN-Celeb2_flac/data"]
 }
 
 commonvoice_datasets = {

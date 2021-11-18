@@ -106,8 +106,14 @@ def _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir,
                 #sources_file.write("%s,%s\n" % (out_fname, in_fpath))
                 continue
 
-            # Load and preprocess the waveform, discard those that are too short
-            wav = audio.preprocess_wav(in_fpath)
+            # Load and preprocess the waveform, discard those that are too short or broken
+            wav = []
+            try:
+                wav = audio.preprocess_wav(in_fpath)
+            except EOFError as err:
+                print("Unable to process audio file {0}: {1}".format(in_fpath, err))
+                pass
+
             if len(wav) == 0:
                 continue
 
