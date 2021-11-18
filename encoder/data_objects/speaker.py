@@ -2,6 +2,7 @@ from encoder.data_objects.random_cycler import RandomCycler
 from encoder.data_objects.utterance import Utterance
 from pathlib import Path
 import numpy as np
+import os
 
 # Contains the set of utterances of a single speaker
 class Speaker:
@@ -38,7 +39,7 @@ class Speaker:
             self._load_utterances()
 
         a = None
-        with np.load(self.root.joinpath('combined.npz')) as data:
+        with np.load(self.root.joinpath("combined.npz")) as data:
             utterances = self.utterance_cycler.sample(count)
             a = [(u,) + u.random_partial(n_frames, data) for u in utterances]
 

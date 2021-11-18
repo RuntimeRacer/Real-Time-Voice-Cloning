@@ -1,7 +1,6 @@
 from typing import Dict
 from multiprocess.pool import ThreadPool
 from encoder.params_data import *
-from encoder.config import librispeech_datasets, libritts_datasets, voxceleb_datasets, slr_datasets, other_datasets, anglophone_nationalites
 from datetime import datetime
 from encoder import audio
 from pathlib import Path
@@ -89,7 +88,7 @@ def _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir,
             source_files = source_files[:max]
 
         # Define npz output file and dict for the utterance data
-        outpath = speaker_out_dir.joinpath("{0}_combined.npz".format(speaker_name))
+        outpath = speaker_out_dir.joinpath("combined.npz")
         npz_data = {}
         try:
             # Try to load the existing combined file
@@ -109,13 +108,17 @@ def _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir,
 
             # Load and preprocess the waveform, discard those that are too short
             wav = audio.preprocess_wav(in_fpath)
-            if len(wav) < partials_n_frames:
+            if len(wav) == 0:
                 continue
 
-            # Create the mel spectrogram
+            # Create the mel spectrogram, discard those that are too short
+            frames = audio.wav_to_mel_spectrogram(wav)
+            if len(frames) < partials_n_frames:
+                continue
+
             # out_fpath = speaker_out_dir.joinpath(out_fname)
             # np.save(out_fpath, wav)
-            npz_data[out_fname] = wav
+            npz_data[out_fname] = frames
             logger.add_sample(duration=len(wav) / sampling_rate)
             sources_file.write("%s,%s\n" % (out_fname, in_fpath))
 

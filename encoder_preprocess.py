@@ -78,10 +78,8 @@ if __name__ == "__main__":
         "voxceleb2": config.voxceleb_datasets["voxceleb2"]["train"],
         "vctk": config.other_datasets["VCTK"],
         "commonvoice_all": config.commonvoice_datasets["commonvoice-7"]["all"],
-        "slr_all": merge_datasets_paths(config.slr_datasets),
-        "slr_66": config.slr_datasets["slr66"],
-        "slr_82": config.slr_datasets["slr82"],
-        "slr_100": config.slr_datasets["slr100"],
+        "slr_wav": merge_datasets_paths(config.slr_datasets_wav),
+        "slr_flac": merge_datasets_paths(config.slr_datasets_flac),
         "nasjonalbank": config.other_datasets["nasjonalbank"]
     }
 
