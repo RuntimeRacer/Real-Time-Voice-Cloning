@@ -14,16 +14,16 @@ librispeech_datasets = {
 }
 libritts_datasets = {
     "train": {
-        "clean": ["slr60/train-clean-100", "slr60/train-clean-360"],
-        "other": ["slr60/train-other-500"]
+        "clean": ["LibriTTS/train-clean-100", "LibriTTS/train-clean-360"],
+        "other": ["LibriTTS/train-other-500"]
     },
     "test": {
-        "clean": ["slr60/test-clean"],
-        "other": ["slr60/test-other"]
+        "clean": ["LibriTTS/test-clean"],
+        "other": ["LibriTTS/test-other"]
     },
     "dev": {
-        "clean": ["slr60/dev-clean"],
-        "other": ["slr60/dev-other"]
+        "clean": ["LibriTTS/dev-clean"],
+        "other": ["LibriTTS/dev-other"]
     },
 }
 voxceleb_datasets = {
