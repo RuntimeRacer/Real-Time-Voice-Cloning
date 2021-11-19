@@ -75,14 +75,10 @@ def _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir,
             print("Skipping speaker {0} due to too few recordings.".format(speaker_name))
             return
 
-        # Create an output directory with that name, as well as a txt file containing a
-        # reference to each source file. 
+        # Create an output directory with that name
         speaker_out_dir = out_dir.joinpath(speaker_name)
         speaker_out_dir.mkdir(exist_ok=True)
-        sources_fpath = speaker_out_dir.joinpath("_sources.txt")      
-        # Gather all audio files for that speaker recursively.  
-        sources_file = sources_fpath.open("a" if skip_existing else "w")
-
+        
         # Limit amount of speaker files if too many
         if len(source_files) > max:
             random.shuffle(source_files)
@@ -91,12 +87,13 @@ def _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir,
         # Define npz output file and dict for the utterance data
         outpath = speaker_out_dir.joinpath("combined.npz")
         npz_data = {}
+        sources = {}
         try:
             # First: Check if it is actually a zip file.
             # Otherwise it will throw hundreds of uncatchable exceptions
             if zipfile.is_zipfile(outpath):
                 # Try to load the existing combined file
-                npz_data = np.load(outpath)
+                npz_data = dict(np.load(outpath))
         except FileNotFoundError:
             print("No existing .npz file found for speaker {0}".format(speaker_name))
             pass
@@ -106,8 +103,10 @@ def _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir,
             # Check if the target output file already exists
             out_fname = "_".join(in_fpath.relative_to(speaker_dir).parts)
             out_fname = out_fname.replace(".%s" % extension, ".npy")
+
+            # Skip this file if existing
             if skip_existing and out_fname in npz_data:
-                #sources_file.write("%s,%s\n" % (out_fname, in_fpath))
+                sources[out_fname] = in_fpath
                 continue
 
             # Load and preprocess the waveform, discard those that are too short or broken
@@ -131,23 +130,22 @@ def _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir,
             # out_fpath = speaker_out_dir.joinpath(out_fname)
             # np.save(out_fpath, wav)
             npz_data[out_fname] = frames
-            logger.add_sample(duration=len(wav) / sampling_rate)
-            sources_file.write("%s,%s\n" % (out_fname, in_fpath))
+            sources[out_fname] = in_fpath
+            logger.add_sample(duration=len(wav) / sampling_rate)            
 
         # Ensure there aren't too many files in npz on second run
-        kill_amount = len(npz_data) - max
-        if kill_amount > 0:
-            # Delete random file keys
-            file_keys = list(npz_data.keys())
-            random.shuffle(file_keys)
-            while kill_amount > 0:
-                for key in file_keys:
+        # Delete everything that's not in sources
+        if len(npz_data) > len(sources):
+            for key in list(npz_data.keys()):
+                if key not in sources:
                     del npz_data[key]
-                    kill_amount-=1
         
         # Write npz and sources file
         np.savez(outpath, **npz_data)
-        sources_file.close()
+        sources_fpath = speaker_out_dir.joinpath("_sources.txt")     
+        with sources_fpath.open( "w") as sources_file:
+            for out_fname, in_fpath in sources.items():
+                sources_file.write("%s,%s\n" % (out_fname, in_fpath))
 
     # Process the utterances for each speaker
     with ThreadPool(threads) as pool:
