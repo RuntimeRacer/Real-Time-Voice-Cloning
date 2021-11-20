@@ -396,6 +396,7 @@ class Visualizations:
         # Create the windows
         self.loss_win = None
         self.eer_win = None
+        self.acc_win = None
         self.lang_loss_win = None
         self.lang_eer_win = None
         self.age_loss_win = None
@@ -461,8 +462,8 @@ class Visualizations:
             return
         time_string = "Step time:  mean: %5dms  std: %5dms" % \
                       (int(np.mean(self.step_times)), int(np.std(self.step_times)))
-        print("\nStep %6d Loss: %.4f ACC: %.4f  %s" %
-              (step, np.mean(self.losses), np.mean(self.eers), time_string))
+        print("\nStep %6d Loss: %.6f EER: %.6f ACC: %.6f  %s" %
+              (step, np.mean(self.losses), np.mean(self.eers), 1-np.mean(self.eers), time_string))
 
         if not self.disabled:
             self.loss_win = self.vis.line(
@@ -482,6 +483,19 @@ class Visualizations:
                 [step],
                 win=self.eer_win,
                 update="append" if self.eer_win else None,
+                opts=dict(
+                    legend=["Avg. EER"],
+                    xlabel="Step",
+                    ylabel="EER",
+                    title="Equal error rate"
+                )
+            )
+
+            self.acc_win = self.vis.line(
+                [1-np.mean(self.eers)],
+                [step],
+                win=self.acc_win,
+                update="append" if self.acc_win else None,
                 opts=dict(
                     legend=["Avg. ACC"],
                     xlabel="Step",
