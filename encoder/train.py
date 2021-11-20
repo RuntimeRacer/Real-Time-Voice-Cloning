@@ -24,6 +24,7 @@ def train(run_id: str, clean_data_root: Path, models_dir: Path, umap_every: int,
         speakers_per_batch,
         utterances_per_speaker,
         num_workers=threads,
+        pin_memory=True
     )
 
     # Setup the device on which to run the forward pass and the loss. These can be different,
@@ -133,3 +134,5 @@ def train(run_id: str, clean_data_root: Path, models_dir: Path, umap_every: int,
                 "optimizer_state": optimizer.state_dict(),
             }, state_fpath)
             break
+
+        step+=1
