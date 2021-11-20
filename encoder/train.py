@@ -134,5 +134,3 @@ def train(run_id: str, clean_data_root: Path, models_dir: Path, umap_every: int,
                 "optimizer_state": optimizer.state_dict(),
             }, state_fpath)
             break
-
-        step+=1
