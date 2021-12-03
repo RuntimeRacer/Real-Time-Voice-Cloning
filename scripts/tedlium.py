@@ -17,6 +17,8 @@ parser.add_argument('--min', type=int, default=12, help=\
     'Minimum number of files per speaker')
 parser.add_argument('--max', type=int, default=40, help=\
     'Maximum number of files per speaker')
+parser.add_argument("-ft", "--fetch_transcripts", type=bool, default=False, help=\
+    "Path to the ouput directory for this preprocessing script")
 parser.add_argument("-t", "--threads", type=int, default=8)
 args = parser.parse_args()
 
@@ -24,7 +26,7 @@ args = parser.parse_args()
 base_dir = args.datasets_root
 # wav_dir = base_dir.joinpath("wav") # Contains WAV files (Audio, outdated)
 sph_dir = base_dir.joinpath("sph") # Contains SPH files (Audio)
-stm_dir = base_dir.joinpath("stm") # Contains STM file ()
+stm_dir = base_dir.joinpath("stm") # Contains STM file (Metadata)
 out_dir = base_dir.joinpath("speakers")
 if out_dir != None:
     out_dir = args.out_dir
@@ -57,7 +59,7 @@ def process_file(file):
         random.shuffle(stm_segments)
         stm_segments = stm_segments[0:args.max]
 
-    # Make sure speaer dir exists
+    # Make sure speaker dir exists
     out_path = out_dir.joinpath(speaker_id)
     os.makedirs(out_path, exist_ok=True)
 
@@ -65,6 +67,18 @@ def process_file(file):
     for si, segment in enumerate(stm_segments):
         # define output file
         out_file = Path(out_path).joinpath("{0}_{1:04d}.wav".format(file_name, si))
+
+        if args.fetch_transcripts:
+            out_file_transcript = Path(out_path).joinpath("{0}_{1:04d}.txt".format(file_name, si))
+
+             # Get transcript and remove unwanted content
+            transcript = segment.transcript
+            transcript = transcript.replace("<unk>","")
+            transcript = transcript.strip()
+
+            if not out_file_transcript.exists():
+                with open(out_file_transcript, "w", encoding="utf8") as out:
+                    out.write(transcript)
 
         # Initialize Transformer
         transformer = sox.Transformer()

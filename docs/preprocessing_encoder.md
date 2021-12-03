@@ -1,4 +1,4 @@
-# Readme for pre-pre-processing the different datasets
+# Readme for pre-pre-processing the different datasets for encoder training
 
 This readme is intended to provide guidance for preprocessing datasets NOT in valid format for use with this repo.
 
@@ -37,12 +37,7 @@ I mostly re-used the script leftover by @sberryman; which was built around CV Ve
 python scripts/commonvoice_speakers.py <source-dir>/datasets/cv-corpus-7.0-2021-07-21/ -o <target-dir>/cv-corpus-7.0-2021-07-21/ -ar 16000 -t 32
 ```
 
-*Processing languages "en" at 16 kHz and store converted speaker files into separate target dir, using 32 threads.*
-```
-python scripts/commonvoice_speakers.py <source-dir>/datasets/cv-corpus-7.0-2021-07-21/ -o <target-dir>/cv-corpus-7.0-2021-07-21/ -ar 16000 -t 32 --lang en
-```
-
-*Processing languages "en" at 16 kHz and store converted speaker files into "speakers" subdir within "en" source dir, using 32 threads.*
+*Processing language "en" at 16 kHz and store converted speaker files into separate target dir, using 32 threads.*
 ```
 python scripts/commonvoice_speakers.py <source-dir>/datasets/cv-corpus-7.0-2021-07-21/ -o <target-dir>/cv-corpus-7.0-2021-07-21/ -ar 16000 -t 32 --lang en
 ```
@@ -59,7 +54,7 @@ I created a way less complex file copy script based on the CommonVoice pre-pre-p
 
 *Moving over up to 40 files for each speaker to the target directory*
 ```
-python scripts/vctk_speakers.py /media/dominik/Project-M1nk/datasets/VCTK-Corpus/wav48_silence_trimmed/ -o /media/dominik/Project-M1nk/datasets-eval/VCTK-Corpus/wav48_silence_trimmed/ -t 8 --min 12
+python scripts/vctk.py /media/dominik/Project-M1nk/datasets/VCTK-Corpus/wav48_silence_trimmed/ -o /media/dominik/Project-M1nk/datasets-eval/VCTK-Corpus/wav48_silence_trimmed/ -t 8 --min 12 --max 40
 ```
 
 ## SLR82 (CN-Celeb 1 & 2) Datasets
@@ -168,9 +163,9 @@ Applicable versions: 3
 ### What I did
 Building on top of a pre-existing script from Sberryman, I added additional arguments to the speaker conversion script and changed it so the Talks are being converted from `.sph` format to `.wav` file format properly. The Splitting based on the STM files has just been kept mainly as it was implemented already. However, I changed the code so it now has multithreading capability.
 
-*Moving over up to 40 files for each speaker to the target directory*
+*Create up to 40 sub-utterances without transcript files for each speaker within the target directory. Skip Speakers with less than 12 utterances*
 ```
-python scripts/tedlium_speakers.py /media/dominik/Project-M1nk/datasets/TEDLIUM_release-3/data/ -o /media/dominik/Project-M1nk/datasets-eval/TEDLIUM_release-3/speakers -t 8 --min 12
+python scripts/tedlium_speakers.py /media/dominik/Project-M1nk/datasets/TEDLIUM_release-3/data/ -o /media/dominik/Project-M1nk/datasets-eval/TEDLIUM_release-3/speakers -t 8 --min 12 --max 40
 ```
 
 ## Nasjonalbank Dataset
@@ -233,4 +228,4 @@ python scripts/tedx_speakers.py /media/dominik/Project-M1nk/datasets/mtedx/ru-ru
 
 This readme is brought to you by (c) 2021 @RuntimeRacer
 
-Script described may be originally forked from @sberryman's WIP branch: https://github.com/sberryman/Real-Time-Voice-Cloning/tree/wip
+Scripts described may be originally forked from @sberryman's WIP branch: https://github.com/sberryman/Real-Time-Voice-Cloning/tree/wip

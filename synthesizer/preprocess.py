@@ -1,19 +1,22 @@
-from multiprocessing.pool import Pool
+from multiprocess.pool import ThreadPool
 from synthesizer import audio
 from functools import partial
 from itertools import chain
-from encoder import inference as encoder
+from encoder import config, inference as encoder
 from pathlib import Path
 from utils import logmmse
 from tqdm import tqdm
+from audioread.exceptions import NoBackendError
+from shutil import copyfile
 import numpy as np
 import librosa
 import sys
+import time
 
-def preprocess_dataset(datasets_root: Path, out_dir: Path, n_processes: int, skip_existing: bool, hparams, no_alignments: bool, datasets_name: str, subfolders: str):
+def synthesizer_preprocess_dataset(datasets_root: Path, out_dir: Path, n_processes: int, skip_existing: bool, hparams, no_alignments: bool, dataset_name: str, subfolders: str, audio_extensions: list, transcript_extension: str):
     # Gather the input directories
-    dataset_root = datasets_root.joinpath(datasets_name)
-    input_dirs = [dataset_root.joinpath(subfolder.strip()) for subfolder in subfolders.split(",")]
+    dataset_root = datasets_root.joinpath(dataset_name)
+    input_dirs = [dataset_root.joinpath(subfolder.strip()) for subfolder in subfolders]
     print("\n    ".join(map(str, ["Using data from:"] + input_dirs)))
     assert all(input_dir.exists() for input_dir in input_dirs)
 
@@ -23,13 +26,16 @@ def preprocess_dataset(datasets_root: Path, out_dir: Path, n_processes: int, ski
 
     # Create a metadata file
     metadata_fpath = out_dir.joinpath("train.txt")
+    metadata_bup_fpath = out_dir.joinpath("train_backup_{0}.txt".format(time.time()))
+    if metadata_fpath.is_file():
+        copyfile(metadata_fpath, metadata_bup_fpath)
     metadata_file = metadata_fpath.open("a" if skip_existing else "w", encoding="utf-8")
 
     # Preprocess the dataset
     speaker_dirs = list(chain.from_iterable(input_dir.glob("*") for input_dir in input_dirs))
-    func = partial(preprocess_speaker, out_dir=out_dir, skip_existing=skip_existing, hparams=hparams, no_alignments=no_alignments)
-    job = Pool(n_processes).imap(func, speaker_dirs)
-    for speaker_metadata in tqdm(job, datasets_name, len(speaker_dirs), unit="speakers"):
+    func = partial(preprocess_speaker, out_dir=out_dir, skip_existing=skip_existing, hparams=hparams, no_alignments=no_alignments, audio_extensions=audio_extensions, transcript_extension=transcript_extension)
+    job = ThreadPool(n_processes).imap(func, speaker_dirs)
+    for speaker_metadata in tqdm(job, dataset_name, len(speaker_dirs), unit="speakers"):
         for metadatum in speaker_metadata:
             metadata_file.write("|".join(str(x) for x in metadatum) + "\n")
     metadata_file.close()
@@ -47,69 +53,102 @@ def preprocess_dataset(datasets_root: Path, out_dir: Path, n_processes: int, ski
     print("Max mel frames length: %d" % max(int(m[4]) for m in metadata))
     print("Max audio timesteps length: %d" % max(int(m[3]) for m in metadata))
 
-def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, hparams, no_alignments: bool, audio_extension=".flac"):
+def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, hparams, no_alignments: bool, audio_extensions: list, transcript_extension: str):
     metadata = []
-    for book_dir in speaker_dir.glob("*"):
-        if no_alignments:
-            # Gather the utterance audios and texts
-            # LibriTTS uses .wav but we will include extensions for compatibility with other datasets
-            extensions = ["*.wav", "*.flac", "*.mp3"]
-            for extension in extensions:
-                wav_fpaths = book_dir.glob(extension)
+    if no_alignments:
+        # Gather the utterance audios and texts
+        # LibriTTS uses .wav but we will include extensions for compatibility with other datasets
+        for extension in audio_extensions:
+            wav_fpaths = speaker_dir.glob("**/*{0}".format(extension))
 
-                for wav_fpath in wav_fpaths:
-                    # Load the audio waveform
+            for wav_fpath in wav_fpaths:
+                utterance_id = "{0}_{1}".format(speaker_dir.name, wav_fpath.with_suffix("").name)
+
+                # Skip existing utterances if needed
+                mel_outpath = out_dir.joinpath("mels", "mel-%s.npy" % utterance_id)
+                wav_outpath = out_dir.joinpath("audio", "audio-%s.npy" % utterance_id)
+                if skip_existing and mel_outpath.exists() and wav_outpath.exists():
+                    continue
+
+                # Load the audio waveform
+                wav = None
+                try:
                     wav, _ = librosa.load(str(wav_fpath), hparams.sample_rate)
-                    if hparams.rescale:
-                        wav = wav / np.abs(wav).max() * hparams.rescaling_max
+                except (ValueError, RuntimeError, NoBackendError) as err:
+                    # Unable to load.
+                    print("Unable to load audio file {0}: {1}".format(wav_fpath, err))
+                    continue
 
-                    # Get the corresponding text
-                    # Check for .txt (for compatibility with other datasets)
-                    text_fpath = wav_fpath.with_suffix(".txt")
-                    if not text_fpath.exists():
-                        # Check for .normalized.txt (LibriTTS)
-                        text_fpath = wav_fpath.with_suffix(".normalized.txt")
-                        assert text_fpath.exists()
-                    with text_fpath.open("r") as text_file:
-                        text = "".join([line for line in text_file])
-                        text = text.replace("\"", "")
-                        text = text.strip()
+                if hparams.rescale:
+                    wav = wav / np.abs(wav).max() * hparams.rescaling_max
 
-                    # Process the utterance
-                    metadata.append(process_utterance(wav, text, out_dir, str(wav_fpath.with_suffix("").name),
-                                                      skip_existing, hparams))
-        else:
-            # Process alignment file (LibriSpeech support)
-            # Gather the utterance audios and texts
-            # Gather the utterance audios and texts
-            try:
-                alignments_fpath = next(book_dir.glob("*.alignment.txt"))
-                with alignments_fpath.open("r", encoding='utf-8') as alignments_file:
-                    alignments = [line.rstrip().split(" ") for line in alignments_file]
-            except StopIteration:
-                # A few alignment files will be missing
+                # Get the corresponding text
+                # Check for .txt (for compatibility with other datasets)
+                text_fpath = wav_fpath.with_suffix(transcript_extension)
+                if not text_fpath.exists():
+                    print("No transcript data for utterance {0} found: Missing file {1}. Skipping...\n".format(wav_fpath, text_fpath))
+                    continue
+                
+                # Process text
+                text = ""
+                with text_fpath.open("r") as text_file:
+                    text = text.join([line for line in text_file])
+                    text = text.replace("\"", "")
+                    text = text.strip()
+
+                if len(text) == 0:
+                    print("No transcript data for utterance {0} found: Missing file {1}. Skipping...\n".format(wav_fpath, text_fpath))
+                    continue
+
+                # Process the utterance
+                metadata.append(process_utterance(wav, text, out_dir, mel_outpath, wav_outpath, utterance_id, hparams))
+
+    else:
+        # Process alignment file (LibriSpeech support)
+        # Gather the utterance audios and texts
+        # Gather the utterance audios and texts
+        try:
+            alignments_fpath = next(speaker_dir.glob("*.alignment.txt"))
+            with alignments_fpath.open("r", encoding='utf-8') as alignments_file:
+                alignments = [line.rstrip().split(" ") for line in alignments_file]
+        except StopIteration as err:
+            # A few alignment files will be missing
+            print("Unable to process alignment file {0}: {1}".format(speaker_dir, err))
+            return
+
+        # Iterate over each entry in the alignments file
+        for alignment in alignments:
+            # expand the alignment
+            # wav_fname, words, end_times
+            wav_fname = alignment[0]
+            words = alignment[1]
+            end_times = alignment[2]
+            transcript = " ".join(alignment[3:])
+
+            # Find audio file for one of the allowed extension types
+            wav_fpath = ""
+            for extension in audio_extensions:
+                wav_fpath = speaker_dir.joinpath(wav_fname + extension)
+            
+            if len(wav_fpath) == 0:
+                print("Audio data for alignment {0} found: Missing file {1}. Skipping...\n" % alignment, wav_fname)
                 continue
 
-            # Iterate over each entry in the alignments file
-            for alignment in alignments:
-                # expand the alignment
-                # wav_fname, words, end_times
-                wav_fname = alignment[0]
-                words = alignment[1]
-                end_times = alignment[2]
-                transcript = " ".join(alignment[3:])
+            words = words.replace("\"", "").split(",")
+            end_times = list(map(float, end_times.replace("\"", "").split(",")))
 
-                wav_fpath = book_dir.joinpath(wav_fname + audio_extension)
-                assert wav_fpath.exists()
-                words = words.replace("\"", "").split(",")
-                end_times = list(map(float, end_times.replace("\"", "").split(",")))
+            # Process each sub-utterance
+            wavs, texts = split_on_silences(wav_fpath, words, end_times, hparams, transcript)
+            for i, (wav, text) in enumerate(zip(wavs, texts)):
+                sub_basename = "%s_%02d" % (wav_fname, i)
 
-                # Process each sub-utterance
-                wavs, texts = split_on_silences(wav_fpath, words, end_times, hparams, transcript)
-                for i, (wav, text) in enumerate(zip(wavs, texts)):
-                    sub_basename = "%s_%02d" % (wav_fname, i)
-                    metadata.append(process_utterance(wav, text, out_dir, sub_basename,
-                                                    skip_existing, hparams))      
+                # Skip existing utterances if needed
+                mel_outpath = out_dir.joinpath("mels", "mel-%s.npy" % sub_basename)
+                wav_outpath = out_dir.joinpath("audio", "audio-%s.npy" % sub_basename)
+                if skip_existing and mel_outpath.exists() and wav_outpath.exists():
+                    continue
+
+                metadata.append(process_utterance(wav, text, out_dir, mel_outpath, wav_outpath, sub_basename, hparams))      
 
     return [m for m in metadata if m is not None]
 
@@ -194,7 +233,7 @@ def split_on_silences(wav_fpath, words, end_times, hparams, transcript):
     return wavs, texts
 
 
-def process_utterance(wav: np.ndarray, text: str, out_dir: Path, basename: str, skip_existing: bool, hparams):
+def process_utterance(wav: np.ndarray, text: str, out_dir: Path, mel_fpath: Path, wav_fpath: Path, basename: str, hparams):
     ## FOR REFERENCE:
     # For you not to lose your head if you ever wish to change things here or implement your own
     # synthesizer.
@@ -207,19 +246,13 @@ def process_utterance(wav: np.ndarray, text: str, out_dir: Path, basename: str, 
     #   without extra padding. This means that you won't have an exact relation between the length
     #   of the wav and of the mel spectrogram. See the vocoder data loader.
 
-
-    # Skip existing utterances if needed
-    mel_fpath = out_dir.joinpath("mels", "mel-%s.npy" % basename)
-    wav_fpath = out_dir.joinpath("audio", "audio-%s.npy" % basename)
-    if skip_existing and mel_fpath.exists() and wav_fpath.exists():
-        return None
-
     # Trim silence
     if hparams.trim_silence:
         wav = encoder.preprocess_wav(wav, normalize=False, trim_silence=True)
     
     # Skip utterances that are too short
     if len(wav) < hparams.utterance_min_duration * hparams.sample_rate:
+        #print("Skipped utterance {0} because it's too short".format(basename))
         return None
 
     # Compute the mel spectrogram
@@ -228,6 +261,7 @@ def process_utterance(wav: np.ndarray, text: str, out_dir: Path, basename: str, 
 
     # Skip utterances that are too long
     if mel_frames > hparams.max_mel_frames and hparams.clip_mels_length:
+        #print("Skipped utterance {0} because it's too long.".format(basename))
         return None
 
     # Write the spectrogram, embed and audio to disk

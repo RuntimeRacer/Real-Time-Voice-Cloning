@@ -1,0 +1,142 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Encoder training",
+            "type": "python",
+            "request": "launch",
+            "program": "encoder_train.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "encoder_new_test",
+                "~/linux-workspace/datasets/SV2TTS/encoder",
+                "-e",
+                "1500000",
+                "-t",
+                "1",
+                "-p",
+                "20",
+                "-v",
+                "100",
+                "-u",
+                "2500",
+                "-b",
+                "5000"
+            ]
+        },
+        {
+            "name": "Encoder training compare",
+            "type": "python",
+            "request": "launch",
+            "program": "encoder_train.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "encoder_new_test",
+                "~/linux-workspace/datasets/SV2TTS/compare_test",
+                "-e",
+                "1500000",
+                "-t",
+                "1",
+                "-p",
+                "20",
+                "-v",
+                "100",
+                "-u",
+                "2500",
+                "-b",
+                "5000"
+            ]
+        },
+        {
+            "name": "CV Speakers",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "/media/dominik/Project-M1nk/datasets/cv-corpus-7.0-2021-07-21/",
+                "-o",
+                "/media/dominik/Project-M1nk/datasets-eval/cv-corpus-7.0-2021-07-21/",
+                "-ar",
+                "16000",
+                "-t",
+                "1",
+                "--lang",
+                "en"
+            ]
+        },
+        {
+            "name": "Nasjonal Speakers",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "/media/dominik/Project-M1nk/datasets/nasjonal-bank/",
+                "-o",
+                "/media/dominik/Project-M1nk/datasets-eval/nasjonal-bank/",
+                "-t",
+                "32"
+            ]
+        },
+        {
+            "name": "Multiling Tedx Speakers",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "/media/dominik/Project-M1nk/datasets/mtedx/de-de/data/train",
+                "-o",
+                "/media/dominik/Project-M1nk/datasets-eval/mtedx/de-de/data/train",
+                "-t",
+                "1"
+            ]
+        },
+        {
+            "name": "Encoder preprocess test",
+            "type": "python",
+            "request": "launch",
+            "program": "encoder_preprocess.py",
+            "console": "integratedTerminal",
+            "args": [
+                "/media/dominik/Project-M1nk/datasets-ready/",
+                "-o",
+                "~/linux-workspace/datasets/SV2TTS/encoder/",
+                "-d",
+                "voxceleb2:wav",
+                "-s",
+                "-t",
+                "1"
+            ]
+        },
+        {
+            "name": "Synthesizer preprocess test",
+            "type": "python",
+            "request": "launch",
+            "program": "synthesizer_preprocess_audio.py",
+            "console": "integratedTerminal",
+            "args": [
+                "/media/dominik/Project-M1nk/datasets-ready/synthesizer/",
+                "-o",
+                "~/linux-workspace/datasets/SV2TTS/synthesizer/",
+                "-s",
+                "-n",
+                "1",
+                "--no_alignments"
+            ]
+        }
+    ]
+}

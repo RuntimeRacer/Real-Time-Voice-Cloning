@@ -11,6 +11,7 @@ import numpy as np
 import visdom
 import umap
 
+# Contains up 356 colors
 colormap = np.array([
     [33, 0, 127],
     [32, 25, 35],

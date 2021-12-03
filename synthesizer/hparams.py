@@ -83,7 +83,7 @@ hparams = HParams(
         trim_silence = True,                        # Use with sample_rate of 16000 for best results
 
         ### SV2TTS
-        speaker_embedding_size = 256,               # Dimension for the speaker embedding
+        speaker_embedding_size = 768,               # Dimension for the speaker embedding
         silence_min_duration_split = 0.4,           # Duration in seconds of a silence for an utterance to be split
         utterance_min_duration = 1.6,               # Duration in seconds below which utterances are discarded
         )

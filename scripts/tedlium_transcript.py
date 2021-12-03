@@ -1,23 +1,87 @@
-import numpy as np
-from pathlib import Path
-from tqdm import tqdm
 import os
-import shutil
+from pathlib import Path
+from stm import parse_stm_file
+import argparse
+import sox
+import random
+from tqdm import tqdm
+from multiprocess.pool import ThreadPool
 
-base_path = Path("/datasets/slr60/train-clean-360")
-# speaker_dirs = [f for f in encoder_path.glob("*") if f.is_file()]
-audio_files = [f for f in base_path.glob("**/*.wav")]
+# Parser for Arguments
+parser = argparse.ArgumentParser(description='Process TED-LIUM v3.')
+parser.add_argument("datasets_root", type=Path, help=\
+    "Path to the directory containing your CommonVoice datasets.")
+parser.add_argument("-o", "--out_dir", type=Path, default=argparse.SUPPRESS, help=\
+    "Path to the ouput directory for this preprocessing script")
+parser.add_argument("-ft", "--fetch_transcripts", type=Path, default=argparse.SUPPRESS, help=\
+    "Path to the ouput directory for this preprocessing script")
+parser.add_argument("-t", "--threads", type=int, default=8)
+args = parser.parse_args()
 
-# loop through and group the files!
-for audio_file in tqdm(audio_files):
-    # new_file = base_path.joinpath(os.path.basename(speaker_dir))
-    src_file = audio_file.parent.joinpath("{0}.original.txt".format(audio_file.stem))
-    dest_file = audio_file.parent.joinpath("{0}.txt".format(audio_file.stem))
+# dirs
+base_dir = args.datasets_root
+# wav_dir = base_dir.joinpath("wav") # Contains WAV files (Audio, outdated)
+sph_dir = base_dir.joinpath("sph") # Contains SPH files (Audio)
+stm_dir = base_dir.joinpath("stm") # Contains STM file (Metadata)
+out_dir = base_dir.joinpath("speakers")
+if out_dir != None:
+    out_dir = args.out_dir
 
-    # debug!
-    # print("From: {0} - To: {1}".format(src_file, dest_file))
-    # break
+# Process files
+source_files = [f for f in sph_dir.glob("*.sph") if f.is_file()]
+sorted_files = sorted(source_files)
 
-    # scary!
-    # shutil.move(speaker_dir, new_dir)
-    shutil.copy(src_file, dest_file)
+# Process individual files in threadpool
+def process_file(file):
+    # file details
+    name = file.name
+    file_name = file.stem
+    suffix = file.suffix
+    # print("Processing: {0}...".format(name))
+
+    # Get ID for this speaker
+    speaker_id = out_dir.joinpath(file_name.split('_')[0])    
+
+    # Get matching STM file for this audio file and retrieve the segments
+    stm_path = stm_dir.joinpath("{}.stm".format(file_name))
+    stm_segments = parse_stm_file(stm_path)
+
+    # Make sure speaker dir exists
+    out_path = out_dir.joinpath(speaker_id)
+    os.makedirs(out_path, exist_ok=True)
+
+    # process all segments for this speaker
+    for si, segment in enumerate(stm_segments):
+        # define output file
+        out_file_audio = Path(out_path).joinpath("{0}_{1:04d}.wav".format(file_name, si))
+        out_file_transcript = Path(out_path).joinpath("{0}_{1:04d}.txt".format(file_name, si))
+
+        # Get transcript and remove unwanted content
+        transcript = segment.transcript
+        transcript = transcript.replace("<unk>","")
+        transcript = transcript.strip()
+
+        if not out_file_transcript.exists():
+            with open(out_file_transcript, "w", encoding="utf8") as out:
+                out.write(transcript)
+
+        # Initialize Transformer
+        transformer = sox.Transformer()
+        transformer.trim(segment.start_time, segment.stop_time)
+        transformer.build(str(file), str(out_file_audio))
+
+
+with ThreadPool(args.threads) as pool:
+    list(
+        tqdm(
+            pool.imap(
+                process_file,
+                sorted_files
+            ),
+            "TED-LIUM v3",
+            len(sorted_files),
+            unit="speakers"
+        )
+    )
+
+print("Done, thanks for playing...")

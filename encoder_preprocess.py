@@ -25,7 +25,7 @@ if __name__ == "__main__":
         formatter_class=MyFormatter
     )
     parser.add_argument("datasets_root", type=Path, help=\
-        "Path to the directory containing your LibriSpeech/TTS and VoxCeleb datasets.")
+        "Path to the directory containing your encoder training datasets.")
     parser.add_argument("-o", "--out_dir", type=Path, default=argparse.SUPPRESS, help=\
         "Path to the output directory that will contain the mel spectrograms. If left out, "
         "defaults to <datasets_root>/SV2TTS/encoder/")
@@ -57,6 +57,8 @@ if __name__ == "__main__":
     # Output dir for processed audio files
     if not hasattr(args, "out_dir"):
         args.out_dir = args.datasets_root.joinpath("SV2TTS", "encoder")
+
+    # Create directories
     assert args.datasets_root.exists()
     args.out_dir.mkdir(exist_ok=True, parents=True)
 
