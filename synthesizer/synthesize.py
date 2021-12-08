@@ -10,10 +10,10 @@ from pathlib import Path
 from tqdm import tqdm
 import platform
 
-def run_synthesis(in_dir, out_dir, model_dir, hparams):
+def run_synthesis(in_dir, out_dir, model_dir, hparams, skip_existing, threads=8):
     # This generates ground truth-aligned mels for vocoder training
     synth_dir = Path(out_dir).joinpath("mels_gta")
-    synth_dir.mkdir(exist_ok=True)
+    synth_dir.mkdir(exist_ok=True, parents=True)
     print(hparams_debug_string())
 
     # Check for GPU
@@ -64,7 +64,7 @@ def run_synthesis(in_dir, out_dir, model_dir, hparams):
     data_loader = DataLoader(dataset,
                              collate_fn=lambda batch: collate_synthesizer(batch, r, hparams),
                              batch_size=hparams.synthesis_batch_size,
-                             num_workers=2 if platform.system() != "Windows" else 0,
+                             num_workers=threads if platform.system() != "Windows" else 0,
                              shuffle=False,
                              pin_memory=True)
 
@@ -85,6 +85,10 @@ def run_synthesis(in_dir, out_dir, model_dir, hparams):
             for j, k in enumerate(idx):
                 # Note: outputs mel-spectrogram files and target ones have same names, just different folders
                 mel_filename = Path(synth_dir).joinpath(dataset.metadata[k][1])
+
+                #if skip_existing and mel_filename.exists():
+                    #continue
+
                 mel_out = mels_out[j].detach().cpu().numpy().T
 
                 # Use the length of the ground truth mel to remove padding from the generated mels

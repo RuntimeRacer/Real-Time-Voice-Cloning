@@ -111,13 +111,15 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
             k = step // 1000
 
             if backup_every != 0 and step % backup_every == 0 :
+                print("Making a backup (step %d)" % step)
                 model.checkpoint(model_dir, optimizer)
                 
             if save_every != 0 and step % save_every == 0 :
+                print("Saving the model (step %d)" % step)
                 model.save(weights_fpath, optimizer)
 
             msg = f"| Epoch: {epoch} ({i}/{len(data_loader)}) | " \
-                f"Loss: {avg_loss:.4f} | {speed:.1f} " \
+                f"Loss: {avg_loss:.6f} | {speed:.1f} " \
                 f"steps/s | Step: {k}k | "
             stream(msg)
 

@@ -32,6 +32,11 @@ if __name__ == "__main__":
         "Preprocess audio without trimming silences (not recommended).")
     parser.add_argument("--cpu", action="store_true", help=\
         "If True, processing is done on CPU, even when a GPU is available.")
+    parser.add_argument("-t","--threads", type=int, default=8, help=\
+        "Amount of threads to be used during preprocessing")
+    parser.add_argument("-s", "--skip_existing", action="store_true", help=\
+        "Whether to overwrite existing files with the same name. Useful if the preprocessing was "
+        "interrupted.")
     args = parser.parse_args()
     print_args(args, parser)
     modified_hp = hparams.parse(args.hparams)
@@ -55,5 +60,5 @@ if __name__ == "__main__":
                 "use --no_trim to disable this error message.")
     del args.no_trim
 
-    run_synthesis(args.in_dir, args.out_dir, args.model_dir, modified_hp)
+    run_synthesis(args.in_dir, args.out_dir, args.model_dir, modified_hp, args.skip_existing, args.threads)
 
