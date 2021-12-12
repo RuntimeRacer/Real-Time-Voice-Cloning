@@ -9,6 +9,7 @@ from synthesizer.utils import ValueWindow, data_parallel_workaround
 from synthesizer.utils.plot import plot_spectrogram
 from synthesizer.utils.symbols import symbols
 from synthesizer.utils.text import sequence_to_text
+from synthesizer.visualizations import Visualizations
 from vocoder.display import *
 from datetime import datetime
 import numpy as np
@@ -23,8 +24,8 @@ def np_now(x: torch.Tensor): return x.detach().cpu().numpy()
 def time_string():
     return datetime.now().strftime("%Y-%m-%d %H:%M")
 
-def train(run_id: str, syn_dir: str, models_dir: str, save_every: int,
-         backup_every: int, force_restart:bool, hparams):
+def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: int,
+         backup_every: int, force_restart:bool, vis_every: int, visdom_server: str, no_visdom: bool, hparams):
 
     syn_dir = Path(syn_dir)
     models_dir = Path(models_dir)
@@ -115,6 +116,14 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int,
                              shuffle=True,
                              pin_memory=True)
 
+    # Initialize the visualization environment
+    vis = Visualizations(run_id, vis_every, server=visdom_server, disabled=no_visdom)
+    vis.log_dataset(dataset)
+    vis.log_params()
+    # FIXME: Print all device names in case we got multiple GPUs or CPUs
+    device_name = str(torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU")
+    vis.log_implementation({"Device": device_name})
+
     for i, session in enumerate(hparams.tts_schedule):
         current_step = model.get_step()
 
@@ -147,7 +156,7 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int,
         data_loader = DataLoader(dataset,
                                  collate_fn=lambda batch: collate_synthesizer(batch, r, hparams),
                                  batch_size=batch_size,
-                                 num_workers=2 if platform.system() != "Windows" else 0,
+                                 num_workers=threads,
                                  shuffle=True,
                                  pin_memory=True)
 
@@ -172,8 +181,7 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int,
                 # Forward pass
                 # Parallelize model onto GPUS using workaround due to python bug
                 if device.type == "cuda" and torch.cuda.device_count() > 1:
-                    m1_hat, m2_hat, attention, stop_pred = data_parallel_workaround(model, texts,
-                                                                                    mels, embeds)
+                    m1_hat, m2_hat, attention, stop_pred = data_parallel_workaround(model, texts, mels, embeds)
                 else:
                     m1_hat, m2_hat, attention, stop_pred = model(texts, mels, embeds)
 
@@ -202,6 +210,9 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int,
 
                 msg = f"| Epoch: {epoch}/{epochs} ({i}/{steps_per_epoch}) | Loss: {loss_window.average:#.4} | {1./time_window.average:#.2} steps/s | Step: {k}k | "
                 stream(msg)
+
+                # Update visualizations
+                vis.update(loss.item(), step)
 
                 # Backup or save model as appropriate
                 if backup_every != 0 and step % backup_every == 0 : 

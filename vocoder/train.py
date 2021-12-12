@@ -3,6 +3,7 @@ from vocoder.vocoder_dataset import VocoderDataset, collate_vocoder
 from vocoder.distribution import discretized_mix_logistic_loss
 from vocoder.display import stream, simple_table
 from vocoder.gen_wavernn import gen_testset
+from vocoder.visualizations import Visualizations
 from torch.utils.data import DataLoader
 from pathlib import Path
 from torch import optim
@@ -14,7 +15,8 @@ import torch
 import platform
 
 def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_truth: bool,
-          save_every: int, backup_every: int, force_restart: bool, threads: int):
+          save_every: int, backup_every: int, force_restart: bool,
+          vis_every: int, visdom_server: str, no_visdom: bool, threads: int):
     # Check to make sure the hop length is correctly factorised
     assert np.cumprod(hp.voc_upsample_factors)[-1] == hp.hop_length
     
@@ -70,6 +72,14 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
                              shuffle=True,
                              pin_memory=True)
 
+    # Initialize the visualization environment
+    vis = Visualizations(run_id, vis_every, server=visdom_server, disabled=no_visdom)
+    vis.log_dataset(dataset)
+    vis.log_params()
+    # FIXME: Print all device names in case we got multiple GPUs or CPUs
+    device_name = str(torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU")
+    vis.log_implementation({"Device": device_name})
+
     # Begin the training
     simple_table([('Batch size', hp.voc_batch_size),
                   ('LR', hp.voc_lr),
@@ -110,6 +120,11 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
             step = model.get_step()
             k = step // 1000
 
+            msg = f"| Epoch: {epoch} ({i}/{len(data_loader)}) | " \
+                  f"Loss: {avg_loss:.6f} | {speed:.1f} " \
+                  f"steps/s | Step: {k}k | "
+            stream(msg)
+
             if backup_every != 0 and step % backup_every == 0 :
                 print("Making a backup (step %d)" % step)
                 model.checkpoint(model_dir, optimizer)
@@ -118,10 +133,8 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
                 print("Saving the model (step %d)" % step)
                 model.save(weights_fpath, optimizer)
 
-            msg = f"| Epoch: {epoch} ({i}/{len(data_loader)}) | " \
-                f"Loss: {avg_loss:.6f} | {speed:.1f} " \
-                f"steps/s | Step: {k}k | "
-            stream(msg)
+            # Update visualizations
+            vis.update(loss.item(), step)
 
 
         gen_testset(model, test_loader, hp.voc_gen_at_checkpoint, hp.voc_gen_batched,

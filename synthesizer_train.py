@@ -23,6 +23,12 @@ if __name__ == "__main__":
         "model.")
     parser.add_argument("-f", "--force_restart", action="store_true", help= \
         "Do not load any saved model and restart from scratch.")
+    parser.add_argument("-v", "--vis_every", type=int, default=20, help= \
+        "Number of steps between updates of the loss and the plots.")
+    parser.add_argument("--visdom_server", type=str, default="http://localhost")
+    parser.add_argument("--no_visdom", action="store_true", help= \
+        "Disable visdom.")
+    parser.add_argument("-t", "--threads", type=int, default=8)
     parser.add_argument("--hparams", default="",
                         help="Hyperparameter overrides as a comma-separated list of name=value "
 							 "pairs")

@@ -62,6 +62,7 @@ def train(run_id: str, clean_data_root: Path, models_dir: Path, umap_every: int,
     vis = Visualizations(run_id, vis_every, server=visdom_server, disabled=no_visdom)
     vis.log_dataset(dataset)
     vis.log_params()
+    # FIXME: Print all device names in case we got multiple GPUs or CPUs
     device_name = str(torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU")
     vis.log_implementation({"Device": device_name})
 
