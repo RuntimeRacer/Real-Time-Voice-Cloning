@@ -14,7 +14,7 @@ import torch
 import platform
 
 def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_truth: bool,
-          save_every: int, backup_every: int, force_restart: bool):
+          save_every: int, backup_every: int, force_restart: bool, threads: int):
     # Check to make sure the hop length is correctly factorised
     assert np.cumprod(hp.voc_upsample_factors)[-1] == hp.hop_length
     
@@ -79,7 +79,7 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
         data_loader = DataLoader(dataset,
                                  collate_fn=collate_vocoder,
                                  batch_size=hp.voc_batch_size,
-                                 num_workers=2 if platform.system() != "Windows" else 0,
+                                 num_workers=threads,
                                  shuffle=True,
                                  pin_memory=True)
         start = time.time()
