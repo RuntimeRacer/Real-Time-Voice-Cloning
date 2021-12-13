@@ -93,7 +93,10 @@ def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, hparams,
                 text = ""
                 with text_fpath.open("r") as text_file:
                     text = text.join([line for line in text_file])
+                    # Remove unwanted stuff from text
                     text = text.replace("\"", "")
+                    text = text.replace("\\s", "")
+                    text = text.replace("~", "")
                     text = text.strip()
 
                 if len(text) == 0:

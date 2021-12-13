@@ -37,6 +37,16 @@ _abbreviations = [(re.compile("\\b%s\\." % x[0], re.IGNORECASE), x[1]) for x in 
   ("ltd", "limited"),
   ("col", "colonel"),
   ("ft", "fort"),
+  ("mk", "mark"),
+  ("jan", "january"),
+  ("feb", "february"),
+  ("mar", "march"),
+  ("apr", "april"),
+  ("aug", "august"),
+  ("sept", "september"),
+  ("oct", "october"),
+  ("nov", "november"),
+  ("dec", "december")
 ]]
 
 

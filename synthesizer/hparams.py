@@ -21,7 +21,11 @@ class HParams(object):
 hparams = HParams(
         ### Signal Processing (used in both synthesizer and vocoder)
         sample_rate = 16000,
-        n_fft = 800,
+        #n_fft = 800,
+        #num_mels = 80,
+        #hop_size = 200,                             # Tacotron uses 12.5 ms frame shift (set to sample_rate * 0.0125)
+        #win_size = 800,                             # Tacotron uses 50 ms frame length (set to sample_rate * 0.050)
+        n_fft = 1024,
         num_mels = 80,
         hop_size = 200,                             # Tacotron uses 12.5 ms frame shift (set to sample_rate * 0.0125)
         win_size = 800,                             # Tacotron uses 50 ms frame length (set to sample_rate * 0.050)
@@ -35,7 +39,7 @@ hparams = HParams(
         ### Tacotron Text-to-Speech (TTS)
         tts_embed_dims = 512,                       # Embedding dimension for the graphemes/phoneme inputs
         tts_encoder_dims = 256,
-        tts_decoder_dims = 128,
+        tts_decoder_dims = 256,
         tts_postnet_dims = 512,
         tts_encoder_K = 5,
         tts_lstm_dims = 1024,
