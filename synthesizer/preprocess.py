@@ -10,8 +10,16 @@ from audioread.exceptions import NoBackendError
 from shutil import copyfile
 import numpy as np
 import librosa
-import sys
 import time
+import atexit
+import json
+
+
+def save_metadata_progress(metadata: dict, metadata_fpath: Path):
+    print("\nSaving training metadata...")
+    with metadata_fpath.open("w", encoding="utf-8") as metadata_file:
+        json.dump(metadata, metadata_file)
+    print("Saved %d training metadata entries to %s." % (len(metadata), metadata_fpath))
 
 def synthesizer_preprocess_dataset(datasets_root: Path, out_dir: Path, n_processes: int, skip_existing: bool, hparams, no_alignments: bool, dataset_name: str, subfolders: str, audio_extensions: list, transcript_extension: str):
     # Gather the input directories
@@ -25,36 +33,62 @@ def synthesizer_preprocess_dataset(datasets_root: Path, out_dir: Path, n_process
     out_dir.joinpath("audio").mkdir(exist_ok=True)
 
     # Create a metadata file
-    metadata_fpath = out_dir.joinpath("train.txt")
-    metadata_bup_fpath = out_dir.joinpath("train_backup_{0}.txt".format(time.time()))
-    if metadata_fpath.is_file():
+    metadata_fpath = out_dir.joinpath("train.json")
+    metadata_bup_fpath = out_dir.joinpath("train_backup_{0}.json".format(time.time()))
+    if metadata_fpath.is_file() and not skip_existing:
+        # Backup so we don't accidentially delete sth.
         copyfile(metadata_fpath, metadata_bup_fpath)
-    metadata_file = metadata_fpath.open("a" if skip_existing else "w", encoding="utf-8")
+
+    # Create metadata dict
+    metadata = {}
+
+    # Read exsisting metadata in case existing data should be skipped
+    if skip_existing and metadata_fpath.is_file():
+        with metadata_fpath.open("r", encoding="utf-8") as metadata_file:
+            metadata = json.load(metadata_file)
+
+    speaker_dirs = list(chain.from_iterable(input_dir.glob("*") for input_dir in input_dirs))
+    if skip_existing:
+        speaker_dirs[:] = (speaker_dir for speaker_dir in speaker_dirs if not str(speaker_dir) in metadata)
+
+    # Register a shutdown hook to safely store metadata process in case the process is interrupted
+    atexit.register(save_metadata_progress, metadata, metadata_fpath)
 
     # Preprocess the dataset
-    speaker_dirs = list(chain.from_iterable(input_dir.glob("*") for input_dir in input_dirs))
     func = partial(preprocess_speaker, out_dir=out_dir, skip_existing=skip_existing, hparams=hparams, no_alignments=no_alignments, audio_extensions=audio_extensions, transcript_extension=transcript_extension)
     job = ThreadPool(n_processes).imap(func, speaker_dirs)
     for speaker_metadata in tqdm(job, dataset_name, len(speaker_dirs), unit="speakers"):
-        for metadatum in speaker_metadata:
-            metadata_file.write("|".join(str(x) for x in metadatum) + "\n")
-    metadata_file.close()
+        speaker_dir = str(speaker_metadata["speaker_dir"])
+        metadata[speaker_dir] = []
+        for metadatum in speaker_metadata["metadata"]:
+            metadata[speaker_dir].append("|".join(str(x) for x in metadatum))
+
+    # Save metadata file
+    save_metadata_progress(metadata, metadata_fpath)
+    # Unregister shutdown hook
+    atexit.unregister(save_metadata_progress)
 
     # Verify the contents of the metadata file
+    metadata_lines = []
     with metadata_fpath.open("r", encoding="utf-8") as metadata_file:
-        metadata = [line.split("|") for line in metadata_file]
-    mel_frames = sum([int(m[4]) for m in metadata])
-    timesteps = sum([int(m[3]) for m in metadata])
+        metadata = json.load(metadata_file)
+        for speaker, utterances in metadata.items():
+            metadata_lines.extend([line.split("|") for line in utterances])
+    mel_frames = sum([int(m[4]) for m in metadata_lines])
+    timesteps = sum([int(m[3]) for m in metadata_lines])
     sample_rate = hparams.sample_rate
     hours = (timesteps / sample_rate) / 3600
-    print("The dataset consists of %d utterances, %d mel frames, %d audio timesteps (%.2f hours)." %
-          (len(metadata), mel_frames, timesteps, hours))
-    print("Max input length (text chars): %d" % max(len(m[5]) for m in metadata))
-    print("Max mel frames length: %d" % max(int(m[4]) for m in metadata))
-    print("Max audio timesteps length: %d" % max(int(m[3]) for m in metadata))
+    print("The dataset consists of %d utterances, %d mel frames, %d audio timesteps (%.2f hours)." % (len(metadata_lines), mel_frames, timesteps, hours))
+    print("Max input length (text chars): %d" % max(len(m[5]) for m in metadata_lines))
+    print("Max mel frames length: %d" % max(int(m[4]) for m in metadata_lines))
+    print("Max audio timesteps length: %d" % max(int(m[3]) for m in metadata_lines))
 
 def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, hparams, no_alignments: bool, audio_extensions: list, transcript_extension: str):
-    metadata = []
+    speaker_metadata = {
+        "speaker_dir": speaker_dir,
+        "metadata": []
+    }
+
     if no_alignments:
         # Gather the utterance audios and texts
         # LibriTTS uses .wav but we will include extensions for compatibility with other datasets
@@ -64,11 +98,9 @@ def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, hparams,
             for wav_fpath in wav_fpaths:
                 utterance_id = "{0}_{1}".format(speaker_dir.name, wav_fpath.with_suffix("").name)
 
-                # Skip existing utterances if needed
+                # Get out paths
                 mel_outpath = out_dir.joinpath("mels", "mel-%s.npy" % utterance_id)
                 wav_outpath = out_dir.joinpath("audio", "audio-%s.npy" % utterance_id)
-                if skip_existing and mel_outpath.exists() and wav_outpath.exists():
-                    continue
 
                 # Load the audio waveform
                 wav = None
@@ -104,7 +136,9 @@ def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, hparams,
                     continue
 
                 # Process the utterance
-                metadata.append(process_utterance(wav, text, out_dir, mel_outpath, wav_outpath, utterance_id, hparams))
+                output = process_utterance(wav, text, out_dir, mel_outpath, wav_outpath, utterance_id, hparams)
+                if output is not None:
+                    speaker_metadata["metadata"].append(output)
 
     else:
         # Process alignment file (LibriSpeech support)
@@ -151,9 +185,12 @@ def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, hparams,
                 if skip_existing and mel_outpath.exists() and wav_outpath.exists():
                     continue
 
-                metadata.append(process_utterance(wav, text, out_dir, mel_outpath, wav_outpath, sub_basename, hparams))      
+                # Process the utterance
+                output = process_utterance(wav, text, out_dir, mel_outpath, wav_outpath, sub_basename, hparams)
+                if output is not None:
+                    speaker_metadata["metadata"].append(output)
 
-    return [m for m in metadata if m is not None]
+    return speaker_metadata
 
 
 def split_on_silences(wav_fpath, words, end_times, hparams, transcript):
