@@ -449,13 +449,13 @@ class Visualizations:
             opts={"title": "Training implementation"}
         )
 
-    def update(self, loss, acc, step):
+    def update(self, loss, eer, step):
         # Update the tracking data
         now = timer()
         self.step_times.append(1000 * (now - self.last_update_timestamp))
         self.last_update_timestamp = now
         self.losses.append(loss)
-        self.eers.append(acc)
+        self.eers.append(eer)
         print(".", end="")
 
         # Update the plots every <update_every> steps

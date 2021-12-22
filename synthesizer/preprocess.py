@@ -326,15 +326,18 @@ def embed_utterance(fpaths, encoder_model_fpath):
 
 def create_embeddings(synthesizer_root: Path, encoder_model_fpath: Path, n_processes: int):
     wav_dir = synthesizer_root.joinpath("audio")
-    metadata_fpath = synthesizer_root.joinpath("train.txt")
+    metadata_fpath = synthesizer_root.joinpath("train.json")
     assert wav_dir.exists() and metadata_fpath.exists()
     embed_dir = synthesizer_root.joinpath("embeds")
     embed_dir.mkdir(exist_ok=True)
 
     # Gather the input wave filepath and the target output embed filepath
+    fpaths = []
     with metadata_fpath.open("r", encoding="utf-8") as metadata_file:
-        metadata = [line.split("|") for line in metadata_file]
-        fpaths = [(wav_dir.joinpath(m[0]), embed_dir.joinpath(m[2])) for m in metadata]
+        metadata_dict = json.load(metadata_file)
+        for speaker, lines in metadata_dict.items():
+            metadata = [line.split("|") for line in lines]
+            fpaths.extend([(wav_dir.joinpath(m[0]), embed_dir.joinpath(m[2])) for m in metadata])
 
     # TODO: improve on the multiprocessing, it's terrible. Disk I/O is the bottleneck here.
     # Embed the utterances in separate threads
