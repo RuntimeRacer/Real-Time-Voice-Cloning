@@ -107,7 +107,7 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: 
         print("Tacotron weights loaded from step %d" % model.step)
     
     # Initialize the dataset
-    metadata_fpath = syn_dir.joinpath("train.txt")
+    metadata_fpath = syn_dir.joinpath("train.json")
     mel_dir = syn_dir.joinpath("mels")
     embed_dir = syn_dir.joinpath("embeds")
     dataset = SynthesizerDataset(metadata_fpath, mel_dir, embed_dir, hparams)
@@ -127,7 +127,11 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: 
     for i, session in enumerate(hparams.tts_schedule):
         current_step = model.get_step()
 
-        r, lr, max_step, batch_size = session
+        r, lr, loops, batch_size = session
+
+        # Iterate over whole dataset for X loops according to schedule
+        total_iters = len(dataset)
+        max_step = total_iters * (loops / batch_size)
 
         training_steps = max_step - current_step
 
@@ -160,7 +164,6 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: 
                                  shuffle=True,
                                  pin_memory=True)
 
-        total_iters = len(dataset) 
         steps_per_epoch = np.ceil(total_iters / batch_size).astype(np.int32)
         epochs = np.ceil(training_steps / steps_per_epoch).astype(np.int32)
 

@@ -3,14 +3,18 @@ from torch.utils.data import Dataset
 import numpy as np
 from pathlib import Path
 from synthesizer.utils.text import text_to_sequence
+import json
 
 
 class SynthesizerDataset(Dataset):
     def __init__(self, metadata_fpath: Path, mel_dir: Path, embed_dir: Path, hparams):
         print("Using inputs from:\n\t%s\n\t%s\n\t%s" % (metadata_fpath, mel_dir, embed_dir))
-        
+
+        metadata = []
         with metadata_fpath.open("r") as metadata_file:
-            metadata = [line.split("|") for line in metadata_file]
+            metadata_dict = json.load(metadata_file)
+            for speaker, lines in metadata_dict.items():
+                metadata.extend([line.split("|") for line in lines])
         
         mel_fnames = [x[1] for x in metadata if int(x[4])]
         mel_fpaths = [mel_dir.joinpath(fname) for fname in mel_fnames]
