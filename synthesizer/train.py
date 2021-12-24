@@ -218,11 +218,13 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: 
                 vis.update(loss.item(), step)
 
                 # Backup or save model as appropriate
-                if backup_every != 0 and step % backup_every == 0 : 
+                if backup_every != 0 and step % backup_every == 0:
+                    print("Making a backup (step %d)" % step)
                     backup_fpath = Path("{}/{}_{}k.pt".format(str(weights_fpath.parent), run_id, k))
                     model.save(backup_fpath, optimizer)
 
-                if save_every != 0 and step % save_every == 0 : 
+                if save_every != 0 and step % save_every == 0:
+                    print("Saving the model (step %d)" % step)
                     # Must save latest optimizer state to ensure that resuming training
                     # doesn't produce artifacts
                     model.save(weights_fpath, optimizer)
