@@ -125,6 +125,10 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
                   f"steps/s | Step: {k}k | "
             stream(msg)
 
+            # Save visdom values
+            if vis_every != 0 and step % vis_every == 0:
+                vis.save()
+
             if backup_every != 0 and step % backup_every == 0 :
                 print("Making a backup (step %d)" % step)
                 model.checkpoint(model_dir, optimizer)

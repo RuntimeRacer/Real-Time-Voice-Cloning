@@ -219,6 +219,10 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: 
                 # Update visualizations
                 vis.update(loss.item(), step)
 
+                # Save visdom values
+                if vis_every != 0 and step % vis_every == 0:
+                    vis.save()
+
                 # Backup or save model as appropriate
                 if backup_every != 0 and step % backup_every == 0:
                     print("Making a backup (step %d)" % step)
