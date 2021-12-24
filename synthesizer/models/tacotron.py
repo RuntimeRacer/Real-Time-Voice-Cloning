@@ -213,7 +213,7 @@ class LSA(nn.Module):
         self.attention = None
 
     def init_attention(self, encoder_seq_proj):
-        device = next(self.parameters()).device  # use same device as parameters
+        device = self.device  # use same device as parameters
         b, t, c = encoder_seq_proj.size()
         self.cumulative = torch.zeros(b, t, device=device)
         self.attention = torch.zeros(b, t, device=device)
@@ -263,7 +263,7 @@ class Decoder(nn.Module):
         self.stop_proj = nn.Linear(encoder_dims + speaker_embedding_size + lstm_dims, 1)
 
     def zoneout(self, prev, current, p=0.1):
-        device = next(self.parameters()).device  # Use same device as parameters
+        device = self.device  # Use same device as parameters
         mask = torch.zeros(prev.size(), device=device).bernoulli_(p)
         return prev * mask + current * (1 - mask)
 
@@ -359,7 +359,7 @@ class Tacotron(nn.Module):
         self.decoder.r = self.decoder.r.new_tensor(value, requires_grad=False)
 
     def forward(self, x, m, speaker_embedding):
-        device = next(self.parameters()).device  # use same device as parameters
+        device = self.device  # use same device as parameters
 
         self.step += 1
         batch_size, _, steps  = m.size()
@@ -416,7 +416,7 @@ class Tacotron(nn.Module):
 
     def generate(self, x, speaker_embedding=None, steps=2000):
         self.eval()
-        device = next(self.parameters()).device  # use same device as parameters
+        device = self.device  # use same device as parameters
 
         batch_size, _  = x.size()
 
@@ -492,7 +492,7 @@ class Tacotron(nn.Module):
 
     def load(self, path, optimizer=None):
         # Use device of model params as location for loaded state
-        device = next(self.parameters()).device
+        device = self.device
         checkpoint = torch.load(str(path), map_location=device)
         self.load_state_dict(checkpoint["model_state"])
 
