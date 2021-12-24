@@ -8,10 +8,11 @@ import json
 
 class SynthesizerDataset(Dataset):
     def __init__(self, metadata_fpath: Path, mel_dir: Path, embed_dir: Path, hparams):
-        print("Using inputs from:\n\t%s\n\t%s\n\t%s" % (metadata_fpath, mel_dir, embed_dir))
+        self.metadata_fpath = metadata_fpath
+        print("Using inputs from:\n\t%s\n\t%s\n\t%s" % (self.metadata_fpath, mel_dir, embed_dir))
 
         metadata = []
-        with metadata_fpath.open("r") as metadata_file:
+        with self.metadata_fpath.open("r") as metadata_file:
             metadata_dict = json.load(metadata_file)
             for speaker, lines in metadata_dict.items():
                 metadata.extend([line.split("|") for line in lines])
@@ -49,6 +50,22 @@ class SynthesizerDataset(Dataset):
 
     def __len__(self):
         return len(self.samples_fpaths)
+
+    def get_logs(self):
+        speakers = 0
+        utterances = 0
+
+        log_string = ""
+        with self.metadata_fpath.open("r") as metadata_file:
+            metadata_dict = json.load(metadata_file)
+            for speaker, lines in metadata_dict.items():
+                speakers += 1
+                utterances += len(lines)
+
+        log_string += "Speakers: {0}\n".format(speakers)
+        log_string += "Utterances: {0}\n".format(utterances)
+        log_string += "Avg. Utterance / Speaker: {0}\n".format(utterances / speakers)
+        return log_string
 
 
 def collate_synthesizer(batch, r, hparams):
