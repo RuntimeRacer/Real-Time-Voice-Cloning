@@ -184,7 +184,9 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: 
                 # Forward pass
                 # Parallelize model onto GPUS using workaround due to python bug
                 if device.type == "cuda" and torch.cuda.device_count() > 1:
-                    m1_hat, m2_hat, attention, stop_pred = data_parallel_workaround(model, texts, mels, embeds)
+                    # FIXME: data_parallel is deeply broken, try another attempt with distributed version
+                    #m1_hat, m2_hat, attention, stop_pred = data_parallel_workaround(model, texts, mels, embeds)
+                    m1_hat, m2_hat, attention, stop_pred = model(texts, mels, embeds)
                 else:
                     m1_hat, m2_hat, attention, stop_pred = model(texts, mels, embeds)
 

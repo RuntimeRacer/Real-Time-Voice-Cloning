@@ -1,8 +1,7 @@
 import os
-from typing import List, Tuple
 import numpy as np
 import torch
-from torch import Tensor, device, nn
+import torch.nn as nn
 import torch.nn.functional as F
 from pathlib import Path
 from typing import Union
@@ -14,20 +13,6 @@ class HighwayNetwork(nn.Module):
         self.W1 = nn.Linear(size, size)
         self.W2 = nn.Linear(size, size)
         self.W1.bias.data.fill_(0.)
-
-    @property
-    def device(self) -> device:
-        try:
-            return next(self.parameters()).device
-        except StopIteration:
-            # For nn.DataParallel compatibility in PyTorch 1.5+
-            def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
-                tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
-                return tuples
-
-            gen = self._named_members(get_members_fn=find_tensor_attributes)
-            first_tuple = next(gen)
-            return first_tuple[1].device
 
     def forward(self, x):
         x1 = self.W1(x)
@@ -48,20 +33,6 @@ class Encoder(nn.Module):
         self.cbhg = CBHG(K=K, in_channels=cbhg_channels, channels=cbhg_channels,
                          proj_channels=[cbhg_channels, cbhg_channels],
                          num_highways=num_highways)
-
-    @property
-    def device(self) -> device:
-        try:
-            return next(self.parameters()).device
-        except StopIteration:
-            # For nn.DataParallel compatibility in PyTorch 1.5+
-            def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
-                tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
-                return tuples
-
-            gen = self._named_members(get_members_fn=find_tensor_attributes)
-            first_tuple = next(gen)
-            return first_tuple[1].device
 
     def forward(self, x, speaker_embedding=None):
         x = self.embedding(x)
@@ -109,20 +80,6 @@ class BatchNormConv(nn.Module):
         self.bnorm = nn.BatchNorm1d(out_channels)
         self.relu = relu
 
-    @property
-    def device(self) -> device:
-        try:
-            return next(self.parameters()).device
-        except StopIteration:
-            # For nn.DataParallel compatibility in PyTorch 1.5+
-            def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
-                tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
-                return tuples
-
-            gen = self._named_members(get_members_fn=find_tensor_attributes)
-            first_tuple = next(gen)
-            return first_tuple[1].device
-
     def forward(self, x):
         x = self.conv(x)
         x = F.relu(x) if self.relu is True else x
@@ -164,20 +121,6 @@ class CBHG(nn.Module):
 
         # Avoid fragmentation of RNN parameters and associated warning
         self._flatten_parameters()
-
-    @property
-    def device(self) -> device:
-        try:
-            return next(self.parameters()).device
-        except StopIteration:
-            # For nn.DataParallel compatibility in PyTorch 1.5+
-            def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
-                tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
-                return tuples
-
-            gen = self._named_members(get_members_fn=find_tensor_attributes)
-            first_tuple = next(gen)
-            return first_tuple[1].device
 
     def forward(self, x):
         # Although we `_flatten_parameters()` on init, when using DataParallel
@@ -230,20 +173,6 @@ class PreNet(nn.Module):
         self.fc2 = nn.Linear(fc1_dims, fc2_dims)
         self.p = dropout
 
-    @property
-    def device(self) -> device:
-        try:
-            return next(self.parameters()).device
-        except StopIteration:
-            # For nn.DataParallel compatibility in PyTorch 1.5+
-            def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
-                tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
-                return tuples
-
-            gen = self._named_members(get_members_fn=find_tensor_attributes)
-            first_tuple = next(gen)
-            return first_tuple[1].device
-
     def forward(self, x):
         x = self.fc1(x)
         x = F.relu(x)
@@ -259,20 +188,6 @@ class Attention(nn.Module):
         super().__init__()
         self.W = nn.Linear(attn_dims, attn_dims, bias=False)
         self.v = nn.Linear(attn_dims, 1, bias=False)
-
-    @property
-    def device(self) -> device:
-        try:
-            return next(self.parameters()).device
-        except StopIteration:
-            # For nn.DataParallel compatibility in PyTorch 1.5+
-            def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
-                tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
-                return tuples
-
-            gen = self._named_members(get_members_fn=find_tensor_attributes)
-            first_tuple = next(gen)
-            return first_tuple[1].device
 
     def forward(self, encoder_seq_proj, query, t):
 
@@ -297,22 +212,8 @@ class LSA(nn.Module):
         self.cumulative = None
         self.attention = None
 
-    @property
-    def device(self) -> device:
-        try:
-            return next(self.parameters()).device
-        except StopIteration:
-            # For nn.DataParallel compatibility in PyTorch 1.5+
-            def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
-                tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
-                return tuples
-
-            gen = self._named_members(get_members_fn=find_tensor_attributes)
-            first_tuple = next(gen)
-            return first_tuple[1].device
-
     def init_attention(self, encoder_seq_proj):
-        device = self.device  # use same device as parameters
+        device = next(self.parameters()).device  # use same device as parameters
         b, t, c = encoder_seq_proj.size()
         self.cumulative = torch.zeros(b, t, device=device)
         self.attention = torch.zeros(b, t, device=device)
@@ -361,22 +262,8 @@ class Decoder(nn.Module):
         self.mel_proj = nn.Linear(lstm_dims, n_mels * self.max_r, bias=False)
         self.stop_proj = nn.Linear(encoder_dims + speaker_embedding_size + lstm_dims, 1)
 
-    @property
-    def device(self) -> device:
-        try:
-            return next(self.parameters()).device
-        except StopIteration:
-            # For nn.DataParallel compatibility in PyTorch 1.5+
-            def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
-                tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
-                return tuples
-
-            gen = self._named_members(get_members_fn=find_tensor_attributes)
-            first_tuple = next(gen)
-            return first_tuple[1].device
-
     def zoneout(self, prev, current, p=0.1):
-        device = self.device  # Use same device as parameters
+        device = next(self.parameters()).device  # Use same device as parameters
         mask = torch.zeros(prev.size(), device=device).bernoulli_(p)
         return prev * mask + current * (1 - mask)
 
@@ -467,26 +354,12 @@ class Tacotron(nn.Module):
     def r(self):
         return self.decoder.r.item()
 
-    @property
-    def device(self) -> device:
-        try:
-            return next(self.parameters()).device
-        except StopIteration:
-            # For nn.DataParallel compatibility in PyTorch 1.5+
-            def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
-                tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
-                return tuples
-
-            gen = self._named_members(get_members_fn=find_tensor_attributes)
-            first_tuple = next(gen)
-            return first_tuple[1].device
-
     @r.setter
     def r(self, value):
         self.decoder.r = self.decoder.r.new_tensor(value, requires_grad=False)
 
     def forward(self, x, m, speaker_embedding):
-        device = self.device  # use same device as parameters
+        device = next(self.parameters()).device  # use same device as parameters
 
         self.step += 1
         batch_size, _, steps  = m.size()
@@ -543,7 +416,7 @@ class Tacotron(nn.Module):
 
     def generate(self, x, speaker_embedding=None, steps=2000):
         self.eval()
-        device = self.device  # use same device as parameters
+        device = next(self.parameters()).device  # use same device as parameters
 
         batch_size, _  = x.size()
 
@@ -619,7 +492,7 @@ class Tacotron(nn.Module):
 
     def load(self, path, optimizer=None):
         # Use device of model params as location for loaded state
-        device = self.device
+        device = next(self.parameters()).device
         checkpoint = torch.load(str(path), map_location=device)
         self.load_state_dict(checkpoint["model_state"])
 
