@@ -1,7 +1,8 @@
 import os
+from typing import List, Tuple
 import numpy as np
 import torch
-import torch.nn as nn
+from torch import Tensor, device, nn
 import torch.nn.functional as F
 from pathlib import Path
 from typing import Union
@@ -213,7 +214,7 @@ class LSA(nn.Module):
         self.attention = None
 
     def init_attention(self, encoder_seq_proj):
-        device = next(self.parameters()).device  # use same device as parameters
+        device = self.device  # use same device as parameters
         b, t, c = encoder_seq_proj.size()
         self.cumulative = torch.zeros(b, t, device=device)
         self.attention = torch.zeros(b, t, device=device)
@@ -263,7 +264,7 @@ class Decoder(nn.Module):
         self.stop_proj = nn.Linear(encoder_dims + speaker_embedding_size + lstm_dims, 1)
 
     def zoneout(self, prev, current, p=0.1):
-        device = next(self.parameters()).device  # Use same device as parameters
+        device = self.device  # Use same device as parameters
         mask = torch.zeros(prev.size(), device=device).bernoulli_(p)
         return prev * mask + current * (1 - mask)
 
@@ -354,6 +355,20 @@ class Tacotron(nn.Module):
     def r(self):
         return self.decoder.r.item()
 
+    @property
+    def device(self) -> device:
+        try:
+            return next(self.parameters()).device
+        except StopIteration:
+            # For nn.DataParallel compatibility in PyTorch 1.5+
+            def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
+                tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
+                return tuples
+
+            gen = self._named_members(get_members_fn=find_tensor_attributes)
+            first_tuple = next(gen)
+            return first_tuple[1].device
+
     @r.setter
     def r(self, value):
         self.decoder.r = self.decoder.r.new_tensor(value, requires_grad=False)
@@ -416,7 +431,7 @@ class Tacotron(nn.Module):
 
     def generate(self, x, speaker_embedding=None, steps=2000):
         self.eval()
-        device = next(self.parameters()).device  # use same device as parameters
+        device = self.device  # use same device as parameters
 
         batch_size, _  = x.size()
 
@@ -492,7 +507,7 @@ class Tacotron(nn.Module):
 
     def load(self, path, optimizer=None):
         # Use device of model params as location for loaded state
-        device = next(self.parameters()).device
+        device = self.device
         checkpoint = torch.load(str(path), map_location=device)
         self.load_state_dict(checkpoint["model_state"])
 
