@@ -124,6 +124,7 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: 
     device_name = str(torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU")
     vis.log_implementation({"Device": device_name})
 
+    epoch = 1
     for i, session in enumerate(hparams.tts_schedule):
         current_step = model.get_step()
 
@@ -135,7 +136,6 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: 
         training_steps = np.ceil(max_step - current_step).astype(np.int32)
 
         # Do we need to change to the next session?
-        epoch = 1
         if current_step >= max_step:
             # Are there no further sessions than the current one?
             if i == len(hparams.tts_schedule) - 1:
@@ -150,7 +150,8 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: 
         model.r = r
 
         # Begin the training
-        simple_table([(f"Steps with r={r}", str(training_steps) + " Steps"),
+        simple_table([("Epoch", epoch),
+                      (f"Remaining Steps with r={r}", str(training_steps) + " Steps"),
                       ("Batch Size", batch_size),
                       ("Learning Rate", lr),
                       ("Outputs/Step (r)", model.r)])
