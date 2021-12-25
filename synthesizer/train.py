@@ -125,6 +125,7 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: 
     vis.log_implementation({"Device": device_name})
 
     epoch = 1
+    epoch_steps = 0
     for i, session in enumerate(hparams.tts_schedule):
         current_step = model.get_step()
 
@@ -132,7 +133,7 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: 
 
         # Iterate over whole dataset for X loops according to schedule
         total_samples = len(dataset)
-        max_step = np.ceil((total_samples * loops) / batch_size).astype(np.int32)
+        max_step = np.ceil((total_samples * loops) / batch_size).astype(np.int32) + epoch_steps
         training_steps = np.ceil(max_step - current_step).astype(np.int32)
 
         # Do we need to change to the next session?
@@ -145,6 +146,7 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: 
             else:
                 # There is a following session, go to it and inc epoch
                 epoch += 1
+                epoch_steps = max_step
                 continue
 
         model.r = r
@@ -165,8 +167,6 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: 
                                  num_workers=threads,
                                  shuffle=True,
                                  pin_memory=True)
-
-        current_step = (model.get_step()+1)
 
         for step, (texts, mels, embeds, idx) in enumerate(data_loader, current_step):
             start_time = time.time()
@@ -210,7 +210,9 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: 
             time_window.append(time.time() - start_time)
             loss_window.append(loss.item())
 
-            msg = f"| Epoch: {epoch} ({step}/{max_step}) | Loss: {loss_window.average:#.4} | {1./time_window.average:#.2} steps/s | Step: {step} | "
+            epoch_step = step - epoch_steps
+            epoch_max_step = max_step - epoch_steps
+            msg = f"| Epoch: {epoch} ({epoch_step}/{epoch_max_step}) | Loss: {loss_window.average:#.4} | {1./time_window.average:#.2} steps/s | Step: {step} | "
             stream(msg)
 
             # Update visualizations
