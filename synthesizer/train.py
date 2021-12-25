@@ -131,9 +131,8 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: 
 
         # Iterate over whole dataset for X loops according to schedule
         total_samples = len(dataset)
-        max_step = (total_samples * loops) / batch_size
-
-        training_steps = max_step - current_step
+        max_step = np.ceil((total_samples * loops) / batch_size).astype(np.int32)
+        training_steps = np.ceil(max_step - current_step).astype(np.int32)
 
         # Do we need to change to the next session?
         epoch = 1
@@ -166,7 +165,7 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: 
                                  shuffle=True,
                                  pin_memory=True)
 
-        current_step = model.get_step()
+        current_step = (model.get_step()+1)
 
         for step, (texts, mels, embeds, idx) in enumerate(data_loader, current_step):
             start_time = time.time()
