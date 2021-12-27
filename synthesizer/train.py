@@ -261,9 +261,9 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: 
                                        loss=loss,
                                        hparams=hparams)
 
-            # Break out of loop to update training schedule
-            if step >= max_step:
-                break
+                # Break out of loop to update training schedule
+                if step >= max_step:
+                    break
 
         # Add line break after every epoch
         print("")
