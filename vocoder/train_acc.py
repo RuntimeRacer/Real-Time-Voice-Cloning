@@ -15,6 +15,7 @@ from vocoder.gen_wavernn import gen_testset
 from vocoder.models.fatchord_version import WaveRNN
 from vocoder.visualizations import Visualizations
 from vocoder.vocoder_dataset import VocoderDataset, collate_vocoder
+from vocoder.utils import ValueWindow
 
 
 def train_acc(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_truth: bool,
@@ -23,13 +24,15 @@ def train_acc(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, groun
     # Check to make sure the hop length is correctly factorised
     assert np.cumprod(hp.voc_upsample_factors)[-1] == hp.hop_length
 
-
-
     # Initialize Accelerator
     accelerator = Accelerator()
 
     if accelerator.is_local_main_process:
         print("Accelerator process count: {0}".format(accelerator.num_processes))
+
+    # Book keeping
+    time_window = ValueWindow(100)
+    loss_window = ValueWindow(100)
 
     # Let accelerator handle device
     device = accelerator.device
@@ -102,10 +105,14 @@ def train_acc(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, groun
         simple_table([('Batch size', hp.voc_batch_size),
                       ('LR', hp.voc_lr),
                       ('Sequence Len', hp.voc_seq_len)])
-    
+
+    epoch_steps = 0
     for epoch in range(1, 350):
         # Unwrap model after each epoch (if necessary) for re-calibration
         model = accelerator.unwrap_model(model)
+
+        # Get the current step being processed
+        current_step = model.get_step() + 1
 
         # Processing mode
         processing_mode = model.mode
@@ -121,10 +128,20 @@ def train_acc(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, groun
         # Accelerator code - optimize and prepare model
         model, optimizer, data_loader = accelerator.prepare(model, optimizer, data_loader)
 
-        start = time.time()
-        running_loss = 0.
+        # Epoch stats
+        total_samples = len(dataset)
+        overall_batch_size = hp.voc_batch_size * accelerator.state.num_processes
+        max_step = np.ceil((total_samples) / overall_batch_size).astype(np.int32) + epoch_steps
 
-        for i, (x, y, m) in enumerate(data_loader, 1):
+        for step, (x, y, m) in enumerate(data_loader, current_step):
+            current_step = step
+
+            if current_step > max_step:
+                # Next epoch
+                break
+
+            start_time = time.time()
+
             #if torch.cuda.is_available():
                 #x, m, y = x.cuda(), m.cuda(), y.cuda()
             
@@ -142,14 +159,13 @@ def train_acc(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, groun
             accelerator.backward(loss)
             optimizer.step()
 
-            # Get current step
-            step = model.get_step()
+            time_window.append(time.time() - start_time)
+            loss_window.append(loss.item())
 
             if accelerator.is_local_main_process:
-                running_loss += loss.item()
-                speed = i / (time.time() - start)
-                avg_loss = running_loss / i
-                msg = f"| Epoch: {epoch} ({i}/{len(data_loader)}) | Loss: {avg_loss:.6f} | {speed:.1f} steps/s | Step: {step} | "
+                epoch_step = step - epoch_steps
+                epoch_max_step = max_step - epoch_steps
+                msg = f"| Epoch: {epoch} ({epoch_step}/{epoch_max_step}) | Loss: {loss_window.average:#.6} | {1./time_window.average:#.2}steps/s | Step: {step} | "
                 stream(msg)
 
             # Update visualizations
@@ -176,10 +192,14 @@ def train_acc(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, groun
                         print("Saving the model (step %d)" % step)
                         save(accelerator, model, weights_fpath, optimizer)
 
+        # Update epoch steps
+        epoch_steps = max_step
+
         # Evaluate model to generate samples
         # Accelerator: Only in main process
         if accelerator.is_local_main_process:
-            gen_testset(model, test_loader, hp.voc_gen_at_checkpoint, hp.voc_gen_batched,
+            eval_model = accelerator.unwrap_model(model)
+            gen_testset(eval_model, test_loader, hp.voc_gen_at_checkpoint, hp.voc_gen_batched,
                         hp.voc_target, hp.voc_overlap, model_dir)
         print("")
 

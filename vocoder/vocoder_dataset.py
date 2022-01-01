@@ -11,13 +11,14 @@ from vocoder import audio
 
 class VocoderDataset(Dataset):
     def __init__(self, metadata_fpath: Path, mel_dir: Path, wav_dir: Path):
-        print("Using inputs from:\n\t%s\n\t%s\n\t%s" % (metadata_fpath, mel_dir, wav_dir))
+        self.metadata_fpath = metadata_fpath
+        print("Using inputs from:\n\t%s\n\t%s\n\t%s" % (self.metadata_fpath, mel_dir, wav_dir))
 
         metadata = []
         with self.metadata_fpath.open("r") as metadata_file:
             metadata_dict = json.load(metadata_file)
-            for lines in metadata_dict.values():
-                metadata.extend([line.split("|") for line in lines])
+            for line in metadata_dict.values():
+                metadata.extend([line.split("|")])
         
         gta_fnames = [x[1] for x in metadata if int(x[4])]
         gta_fpaths = [mel_dir.joinpath(fname) for fname in gta_fnames]
@@ -59,7 +60,12 @@ class VocoderDataset(Dataset):
 
     def __len__(self):
         return len(self.samples_fpaths)
-        
+
+    def get_logs(self):
+        samples = len(self.samples_fpaths)
+        log_string = "Samples: {0}\n".format(samples)
+        return log_string
+
         
 def collate_vocoder(batch):
     mel_win = hp.voc_seq_len // hp.hop_length + 2 * hp.voc_pad
