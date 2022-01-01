@@ -133,6 +133,14 @@ def train_acc(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, groun
         overall_batch_size = hp.voc_batch_size * accelerator.state.num_processes
         max_step = np.ceil((total_samples) / overall_batch_size).astype(np.int32) + epoch_steps
 
+        # Skip here in case this epoch has already been processed
+        if current_step > max_step:
+            # Update epoch steps
+            epoch_steps = max_step
+            # Next epoch
+            continue
+
+        # Training loop
         for step, (x, y, m) in enumerate(data_loader, current_step):
             current_step = step
 
@@ -192,7 +200,7 @@ def train_acc(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, groun
                         print("Saving the model (step %d)" % step)
                         save(accelerator, model, weights_fpath, optimizer)
 
-        # Update epoch steps
+        # Update epoch steps after training
         epoch_steps = max_step
 
         # Evaluate model to generate samples
