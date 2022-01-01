@@ -53,12 +53,12 @@ hparams = HParams(
                                                     # frame that has all values < -3.4
 
         ### Tacotron Training
-        tts_schedule = [(2,  1e-3,  2,  16),   # Progressive training schedule
-                        (2,  5e-4,  3,  16),   # (r, lr, loops, batch_size)
-                        (2,  2e-4,  5,  16),   #
-                        (2,  1e-4,  8,  16),   # r = reduction factor (# of mel frames
-                        (2,  3e-5, 12,  16),   #     synthesized for each decoder iteration)
-                        (2,  1e-5, 18,  16)],  # lr = learning rate
+        tts_schedule = [(2,  1e-3,  2,  48),   # Progressive training schedule
+                        (2,  5e-4,  3,  48),   # (r, lr, loops, batch_size)
+                        (2,  2e-4,  5,  48),   #
+                        (2,  1e-4,  8,  48),   # r = reduction factor (# of mel frames
+                        (2,  3e-5, 12,  48),   #     synthesized for each decoder iteration)
+                        (2,  1e-5, 18,  48)],  # lr = learning rate
 
         tts_clip_grad_norm = 1.0,                   # clips the gradient norm to prevent explosion - set to None if not needed
         tts_eval_interval = 500,                    # Number of steps between model evaluation (sample generation)
@@ -70,7 +70,7 @@ hparams = HParams(
         max_mel_frames = 900,
         rescale = True,
         rescaling_max = 0.9,
-        synthesis_batch_size = 32,                  # For vocoder preprocessing and inference.
+        synthesis_batch_size = 12,                  # For vocoder preprocessing and inference.
 
         ### Mel Visualization and Griffin-Lim
         signal_normalization = True,

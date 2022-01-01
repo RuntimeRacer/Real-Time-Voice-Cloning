@@ -1,26 +1,22 @@
-from collections import OrderedDict
-import re
+from datetime import datetime
+from pathlib import Path
 
 import torch
 import torch.nn.functional as F
+from accelerate import Accelerator
 from torch import optim
 from torch.utils.data import DataLoader
+
 from synthesizer import audio
 from synthesizer.models.tacotron import Tacotron
-from synthesizer.synthesizer_dataset import SynthesizerDataset, collate_synthesizer
-from synthesizer.utils import ValueWindow, data_parallel_workaround
+from synthesizer.synthesizer_dataset import (SynthesizerDataset,
+                                             collate_synthesizer)
+from synthesizer.utils import ValueWindow
 from synthesizer.utils.plot import plot_spectrogram
 from synthesizer.utils.symbols import symbols
 from synthesizer.utils.text import sequence_to_text
 from synthesizer.visualizations import Visualizations
 from vocoder.display import *
-from datetime import datetime
-from accelerate import Accelerator
-import numpy as np
-from pathlib import Path
-import sys
-import time
-import platform
 
 
 def np_now(x: torch.Tensor): return x.detach().cpu().numpy()
@@ -62,7 +58,7 @@ def train_acc(run_id: str, syn_dir: str, models_dir: str, save_every: int, threa
     time_window = ValueWindow(100)
     loss_window = ValueWindow(100)
 
-    # Let accellerator handle device
+    # Let accelerator handle device
     device = accelerator.device
 
     # Instantiate Tacotron Model
