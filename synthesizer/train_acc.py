@@ -49,7 +49,7 @@ def train_acc(run_id: str, syn_dir: str, models_dir: str, save_every: int, threa
     accelerator = Accelerator()
 
     if accelerator.is_local_main_process:
-        print("Accelerator process count: {0}".format(accelerator.state.num_processes))
+        print("Accelerator process count: {0}".format(accelerator.num_processes))
         print("Checkpoint path: {}".format(weights_fpath))
         print("Loading training data from: {}".format(metadata_fpath))
         print("Using model: Tacotron")
@@ -98,7 +98,7 @@ def train_acc(run_id: str, syn_dir: str, models_dir: str, save_every: int, threa
 
                         f.write("{}\n".format(symbol))
 
-    # Model is has been initialized - Load the weights
+    # Model has been initialized - Load the weights
     print("{0} - Loading weights at {1}".format(device, weights_fpath))
     load(model, device, weights_fpath, optimizer)
     print("{0} - Tacotron weights loaded from step {1}".format(device, model.get_step()))
@@ -108,10 +108,6 @@ def train_acc(run_id: str, syn_dir: str, models_dir: str, save_every: int, threa
     mel_dir = syn_dir.joinpath("mels")
     embed_dir = syn_dir.joinpath("embeds")
     dataset = SynthesizerDataset(metadata_fpath, mel_dir, embed_dir, hparams)
-    test_loader = DataLoader(dataset,
-                             batch_size=1,
-                             shuffle=True,
-                             pin_memory=True)
 
     # Initialize the visualization environment
     vis = Visualizations(run_id, vis_every, server=visdom_server, disabled=no_visdom)

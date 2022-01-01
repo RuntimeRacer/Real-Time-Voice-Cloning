@@ -1,17 +1,23 @@
-from torch.utils.data import Dataset
+import json
 from pathlib import Path
-from vocoder import audio
-import vocoder.hparams as hp
+
 import numpy as np
 import torch
+from torch.utils.data import Dataset
+
+import vocoder.hparams as hp
+from vocoder import audio
 
 
 class VocoderDataset(Dataset):
     def __init__(self, metadata_fpath: Path, mel_dir: Path, wav_dir: Path):
         print("Using inputs from:\n\t%s\n\t%s\n\t%s" % (metadata_fpath, mel_dir, wav_dir))
-        
-        with metadata_fpath.open("r") as metadata_file:
-            metadata = [line.split("|") for line in metadata_file]
+
+        metadata = []
+        with self.metadata_fpath.open("r") as metadata_file:
+            metadata_dict = json.load(metadata_file)
+            for lines in metadata_dict.values():
+                metadata.extend([line.split("|") for line in lines])
         
         gta_fnames = [x[1] for x in metadata if int(x[4])]
         gta_fpaths = [mel_dir.joinpath(fname) for fname in gta_fnames]

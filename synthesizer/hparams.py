@@ -70,7 +70,7 @@ hparams = HParams(
         max_mel_frames = 900,
         rescale = True,
         rescaling_max = 0.9,
-        synthesis_batch_size = 12,                  # For vocoder preprocessing and inference.
+        synthesis_batch_size = 10,                  # For vocoder preprocessing and inference. - Rule of Thumb: 1 unit per GB of VRAM of smallest card
 
         ### Mel Visualization and Griffin-Lim
         signal_normalization = True,
