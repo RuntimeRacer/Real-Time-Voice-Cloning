@@ -83,6 +83,7 @@ def train_acc(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, groun
     mel_dir = syn_dir.joinpath("mels") if ground_truth else voc_dir.joinpath("mels_gta")
     wav_dir = syn_dir.joinpath("audio")
     dataset = VocoderDataset(metadata_fpath, mel_dir, wav_dir)
+    total_samples = len(dataset)
     test_loader = DataLoader(dataset,
                              batch_size=1,
                              shuffle=True,
@@ -114,6 +115,17 @@ def train_acc(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, groun
         # Get the current step being processed
         current_step = model.get_step() + 1
 
+        # Determine poch stats
+        overall_batch_size = hp.voc_batch_size * accelerator.state.num_processes
+        max_step = np.ceil((total_samples) / overall_batch_size).astype(np.int32) + epoch_steps
+
+        # Skip here in case this epoch has already been processed
+        if current_step > max_step:
+            # Update epoch steps
+            epoch_steps = max_step
+            # Next epoch
+            continue
+
         # Processing mode
         processing_mode = model.mode
 
@@ -127,18 +139,6 @@ def train_acc(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, groun
 
         # Accelerator code - optimize and prepare model
         model, optimizer, data_loader = accelerator.prepare(model, optimizer, data_loader)
-
-        # Epoch stats
-        total_samples = len(dataset)
-        overall_batch_size = hp.voc_batch_size * accelerator.state.num_processes
-        max_step = np.ceil((total_samples) / overall_batch_size).astype(np.int32) + epoch_steps
-
-        # Skip here in case this epoch has already been processed
-        if current_step > max_step:
-            # Update epoch steps
-            epoch_steps = max_step
-            # Next epoch
-            continue
 
         # Training loop
         for step, (x, y, m) in enumerate(data_loader, current_step):
