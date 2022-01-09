@@ -34,7 +34,7 @@ def train(run_id: str, clean_data_root: Path, models_dir: Path, umap_every: int,
     device = accelerator.device
 
     # Create the model and the optimizer
-    model = SpeakerEncoder()
+    model = SpeakerEncoder(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate_init)
 
     # Configure file path for the model
