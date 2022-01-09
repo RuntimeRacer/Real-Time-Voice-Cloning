@@ -15,6 +15,9 @@ def train(run_id: str, clean_data_root: Path, models_dir: Path, umap_every: int,
     # Initialize Accelerator
     accelerator = Accelerator()
 
+    if accelerator.is_local_main_process:
+        print("Accelerator process count: {0}".format(accelerator.num_processes))
+
     # Create a dataset and a dataloader
     dataset = SpeakerVerificationDataset(clean_data_root)
     loader = SpeakerVerificationDataLoader(
