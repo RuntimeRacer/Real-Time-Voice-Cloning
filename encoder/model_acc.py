@@ -10,25 +10,26 @@ import torch
 
 
 class SpeakerEncoder(nn.Module):
-    def __init__(self):
+    def __init__(self, device):
         super().__init__()
+        self.device = device
         self.step = 0
 
         # Network defition
         self.lstm = nn.LSTM(input_size=mel_n_channels,
                             hidden_size=model_hidden_size,
                             num_layers=model_num_layers,
-                            batch_first=True)
+                            batch_first=True).to(self.device)
         self.linear = nn.Linear(in_features=model_hidden_size,
-                                out_features=model_embedding_size)
-        self.relu = torch.nn.ReLU()
+                                out_features=model_embedding_size).to(self.device)
+        self.relu = torch.nn.ReLU().to(self.device)
 
         # Cosine similarity scaling (with fixed initial parameter values)
-        self.similarity_weight = nn.Parameter(torch.tensor([10.]))
-        self.similarity_bias = nn.Parameter(torch.tensor([-5.]))
+        self.similarity_weight = nn.Parameter(torch.tensor([10.]).to(self.device))
+        self.similarity_bias = nn.Parameter(torch.tensor([-5.]).to(self.device))
 
         # Loss
-        self.loss_fn = nn.CrossEntropyLoss()
+        self.loss_fn = nn.CrossEntropyLoss().to(self.device)
 
     def do_gradient_ops(self, accelerator):
         # Gradient scale
@@ -83,7 +84,7 @@ class SpeakerEncoder(nn.Module):
         # Similarity matrix. The cosine similarity of already 2-normed vectors is simply the dot
         # product of these vectors (which is just an element-wise multiplication reduced by a sum).
         # We vectorize the computation for efficiency.
-        sim_matrix = torch.zeros(speakers_per_batch, utterances_per_speaker, speakers_per_batch)
+        sim_matrix = torch.zeros(speakers_per_batch, utterances_per_speaker, speakers_per_batch).to(self.device)
 
         mask_matrix = 1 - np.eye(speakers_per_batch, dtype=np.int)
         for j in range(speakers_per_batch):
@@ -119,7 +120,7 @@ class SpeakerEncoder(nn.Module):
         sim_matrix = sim_matrix.reshape((speakers_per_batch * utterances_per_speaker,
                                          speakers_per_batch))
         ground_truth = np.repeat(np.arange(speakers_per_batch), utterances_per_speaker)
-        target = torch.from_numpy(ground_truth).long()
+        target = torch.from_numpy(ground_truth).long().to(self.device)
         loss = self.loss_fn(sim_matrix, target)
 
         # EER (not backpropagated)
