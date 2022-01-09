@@ -97,7 +97,7 @@ def train(run_id: str, clean_data_root: Path, models_dir: Path, umap_every: int,
         accelerator.backward(loss)
         profiler.tick("Backward pass")
 
-        model.module.do_gradient_ops()
+        model.module.do_gradient_ops(accelerator)
         optimizer.step()
         profiler.tick("Parameter update")
 
