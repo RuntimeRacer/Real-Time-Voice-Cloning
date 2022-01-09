@@ -49,12 +49,10 @@ def train(run_id: str, clean_data_root: Path, models_dir: Path, umap_every: int,
                 print("Starting the training from scratch.")
                 save(accelerator, model, state_fpath, 0)
 
-    # Get the current step being processed
-    current_step = model.step + 1
-
     # Model has been initialized - Load the weights
     print("{0} - Loading weights at {1}".format(device, state_fpath))
     load(model, device, state_fpath, optimizer)
+    current_step = model.step + 1
     print("{0} - Encoder weights loaded from step {1}".format(device, current_step))
 
     # Apply learning rate
