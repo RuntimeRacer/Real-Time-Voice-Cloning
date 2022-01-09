@@ -10,9 +10,9 @@ import torch
 
 
 class SpeakerEncoder(nn.Module):
-    def __init__(self, device, loss_device):
+    def __init__(self):
         super().__init__()
-        self.loss_device = loss_device
+        self.step = 0
 
         # Network defition
         self.lstm = nn.LSTM(input_size=mel_n_channels,

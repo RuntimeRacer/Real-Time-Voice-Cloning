@@ -47,12 +47,15 @@ def train(run_id: str, clean_data_root: Path, models_dir: Path, umap_every: int,
         with accelerator.local_main_process_first():
             if accelerator.is_local_main_process:
                 print("Starting the training from scratch.")
-                save(accelerator, model, state_fpath)
+                save(accelerator, model, state_fpath, 0)
+
+    # Get the current step being processed
+    current_step = model.step + 1
 
     # Model has been initialized - Load the weights
     print("{0} - Loading weights at {1}".format(device, state_fpath))
     load(model, device, state_fpath, optimizer)
-    print("{0} - Encoder weights loaded from step {1}".format(device, model.get_step()))
+    print("{0} - Encoder weights loaded from step {1}".format(device, current_step))
 
     # Apply learning rate
     # optimizer.param_groups[0]["lr"] = learning_rate_init
@@ -61,9 +64,6 @@ def train(run_id: str, clean_data_root: Path, models_dir: Path, umap_every: int,
 
     # Set model in training mode
     model.train()
-
-    # Get the current step being processed
-    current_step = model.get_step() + 1
 
     # Initialize the visualization environment
     vis = Visualizations(run_id, vis_every, server=visdom_server, disabled=no_visdom)
@@ -125,7 +125,7 @@ def train(run_id: str, clean_data_root: Path, models_dir: Path, umap_every: int,
             with accelerator.local_main_process_first():
                 if accelerator.is_local_main_process:
                     print("Saving the model (step %d)" % step)
-                    save(accelerator, model, state_fpath, optimizer)
+                    save(accelerator, model, state_fpath, step, optimizer)
 
         # Make a backup
         if backup_every != 0 and step % backup_every == 0:
@@ -136,7 +136,7 @@ def train(run_id: str, clean_data_root: Path, models_dir: Path, umap_every: int,
                     print("Making a backup (step %d)" % step)
                     backup_dir.mkdir(exist_ok=True)
                     backup_fpath = backup_dir.joinpath("%s_bak_%06d.pt" % (run_id, step))
-                    save(accelerator, model, backup_fpath, optimizer)
+                    save(accelerator, model, backup_fpath, step, optimizer)
 
         profiler.tick("Extras (visualizations, saving)")
 
@@ -147,21 +147,23 @@ def train(run_id: str, clean_data_root: Path, models_dir: Path, umap_every: int,
             with accelerator.local_main_process_first():
                 if accelerator.is_local_main_process:
                     print("Step %d processed. Ending training." % step)
-                    save(accelerator, model, state_fpath, optimizer)
+                    save(accelerator, model, state_fpath, step, optimizer)
             break
 
-def save(accelerator, model, path, optimizer=None):
+def save(accelerator, model, path, step, optimizer=None):
     # Unwrap Model
     model = accelerator.unwrap_model(model)
 
     # Save
     if optimizer is not None:
         torch.save({
+            "step": step,
             "model_state": model.state_dict(),
             "optimizer_state": optimizer.state_dict(),
         }, str(path))
     else:
         torch.save({
+            "step": step,
             "model_state": model.state_dict(),
         }, str(path))
 
@@ -171,6 +173,7 @@ def load(model, device, path, optimizer=None):
 
     # Load model state
     model.load_state_dict(checkpoint["model_state"])
+    model.step = checkpoint["step"]
 
     # Load optimizer state
     if "optimizer_state" in checkpoint and optimizer is not None:
