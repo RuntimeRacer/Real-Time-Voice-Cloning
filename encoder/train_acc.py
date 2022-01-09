@@ -89,15 +89,15 @@ def train(run_id: str, clean_data_root: Path, models_dir: Path, umap_every: int,
         profiler.tick("Forward pass")
 
         embeds_loss = embeds.view((speakers_per_batch, utterances_per_speaker, -1))
-        loss, eer = model.loss(embeds_loss)
+        loss, eer = model.module.loss(embeds_loss)
         profiler.tick("Loss")
 
         # Backward pass
-        model.zero_grad()
+        model.module.zero_grad()
         accelerator.backward(loss)
         profiler.tick("Backward pass")
 
-        model.do_gradient_ops()
+        model.module.do_gradient_ops()
         optimizer.step()
         profiler.tick("Parameter update")
 
