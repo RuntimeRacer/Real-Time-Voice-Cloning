@@ -198,6 +198,9 @@ class Toolbox:
         # Plot it
         self.ui.draw_embed(embed, name, "current")
         self.ui.draw_umap_projections(self.utterances)
+
+        # Clear all cache
+        torch.cuda.empty_cache()
         
     def clear_utterances(self):
         self.utterances.clear()
@@ -212,7 +215,10 @@ class Toolbox:
             seed = int(self.ui.seed_textbox.text())
             self.ui.populate_gen_options(seed, self.trim_silences)
         else:
-            seed = None
+            # Generate random seed
+            seed = torch.seed()
+            self.ui.log("Using seed: %d" % seed)
+            print("Using seed: %d" % seed)
 
         if seed is not None:
             torch.manual_seed(seed)
@@ -231,6 +237,9 @@ class Toolbox:
         self.ui.draw_spec(spec, "generated")
         self.current_generated = (self.ui.selected_utterance.speaker_name, spec, breaks, None)
         self.ui.set_loading(0)
+
+        # Clear GPU Memory
+        torch.cuda.empty_cache()
 
     def vocode(self):
         speaker_name, spec, breaks, _ = self.current_generated
@@ -319,6 +328,9 @@ class Toolbox:
         # Plot it
         self.ui.draw_embed(embed, name, "generated")
         self.ui.draw_umap_projections(self.utterances)
+
+        # Clear GPU Memory
+        torch.cuda.empty_cache()
         
     def init_encoder(self):
         model_fpath = self.ui.current_encoder_fpath

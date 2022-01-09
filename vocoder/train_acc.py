@@ -183,7 +183,7 @@ def train_acc(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, groun
             if accelerator.is_local_main_process and vis_every != 0 and step % vis_every == 0:
                 vis.save()
 
-            if backup_every != 0 and step % backup_every == 0 :
+            if backup_every != 0 and step % backup_every == 0:
                 # Accelerator: Save in main process after sync
                 accelerator.wait_for_everyone()
                 with accelerator.local_main_process_first():
