@@ -65,39 +65,52 @@ def train(run_id: str, clean_data_root: Path, models_dir: Path, umap_every: int,
 
     # Initialize the visualization environment
     vis = Visualizations(run_id, vis_every, server=visdom_server, disabled=no_visdom)
-    vis.log_dataset(dataset)
-    vis.log_params()
-    # FIXME: Print all device names in case we got multiple GPUs or CPUs
-    device_name = str(torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU")
-    vis.log_implementation({"Device": device_name})
+    if accelerator.is_local_main_process:
+        vis.log_dataset(dataset)
+        vis.log_params()
+        # FIXME: Print all device names in case we got multiple GPUs or CPUs
+        if accelerator.state.num_processes > 1:
+            vis.log_implementation({"Devices": str(accelerator.state.num_processes)})
+        else:
+            device_name = str(torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU")
+            vis.log_implementation({"Device": device_name})
 
     # Accelerator code - optimize and prepare model
     model, optimizer, loader = accelerator.prepare(model, optimizer, loader)
 
+    # Profiling only in main thread for comprehensibility
+    if accelerator.is_local_main_process:
+        profiler = Profiler(summarize_every=profile_every, disabled=False)
+
     # Training loop
-    profiler = Profiler(summarize_every=profile_every, disabled=False)
     for step, speaker_batch in enumerate(loader, current_step):
-        profiler.tick("Blocking, waiting for batch (threaded)")
+        if accelerator.is_local_main_process:
+            profiler.tick("Blocking, waiting for batch (threaded)")
 
         # Forward pass
         inputs = torch.from_numpy(speaker_batch.data)
-        profiler.tick("Data to %s" % device)
+        if accelerator.is_local_main_process:
+            profiler.tick("Data to %s" % device)
 
         embeds = model(inputs)
-        profiler.tick("Forward pass")
+        if accelerator.is_local_main_process:
+            profiler.tick("Forward pass")
 
         embeds_loss = embeds.view((speakers_per_batch, utterances_per_speaker, -1))
         loss, eer = model.module.loss(embeds_loss)
-        profiler.tick("Loss")
+        if accelerator.is_local_main_process:
+            profiler.tick("Loss")
 
         # Backward pass
         model.module.zero_grad()
         accelerator.backward(loss)
-        profiler.tick("Backward pass")
+        if accelerator.is_local_main_process:
+            profiler.tick("Backward pass")
 
         model.module.do_gradient_ops(accelerator)
         optimizer.step()
-        profiler.tick("Parameter update")
+        if accelerator.is_local_main_process:
+            profiler.tick("Parameter update")
 
         # Update visualizations
         # learning_rate = optimizer.param_groups[0]["lr"]
@@ -136,7 +149,8 @@ def train(run_id: str, clean_data_root: Path, models_dir: Path, umap_every: int,
                     backup_fpath = backup_dir.joinpath("%s_bak_%06d.pt" % (run_id, step))
                     save(accelerator, model, backup_fpath, step, optimizer)
 
-        profiler.tick("Extras (visualizations, saving)")
+        if accelerator.is_local_main_process:
+            profiler.tick("Extras (visualizations, saving)")
 
         # End training
         if end_after != 0 and step % end_after == 0:
