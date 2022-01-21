@@ -121,9 +121,16 @@ def train_acc(run_id: str, syn_dir: str, models_dir: str, save_every: int, threa
             device_name = str(torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU")
             vis.log_implementation({"Device": device_name})
 
-    epoch = 1
-    epoch_steps = 0
+    # Init epoch information
+    epoch = 0
+    max_step = 0
+
+    # Iterate over training schedule
     for i, session in enumerate(hparams.tts_schedule):
+        # Update epoch information
+        epoch += 1
+        epoch_steps = max_step
+
         # Unwrap model after each epoch (if necessary) for re-calibration
         model = accelerator.unwrap_model(model)
 
@@ -164,8 +171,6 @@ def train_acc(run_id: str, syn_dir: str, models_dir: str, save_every: int, threa
                 break
             else:
                 # There is a following session, go to it and inc epoch
-                epoch += 1
-                epoch_steps = max_step
                 continue
 
         # Begin the training
@@ -279,10 +284,6 @@ def train_acc(run_id: str, syn_dir: str, models_dir: str, save_every: int, threa
 
                 # Break out of loop to update training schedule
                 if step >= max_step:
-                    # Re-initialize Epoch & step calculation for each iteration
-                    # Fixes Bug to count already made steps into new epoch and not increasing epoch count
-                    epoch = 1
-                    epoch_steps = 0
                     break
 
         # Add line break after every epoch
