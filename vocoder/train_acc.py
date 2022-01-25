@@ -20,7 +20,7 @@ from vocoder.utils import ValueWindow
 
 def train_acc(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_truth: bool,
           save_every: int, backup_every: int, force_restart: bool,
-          vis_every: int, visdom_server: str, no_visdom: bool, threads: int):
+          vis_every: int, visdom_server: str, no_visdom: bool, testset_every: int,  threads: int):
     # Check to make sure the hop length is correctly factorised
     assert np.cumprod(hp.voc_upsample_factors)[-1] == hp.hop_length
 
@@ -108,7 +108,7 @@ def train_acc(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, groun
                       ('Sequence Len', hp.voc_seq_len)])
 
     epoch_steps = 0
-    for epoch in range(1, 350):
+    for epoch in range(1, 10000):
         # Unwrap model after each epoch (if necessary) for re-calibration
         model = accelerator.unwrap_model(model)
 
@@ -200,15 +200,16 @@ def train_acc(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, groun
                         print("Saving the model (step %d)" % step)
                         save(accelerator, model, weights_fpath, optimizer)
 
+            # Evaluate model to generate samples
+            # Accelerator: Only in main process
+            if accelerator.is_local_main_process and testset_every != 0 and step % testset_every == 0:
+                eval_model = accelerator.unwrap_model(model)
+                gen_testset(eval_model, test_loader, hp.voc_gen_at_checkpoint, hp.voc_gen_batched,
+                            hp.voc_target, hp.voc_overlap, model_dir)
+
         # Update epoch steps after training
         epoch_steps = max_step
 
-        # Evaluate model to generate samples
-        # Accelerator: Only in main process
-        if accelerator.is_local_main_process:
-            eval_model = accelerator.unwrap_model(model)
-            gen_testset(eval_model, test_loader, hp.voc_gen_at_checkpoint, hp.voc_gen_batched,
-                        hp.voc_target, hp.voc_overlap, model_dir)
         print("")
 
 def save(accelerator, model, path, optimizer=None):
