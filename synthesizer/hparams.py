@@ -20,30 +20,26 @@ class HParams(object):
 
 hparams = HParams(
         ### Signal Processing (used in both synthesizer and vocoder)
-        sample_rate = 16000,
-        #n_fft = 800,
-        #num_mels = 80,
-        #hop_size = 200,                             # Tacotron uses 12.5 ms frame shift (set to sample_rate * 0.0125)
-        #win_size = 800,                             # Tacotron uses 50 ms frame length (set to sample_rate * 0.050)
-        n_fft = 1024,
-        num_mels = 80,
-        hop_size = 200,                             # Tacotron uses 12.5 ms frame shift (set to sample_rate * 0.0125)
-        win_size = 800,                             # Tacotron uses 50 ms frame length (set to sample_rate * 0.050)
-        fmin = 55,
+        sample_rate = 22050,
+        n_fft = 2048,
+        num_mels = 120,
+        hop_size = 300,                             # Tacotron uses 12.5 ms frame shift (set to sample_rate * 0.0125)
+        win_size = 1200,                            # Tacotron uses 50 ms frame length (set to sample_rate * 0.050)
+        fmin = 40,
         min_level_db = -100,
         ref_level_db = 20,
-        max_abs_value = 4.,                         # Gradient explodes if too big, premature convergence if too small.
+        max_abs_value = 4.,                        # Gradient explodes if too big, premature convergence if too small.
         preemphasis = 0.97,                         # Filter coefficient to use if preemphasize is True
         preemphasize = True,
 
         ### Tacotron Text-to-Speech (TTS)
-        tts_embed_dims = 512,                       # Embedding dimension for the graphemes/phoneme inputs
-        tts_encoder_dims = 256,
+        tts_embed_dims = 256,                       # Embedding dimension for the graphemes/phoneme inputs
+        tts_encoder_dims = 128,
         tts_decoder_dims = 256,
-        tts_postnet_dims = 512,
-        tts_encoder_K = 5,
-        tts_lstm_dims = 1024,
-        tts_postnet_K = 5,
+        tts_postnet_dims = 128,
+        tts_encoder_K = 16,
+        tts_lstm_dims = 512,
+        tts_postnet_K = 8,
         tts_num_highways = 4,
         tts_dropout = 0.5,
         tts_cleaner_names = ["english_cleaners"],
@@ -53,12 +49,26 @@ hparams = HParams(
                                                     # frame that has all values < -3.4
 
         ### Tacotron Training
-        tts_schedule = [(2,  1e-3,  2,  48),   # Progressive training schedule
-                        (2,  5e-4,  4,  48),   # (r, lr, loops, batch_size)
-                        (2,  2e-4,  8,  48),   #
-                        (2,  1e-4, 16,  48),   # r = reduction factor (# of mel frames
-                        (2,  3e-5, 32,  48),   #     synthesized for each decoder iteration)
-                        (2,  1e-5, 64,  48)],  # lr = learning rate
+        # Progressive training schedule
+        # (r, lr, loops, batch_size)
+        # r          = reduction factor (# of mel frames synthesized for each decoder iteration)
+        # lr         = learning rate
+        # loops      = iteration loops over whole dataset
+        # batch_size = amount of dataset items to train on per step
+        #
+        tts_schedule = [(7,  1e-3,  4,  80),
+                        (6,  5e-4,  4,  80),
+                        (5,  2e-4,  4,  80),
+                        (5,  1e-4,  8,  80),
+                        # After finishing 1st epoch of lr 1e-4, reduce batch size to smoothen training optimization
+                        (4,  1e-4,  4,  64),
+                        (3,  1e-4,  4,  48),
+                        (2,  5e-5,  4,  32),
+                        (2,  3e-5,  4,  32),
+                        (2,  1e-5,  4,  32),
+                        # Fine-tuning after finishing epoch of lr 1e-5
+                        (2,  5e-6,  4,  16),
+                        (2,  1e-6,  4,  16)],
 
         tts_clip_grad_norm = 1.0,                   # clips the gradient norm to prevent explosion - set to None if not needed
         tts_eval_interval = 500,                    # Number of steps between model evaluation (sample generation)
@@ -67,18 +77,18 @@ hparams = HParams(
         tts_eval_num_samples = 1,                   # Makes this number of samples
 
         ### Data Preprocessing
-        max_mel_frames = 900,
+        max_mel_frames = 1200,
         rescale = True,
         rescaling_max = 0.9,
-        synthesis_batch_size = 10,                  # For vocoder preprocessing and inference. - Rule of Thumb: 1 unit per GB of VRAM of smallest card
+        synthesis_batch_size = 24,                  # For vocoder preprocessing and inference. - Rule of Thumb: 1 unit per GB of VRAM of smallest card
 
         ### Mel Visualization and Griffin-Lim
         signal_normalization = True,
         power = 1.5,
-        griffin_lim_iters = 60,
+        griffin_lim_iters = 80,
 
         ### Audio processing options
-        fmax = 7600,                                # Should not exceed (sample_rate // 2)
+        fmax = 11000,                               # Should not exceed (sample_rate // 2)
         allow_clipping_in_normalization = True,     # Used when signal_normalization = True
         clip_mels_length = True,                    # If true, discards samples exceeding max_mel_frames
         use_lws = False,                            # "Fast spectrogram phase recovery using local weighted sums"
@@ -88,8 +98,8 @@ hparams = HParams(
 
         ### SV2TTS
         speaker_embedding_size = 768,               # Dimension for the speaker embedding
-        silence_min_duration_split = 0.4,           # Duration in seconds of a silence for an utterance to be split
-        utterance_min_duration = 1.6,               # Duration in seconds below which utterances are discarded
+        silence_min_duration_split = 0.3,           # Duration in seconds of a silence for an utterance to be split
+        utterance_min_duration = 0.6,               # Duration in seconds below which utterances are discarded
         )
 
 def hparams_debug_string():

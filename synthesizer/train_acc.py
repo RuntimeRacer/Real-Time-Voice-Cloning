@@ -286,9 +286,15 @@ def train_acc(run_id: str, syn_dir: str, models_dir: str, save_every: int, threa
                 if step >= max_step:
                     break
 
-        # Add line break after every epoch
-        if accelerator.is_local_main_process:
-            print("")
+        # Add line break to output and make a backup after every epoch
+        # Accelerator: Save in main process after sync
+        accelerator.wait_for_everyone()
+        with accelerator.local_main_process_first():
+            if accelerator.is_local_main_process:
+                print("")
+                print("Making a backup (step %d)" % current_step)
+                backup_fpath = Path("{}/{}_{}.pt".format(str(weights_fpath.parent), run_id, current_step))
+                save(accelerator, model, backup_fpath, optimizer)
 
 def save(accelerator, model, path, optimizer=None):
     # Unwrap Model
