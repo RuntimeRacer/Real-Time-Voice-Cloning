@@ -64,11 +64,10 @@ hparams = HParams(
                         (4,  1e-4,  4,  64),
                         (3,  1e-4,  4,  48),
                         (2,  5e-5,  4,  32),
-                        (2,  3e-5,  4,  32),
                         (2,  1e-5,  4,  32),
                         # Fine-tuning after finishing epoch of lr 1e-5
-                        (2,  5e-6,  4,  16),
-                        (2,  1e-6,  4,  16)],
+                        (2,  5e-6,  2,  16),
+                        (2,  1e-6,  2,  16)],
 
         tts_clip_grad_norm = 1.0,                   # clips the gradient norm to prevent explosion - set to None if not needed
         tts_eval_interval = 500,                    # Number of steps between model evaluation (sample generation)
