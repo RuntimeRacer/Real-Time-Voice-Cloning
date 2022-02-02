@@ -51,7 +51,8 @@ hparams = HParams(
         ### Tacotron Training
         # Progressive training schedule
         # (r, lr, loops, batch_size)
-        # r          = reduction factor (# of mel frames synthesized for each decoder iteration)
+        # r          = reduction factor - divisor of mel frames synthesized for each decoder iteration
+        #              (lesser value => higher resolution and more precise training, but also higher step time)
         # lr         = learning rate
         # loops      = iteration loops over whole dataset
         # batch_size = amount of dataset items to train on per step
@@ -66,8 +67,9 @@ hparams = HParams(
                         (2,  5e-5,  4,  32),
                         (2,  1e-5,  4,  32),
                         # Fine-tuning after finishing epoch of lr 1e-5
-                        (2,  5e-6,  2,  16),
-                        (2,  1e-6,  2,  16)],
+                        (2,  5e-6,  8,  48),
+                        (2,  1e-6,  8,  48),
+                        (1,  1e-6,  64, 24)],
 
         tts_clip_grad_norm = 1.0,                   # clips the gradient norm to prevent explosion - set to None if not needed
         tts_eval_interval = 500,                    # Number of steps between model evaluation (sample generation)
