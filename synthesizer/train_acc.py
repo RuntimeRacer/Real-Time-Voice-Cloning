@@ -160,6 +160,9 @@ def train_acc(run_id: str, syn_dir: str, models_dir: str, save_every: int, threa
         max_step = np.ceil((total_samples * loops) / overall_batch_size).astype(np.int32) + epoch_steps
         training_steps = np.ceil(max_step - current_step).astype(np.int32)
 
+        # Calc SGDR values
+        sgdr_lr_stepping = (hparams.sgdr_init_lr - hparams.sgdr_final_lr) / np.ceil((total_samples * loops) / overall_batch_size).astype(np.int32)
+
         # Do we need to change to the next session?
         if current_step >= max_step:
             # Are there no further sessions than the current one?
@@ -189,6 +192,11 @@ def train_acc(run_id: str, syn_dir: str, models_dir: str, save_every: int, threa
             for step, (texts, mels, embeds, idx) in enumerate(data_loader, current_step):
                 current_step = step
                 start_time = time.time()
+
+                # Update lr
+                lr = hparams.sgdr_init_lr - (sgdr_lr_stepping * (current_step - epoch_steps))
+                for p in optimizer.param_groups:
+                    p["lr"] = lr
 
                 # Generate stop tokens for training
                 stop = torch.ones(mels.shape[0], mels.shape[2])
@@ -227,7 +235,7 @@ def train_acc(run_id: str, syn_dir: str, models_dir: str, save_every: int, threa
                 if accelerator.is_local_main_process:
                     epoch_step = step - epoch_steps
                     epoch_max_step = max_step - epoch_steps
-                    msg = f"| Epoch: {epoch} ({epoch_step}/{epoch_max_step}) | Loss: {loss_window.average:#.4} | {1./time_window.average:#.2} steps/s | Step: {step} | "
+                    msg = f"| Epoch: {epoch} ({epoch_step}/{epoch_max_step}) | LR: {lr} | Loss: {loss_window.average:#.4} | {1./time_window.average:#.2} steps/s | Step: {step} | "
                     stream(msg)
 
                 # Update visualizations
