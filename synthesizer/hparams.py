@@ -49,6 +49,9 @@ hparams = HParams(
                                                     # frame that has all values < -3.4
 
         ### Tacotron Training
+        sgdr_init_lr = 1e-3
+        sgdr_final_lr = 1e-7
+
         # Progressive training schedule
         # (r, lr, loops, batch_size)
         # r          = reduction factor (# of mel frames synthesized for each decoder iteration)
