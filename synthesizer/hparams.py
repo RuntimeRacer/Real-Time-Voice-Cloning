@@ -49,30 +49,41 @@ hparams = HParams(
                                                     # frame that has all values < -3.4
 
         ### Tacotron Training
-        sgdr_init_lr = 1e-3
-        sgdr_final_lr = 1e-7
+        sgdr_init_lr = 1e-3,
+        sgdr_final_lr = 1e-7,
 
         # Progressive training schedule
         # (r, lr, loops, batch_size)
         # r          = reduction factor - divisor of mel frames synthesized for each decoder iteration
         #              (lesser value => higher resolution and more precise training, but also higher step time)
-        # lr         = learning rate
         # loops      = iteration loops over whole dataset
         # batch_size = amount of dataset items to train on per step
+
+        tts_schedule=[(7, 1, 96),
+                      (6, 2, 96),
+                      (5, 4, 72),
+                      (4, 8, 72),
+                      (3, 16, 48),
+                      (2, 32, 48),
+                      (1, 64, 24)],
+
         #
-        tts_schedule = [(7,  1e-3,  4,  80),
-                        (6,  5e-4,  4,  80),
-                        (5,  2e-4,  4,  80),
-                        (5,  1e-4,  8,  80),
-                        # After finishing 1st epoch of lr 1e-4, reduce batch size to smoothen training optimization
-                        (4,  1e-4,  4,  64),
-                        (3,  1e-4,  4,  48),
-                        (2,  5e-5,  4,  32),
-                        (2,  1e-5,  4,  32),
-                        # Fine-tuning after finishing epoch of lr 1e-5
-                        (2,  5e-6,  8,  48),
-                        (2,  1e-6,  8,  48),
-                        (1,  1e-6,  64, 24)],
+        # Constantly adapt batch size according to reduction factor
+        # Reduction facter 1, each unit consumes ~1 GB of VRAM
+        # For best training alignment, do never change r and lr at the same time.
+        # tts_schedule=[(7, 1e-3, 2, 168),
+        #               (6, 1e-3, 2, 168),
+        #               (6, 5e-4, 2, 144),
+        #               (5, 5e-4, 2, 120),
+        #               (5, 2e-4, 2, 120),
+        #               (4, 2e-4, 2, 96),
+        #               (4, 1e-4, 2, 96),
+        #               (3, 1e-4, 2, 72),
+        #               (3, 5e-5, 2, 72),
+        #               (2, 5e-5, 2, 48),
+        #               (2, 2e-5, 2, 48),
+        #               (1, 2e-5, 2, 24),
+        #               (1, 1e-6, 24, 24)],
 
         tts_clip_grad_norm = 1.0,                   # clips the gradient norm to prevent explosion - set to None if not needed
         tts_eval_interval = 500,                    # Number of steps between model evaluation (sample generation)
@@ -102,7 +113,7 @@ hparams = HParams(
 
         ### SV2TTS
         speaker_embedding_size = 768,               # Dimension for the speaker embedding
-        silence_min_duration_split = 0.3,           # Duration in seconds of a silence for an utterance to be split
+        silence_min_duration_split = 0.4,           # Duration in seconds of a silence for an utterance to be split
         utterance_min_duration = 0.6,               # Duration in seconds below which utterances are discarded
         )
 
