@@ -161,8 +161,8 @@ def train_acc(run_id: str, syn_dir: str, models_dir: str, save_every: int, threa
         training_steps = np.ceil(max_step - current_step).astype(np.int32)
 
         # Calc SGDR values
-        sgdr_lr_stepping_base = (hparams.sgdr_init_lr - hparams.sgdr_final_lr) / np.ceil((total_samples * loops) / overall_batch_size).astype(np.int32)
-        lr =  (2 * sgdr_lr_stepping_base * (epoch_steps - current_step)) / epoch_steps
+        sgdr_lr_stepping = (hparams.sgdr_init_lr - hparams.sgdr_final_lr) / np.ceil((total_samples * loops) / overall_batch_size).astype(np.int32)
+        lr = hparams.sgdr_init_lr - (sgdr_lr_stepping * ((current_step-1) - epoch_steps))
 
         # Do we need to change to the next session?
         if current_step >= max_step:
@@ -182,8 +182,8 @@ def train_acc(run_id: str, syn_dir: str, models_dir: str, save_every: int, threa
             simple_table([("Epoch", epoch),
                           (f"Remaining Steps with r={r}", str(training_steps) + " Steps"),
                           ("Batch Size", batch_size),
-                          ("Init Learning Rate", lr),
-                          ("LR Stepping Init", sgdr_lr_stepping_base),
+                          ("Init LR", lr),
+                          ("LR Stepping", sgdr_lr_stepping),
                           ("Outputs/Step (r)", r)])
 
         for p in optimizer.param_groups:
@@ -195,8 +195,12 @@ def train_acc(run_id: str, syn_dir: str, models_dir: str, save_every: int, threa
                 current_step = step
                 start_time = time.time()
 
+                # Break out of loop to update training schedule
+                if current_step > max_step:
+                    break
+
                 # Update lr
-                lr =  (2 * sgdr_lr_stepping_base * (epoch_steps - current_step)) / epoch_steps
+                lr = hparams.sgdr_init_lr - (sgdr_lr_stepping * ((current_step-1) - epoch_steps))
                 for p in optimizer.param_groups:
                     p["lr"] = lr
 
