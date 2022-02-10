@@ -21,7 +21,7 @@ mu_law = True                       # Recommended to suppress noise if using raw
 
 
 # WAVERNN / VOCODER --------------------------------------------------------------------------------
-voc_mode = 'MOL'                    # either 'RAW' (softmax on raw bits) or 'MOL' (sample from mixture of logistics)
+voc_mode = 'RAW'                    # either 'RAW' (softmax on raw bits) or 'MOL' (sample from mixture of logistics)
 voc_upsample_factors = (5, 5, 12)    # NB - this needs to correctly factorise hop_length
 voc_rnn_dims = 512
 voc_fc_dims = 512
@@ -30,23 +30,29 @@ voc_res_out_dims = 128
 voc_res_blocks = 10
 
 # Training
-voc_batch_size = 288                # Rule of Thumb: 12 units per GB of VRAM of smallest card
-voc_sgdr_init_lr = 1e-3
-voc_sgdr_final_lr = 1e-7
+voc_batch_size = 240                # Rule of Thumb: 12 units per GB of VRAM of smallest card
 voc_gen_at_checkpoint = 5           # number of samples to generate at each checkpoint
 voc_pad = 2                         # this will pad the input so that the resnet can 'see' wider 
                                     # than input length
 voc_seq_len = hop_length * 5        # must be a multiple of hop_length
 
-# Progressive training schedule - amount of loops through the dataset per epoch
+# Progressive training schedule
+# (loops, init_lr, final_lr)
+# loops = amount of loops through the dataset per epoch
+# init_lr = inital sgdr learning rate
+# final_lr = amount of loops through the dataset per epoch
 voc_tts_schedule=[
-    1,
-    2,
-    4,
-    8,
-    16,
-    32,
-    64
+    (1, 5e-3, 1e-3),
+    (2, 1e-3, 1e-3),
+    (4, 1e-3, 5e-4),
+    (8, 7e-4, 3e-4),
+    (16, 4e-4, 1e-4),
+    (32, 2e-4, 5e-5),
+    (64, 7e-5, 3e-5),
+    (128, 4e-5, 1e-5),
+    (256, 2e-5, 5e-6),
+    (512, 7e-6, 1e-6),
+    (1024, 2e-6, 1e-6),
 ]
 
 # Generating / Synthesizing

@@ -41,7 +41,7 @@ if __name__ == "__main__":
     parser.add_argument("--visdom_server", type=str, default="http://localhost")
     parser.add_argument("--no_visdom", action="store_true", help= \
         "Disable visdom.")
-    parser.add_argument("-ts", "--testset_every", type=int, default=1000, help= \
+    parser.add_argument("-ts", "--testset_every", type=int, default=5000, help= \
         "Number of steps between generation of a testset.")
     parser.add_argument("-t", "--threads", type=int, default=2)
     args = parser.parse_args()

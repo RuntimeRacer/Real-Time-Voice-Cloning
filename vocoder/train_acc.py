@@ -103,7 +103,7 @@ def train_acc(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, groun
     epoch = 0
     max_step = 0
 
-    for i, loops in enumerate(hp.voc_tts_schedule):
+    for i, session in enumerate(hp.voc_tts_schedule):
         # Update epoch information
         epoch += 1
         epoch_steps = max_step
@@ -128,6 +128,9 @@ def train_acc(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, groun
         # Accelerator code - optimize and prepare model
         model, optimizer, data_loader = accelerator.prepare(model, optimizer, data_loader)
 
+        # Get session info
+        loops, sgdr_init_lr, sgdr_final_lr = session
+
         # Iterate over whole dataset for X loops according to schedule
         total_samples = len(dataset)
         overall_batch_size = hp.voc_batch_size * accelerator.state.num_processes  # Split training steps by amount of overall batch
@@ -135,8 +138,8 @@ def train_acc(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, groun
         training_steps = np.ceil(max_step - current_step).astype(np.int32)
 
         # Calc SGDR values
-        sgdr_lr_stepping = (hp.voc_sgdr_init_lr - hp.voc_sgdr_final_lr) / np.ceil((total_samples * loops) / overall_batch_size).astype(np.int32)
-        lr = hp.voc_sgdr_init_lr - (sgdr_lr_stepping * ((current_step-1) - epoch_steps))
+        sgdr_lr_stepping = (sgdr_init_lr - sgdr_final_lr) / np.ceil((total_samples * loops) / overall_batch_size).astype(np.int32)
+        lr = sgdr_init_lr - (sgdr_lr_stepping * ((current_step-1) - epoch_steps))
 
         # Do we need to change to the next session?
         if current_step >= max_step:
@@ -175,7 +178,7 @@ def train_acc(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, groun
                     break
 
                 # Update lr
-                lr = hp.voc_sgdr_init_lr - (sgdr_lr_stepping * ((current_step-1) - epoch_steps))
+                lr = sgdr_init_lr - (sgdr_lr_stepping * ((current_step-1) - epoch_steps))
                 for p in optimizer.param_groups:
                     p["lr"] = lr
 
@@ -246,6 +249,11 @@ def train_acc(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, groun
                 print("Making a backup (step %d)" % current_step)
                 backup_fpath = Path("{}/{}_{}.pt".format(str(weights_fpath.parent), run_id, current_step))
                 save(accelerator, model, backup_fpath, optimizer)
+                
+                # Generate a testset after each epoch
+                eval_model = accelerator.unwrap_model(model)
+                gen_testset(eval_model, test_loader, hp.voc_gen_at_checkpoint, hp.voc_gen_batched,
+                            hp.voc_target, hp.voc_overlap, model_dir)
 
 def save(accelerator, model, path, optimizer=None):
     # Unwrap Model
