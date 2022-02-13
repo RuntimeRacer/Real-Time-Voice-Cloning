@@ -42,20 +42,14 @@ voc_seq_len = hop_length * 5        # must be a multiple of hop_length
 # init_lr = inital sgdr learning rate
 # final_lr = amount of loops through the dataset per epoch
 voc_tts_schedule=[
-    (1, 5e-3, 1e-3),
-    (2, 1e-3, 1e-3),
-    (4, 1e-3, 5e-4),
-    (8, 7e-4, 3e-4),
-    (16, 4e-4, 1e-4),
-    (32, 2e-4, 5e-5),
-    (64, 7e-5, 3e-5),
-    (128, 4e-5, 1e-5),
-    (256, 2e-5, 5e-6),
-    (512, 7e-6, 1e-6),
-    (1024, 2e-6, 1e-6),
+    (2, 5e-3, 1e-3),
+    (8, 1e-3, 5e-4),
+    (32, 5e-4, 1e-4),
+    (128, 1e-4, 5e-5),
+    (512, 5e-5, 1e-5),
 ]
 
 # Generating / Synthesizing
 voc_gen_batched = True              # very fast (realtime+) single utterance batched generation
-voc_target = 11000                  # target number of samples to be generated in each batch entry
-voc_overlap = 550                   # number of samples for crossfading between batches
+voc_target = 16000                  # target number of samples to be generated in each batch entry
+voc_overlap = 800                   # number of samples for crossfading between batches
