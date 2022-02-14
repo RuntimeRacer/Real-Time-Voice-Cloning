@@ -395,18 +395,28 @@ class UI(QDialog):
             self.random_seed_checkbox.setChecked(True)
             self.seed_textbox.setText(str(seed))
             self.seed_textbox.setEnabled(True)
+            self.autotune_button.setEnabled(True)
         else:
             self.random_seed_checkbox.setChecked(False)
             self.seed_textbox.setText(str(0))
             self.seed_textbox.setEnabled(False)
+            self.autotune_button.setEnabled(False)
 
         if not trim_silences:
             self.trim_silences_checkbox.setChecked(False)
             self.trim_silences_checkbox.setDisabled(True)
 
-    def update_seed_textbox(self):
+    def update_seed_features(self):
         if self.random_seed_checkbox.isChecked():
             self.seed_textbox.setEnabled(True)
+            self.autotune_button.setEnabled(True)
+        else:
+            self.seed_textbox.setEnabled(False)
+            self.autotune_button.setEnabled(False)
+
+    def autotune_switch(self, set_active=True):
+        if set_active:
+            self.seed_textbox.setEnabled(False)
         else:
             self.seed_textbox.setEnabled(False)
 
@@ -583,10 +593,15 @@ class UI(QDialog):
         self.seed_textbox = QLineEdit()
         self.seed_textbox.setMaximumWidth(80)
         layout_seed.addWidget(self.seed_textbox, 0, 1)
+        self.autotune_button = QPushButton("Seed Autotune")
+        self.autotune_button.setToolTip("Performs Seed Autotuning for currently selected synthesizer and vocoder."
+            "Will try to find a random seed which generates outputs which have the lowest loss towards the embed."
+            "Recommended to use Griffin-Lim for this.")
+        layout_seed.addWidget(self.autotune_button, 0, 2)
         self.trim_silences_checkbox = QCheckBox("Enhance vocoder output")
         self.trim_silences_checkbox.setToolTip("When checked, trims excess silence in vocoder output."
             " This feature requires `webrtcvad` to be installed.")
-        layout_seed.addWidget(self.trim_silences_checkbox, 0, 2, 1, 2)
+        layout_seed.addWidget(self.trim_silences_checkbox, 0, 3, 1, 3)
         gen_layout.addLayout(layout_seed)
 
         self.loading_bar = QProgressBar()
