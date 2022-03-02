@@ -24,12 +24,13 @@ class VocoderDataset(Dataset):
         gta_fpaths = [mel_dir.joinpath(fname) for fname in gta_fnames]
         wav_fnames = [x[0] for x in metadata if int(x[4])]
         wav_fpaths = [wav_dir.joinpath(fname) for fname in wav_fnames]
-        self.samples_fpaths = list(zip(gta_fpaths, wav_fpaths))
+        utterances = [x[5] for x in metadata if int(x[4])]
+        self.samples_fpaths = list(zip(gta_fpaths, wav_fpaths, utterances))
         
         print("Found %d samples" % len(self.samples_fpaths))
     
     def __getitem__(self, index):  
-        mel_path, wav_path = self.samples_fpaths[index]
+        mel_path, wav_path, utterance = self.samples_fpaths[index]
         
         # Load the mel spectrogram and adjust its range to [-1, 1]
         mel = np.load(mel_path).T.astype(np.float32) / hp.mel_max_abs_value
@@ -56,7 +57,7 @@ class VocoderDataset(Dataset):
         elif hp.voc_mode == 'MOL':
             quant = audio.float_2_label(wav, bits=16)
             
-        return mel.astype(np.float32), quant.astype(np.int64)
+        return mel.astype(np.float32), quant.astype(np.int64), str(wav_path), utterance
 
     def __len__(self):
         return len(self.samples_fpaths)
@@ -68,6 +69,9 @@ class VocoderDataset(Dataset):
 
         
 def collate_vocoder(batch):
+    src_mel_data = [x[1] for x in batch]
+    src_wav_data = [x[2] for x in batch]
+    src_utterance_data = [x[3] for x in batch]
     mel_win = hp.voc_seq_len // hp.hop_length + 2 * hp.voc_pad
     max_offsets = [x[0].shape[-1] -2 - (mel_win + 2 * hp.voc_pad) for x in batch]
     mel_offsets = [np.random.randint(0, offset) for offset in max_offsets]
@@ -93,4 +97,4 @@ def collate_vocoder(batch):
     if hp.voc_mode == 'MOL' :
         y = audio.label_2_float(y.float(), bits)
 
-    return x, y, mels
+    return x, y, mels, src_mel_data, src_wav_data, src_utterance_data

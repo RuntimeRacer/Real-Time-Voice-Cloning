@@ -20,11 +20,11 @@ class HParams(object):
 
 hparams = HParams(
         ### Signal Processing (used in both synthesizer and vocoder)
-        sample_rate = 22050,
-        n_fft = 2048,
-        num_mels = 120,
-        hop_size = 300,                             # Tacotron uses 12.5 ms frame shift (set to sample_rate * 0.0125)
-        win_size = 1200,                            # Tacotron uses 50 ms frame length (set to sample_rate * 0.050)
+        sample_rate = 16000,
+        n_fft = 1024,
+        num_mels = 80,
+        hop_size = 200,                             # Tacotron uses 12.5 ms frame shift (set to sample_rate * 0.0125)
+        win_size = 800,                            # Tacotron uses 50 ms frame length (set to sample_rate * 0.050)
         fmin = 40,
         min_level_db = -100,
         ref_level_db = 20,
@@ -59,13 +59,13 @@ hparams = HParams(
         # loops      = iteration loops over whole dataset
         # batch_size = amount of dataset items to train on per step
 
-        tts_schedule=[(7, 1, 96),
-                      (6, 2, 96),
-                      (5, 4, 72),
-                      (4, 8, 72),
-                      (3, 16, 48),
-                      (2, 32, 48),
-                      (1, 64, 24)],
+        tts_schedule=[(7, 1, 112),
+                      (6, 2, 100),
+                      (5, 4, 88),
+                      (4, 8, 76),
+                      (3, 16, 64),
+                      (2, 16, 44),
+                      (1, 16, 24)],
 
         #
         # Constantly adapt batch size according to reduction factor
@@ -103,7 +103,7 @@ hparams = HParams(
         griffin_lim_iters = 80,
 
         ### Audio processing options
-        fmax = 11000,                               # Should not exceed (sample_rate // 2)
+        fmax = 8000,                               # Should not exceed (sample_rate // 2)
         allow_clipping_in_normalization = True,     # Used when signal_normalization = True
         clip_mels_length = True,                    # If true, discards samples exceeding max_mel_frames
         use_lws = False,                            # "Fast spectrogram phase recovery using local weighted sums"

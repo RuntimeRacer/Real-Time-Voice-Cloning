@@ -1,3 +1,4 @@
+import json
 import time
 from pathlib import Path
 
@@ -11,7 +12,7 @@ from torch.utils.data import DataLoader
 import vocoder.hparams as hp
 from vocoder.display import simple_table, stream
 from vocoder.distribution import discretized_mix_logistic_loss
-from vocoder.gen_wavernn import gen_testset
+from vocoder.gen_wavernn import gen_testset, export_batch
 from vocoder.models.fatchord_version import WaveRNN
 from vocoder.visualizations import Visualizations
 from vocoder.vocoder_dataset import VocoderDataset, collate_vocoder
@@ -81,7 +82,6 @@ def train_acc(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, groun
     mel_dir = syn_dir.joinpath("mels") if ground_truth else voc_dir.joinpath("mels_gta")
     wav_dir = syn_dir.joinpath("audio")
     dataset = VocoderDataset(metadata_fpath, mel_dir, wav_dir)
-    total_samples = len(dataset)
     test_loader = DataLoader(dataset,
                              batch_size=1,
                              shuffle=True,
@@ -166,9 +166,15 @@ def train_acc(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, groun
         for p in optimizer.param_groups:
             p["lr"] = lr
 
+        # Loss anomaly detection
+        # If loss change after a step differs by > 50%, this will print info which training data was in the last batch
+        avgLossDiff = 0
+        avgLossCount = 0
+        lastLoss = 0
+
         # Training loop
         while current_step < max_step:
-            for step, (x, y, m) in enumerate(data_loader, current_step):
+            for step, (x, y, m, src_mel_data, src_wav_data, src_utterance_data) in enumerate(data_loader, current_step):
                 current_step = step
                 start_time = time.time()
 
@@ -199,11 +205,28 @@ def train_acc(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, groun
                 time_window.append(time.time() - start_time)
                 loss_window.append(loss.item())
 
+                # anomaly detection
+                if avgLossCount == 0:
+                    currentLossDiff = 0
+                    avgLossDiff = 0
+                else:
+                    currentLossDiff = abs(lastLoss - loss.item())
+
+                if step > 5000 and avgLossCount > 50 and currentLossDiff > (avgLossDiff * 8): # Give it a few steps to normalize, then do the check
+                    print("WARNING - Anomaly detected! (Step {}, Thread {}) - Avg Loss Diff: {}, Current Loss Diff: {}".format(step, accelerator.process_index, avgLossDiff, currentLossDiff))
+                    export_batch((src_mel_data, src_wav_data, src_utterance_data), model_dir.joinpath("anomalies/step_" + str(current_step) + "_thread_" + str(accelerator.process_index)))
+
+                # Update avg loss count
+                avgLossDiff = (avgLossDiff * avgLossCount + currentLossDiff) / (avgLossCount + 1)
+                avgLossCount += 1
+
                 if accelerator.is_local_main_process:
                     epoch_step = step - epoch_steps
                     epoch_max_step = max_step - epoch_steps
                     msg = f"| Epoch: {epoch} ({epoch_step}/{epoch_max_step}) | LR: {lr:#.6} | Loss: {loss_window.average:#.6} | {1./time_window.average:#.2}steps/s | Step: {step} | "
                     stream(msg)
+
+                lastLoss = loss.item()
 
                 # Update visualizations
                 vis.update(loss.item(), step)
