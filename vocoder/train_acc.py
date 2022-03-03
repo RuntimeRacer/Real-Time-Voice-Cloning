@@ -1,4 +1,5 @@
 import json
+import math
 import time
 from pathlib import Path
 
@@ -10,9 +11,10 @@ from torch import optim
 from torch.utils.data import DataLoader
 
 import vocoder.hparams as hp
+from vocoder.batch import analyse_and_export_batch
 from vocoder.display import simple_table, stream
 from vocoder.distribution import discretized_mix_logistic_loss
-from vocoder.gen_wavernn import gen_testset, export_batch
+from vocoder.gen_wavernn import gen_testset
 from vocoder.models.fatchord_version import WaveRNN
 from vocoder.visualizations import Visualizations
 from vocoder.vocoder_dataset import VocoderDataset, collate_vocoder
@@ -174,7 +176,7 @@ def train_acc(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, groun
 
         # Training loop
         while current_step < max_step:
-            for step, (x, y, m, src_mel_data, src_wav_data, src_utterance_data) in enumerate(data_loader, current_step):
+            for step, (x, y, m, src_data) in enumerate(data_loader, current_step):
                 current_step = step
                 start_time = time.time()
 
@@ -196,6 +198,10 @@ def train_acc(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, groun
                     y = y.float()
                 y = y.unsqueeze(-1)
 
+                # Copy results of forward pass for analysis of needed
+                cp_y_hat = torch.clone(y_hat)
+                cp_y = torch.clone(y)
+
                 # Backward pass
                 loss = loss_func(y_hat, y)
                 optimizer.zero_grad()
@@ -212,9 +218,15 @@ def train_acc(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, groun
                 else:
                     currentLossDiff = abs(lastLoss - loss.item())
 
-                if step > 5000 and avgLossCount > 50 and currentLossDiff > (avgLossDiff * 8): # Give it a few steps to normalize, then do the check
+                if step > 5000 and avgLossCount > 50 and currentLossDiff > (avgLossDiff * hp.voc_anomaly_trigger_multiplier) or math.isnan(currentLossDiff) or math.isnan(loss.item()): # Give it a few steps to normalize, then do the check
                     print("WARNING - Anomaly detected! (Step {}, Thread {}) - Avg Loss Diff: {}, Current Loss Diff: {}".format(step, accelerator.process_index, avgLossDiff, currentLossDiff))
-                    export_batch((src_mel_data, src_wav_data, src_utterance_data), model_dir.joinpath("anomalies/step_" + str(current_step) + "_thread_" + str(accelerator.process_index)))
+                    individual_loss = loss_func(cp_y_hat, cp_y, reduce=False)
+                    individual_loss = torch.mean(individual_loss, 1, True).tolist()
+                    analyse_and_export_batch(src_data, dataset, individual_loss, model_dir.joinpath("anomalies/step_" + str(current_step) + "_thread_" + str(accelerator.process_index)))
+
+                # Kill process if NaN
+                if math.isnan(loss.item()):
+                    currentLossDiff /= 0
 
                 # Update avg loss count
                 avgLossDiff = (avgLossDiff * avgLossCount + currentLossDiff) / (avgLossCount + 1)

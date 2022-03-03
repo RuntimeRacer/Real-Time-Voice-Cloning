@@ -36,6 +36,9 @@ voc_pad = 2                         # this will pad the input so that the resnet
                                     # than input length
 voc_seq_len = hop_length * 5        # must be a multiple of hop_length
 
+# Anomaly detection
+voc_anomaly_trigger_multiplier = 6 # Threshold for raising anomaly detection. It is a Multiplier of average loss change
+
 # Progressive training schedule
 # (loops, init_lr, final_lr)
 # loops = amount of loops through the dataset per epoch
