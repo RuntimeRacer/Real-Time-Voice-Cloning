@@ -4,7 +4,7 @@ from vocoder.audio import *
 def gen_testset(model: WaveRNN, test_set, samples, batched, target, overlap, save_path):
     step = model.get_step()
 
-    for i, (m, x, wav_path, utterance) in enumerate(test_set, 1):
+    for i, (m, x, idx) in enumerate(test_set, 1):
         if i > samples: 
             break
 
