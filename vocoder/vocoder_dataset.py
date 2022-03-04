@@ -25,7 +25,7 @@ class VocoderDataset(Dataset):
         wav_fnames = [x[0] for x in metadata if int(x[4])]
         wav_fpaths = [wav_dir.joinpath(fname) for fname in wav_fnames]
         self.samples_fpaths = list(zip(gta_fpaths, wav_fpaths))
-        self.samples_texts = [x[5].strip() for x in metadata if int(x[4])]
+        self.samples_texts = [x[5].strip() for x in metadata if int(x[4])] if hp.voc_anomaly_detection else []
         self.metadata = metadata
         
         print("Found %d samples" % len(self.samples_fpaths))
@@ -70,11 +70,12 @@ class VocoderDataset(Dataset):
 
         
 def collate_vocoder(batch):
-    # collections of data for analyzing the batch
-    src_mel_data = [x[0] for x in batch]
-    src_wav_data = [x[1] for x in batch]
-    indices = [x[2] for x in batch]
-    src_data = (src_mel_data, src_wav_data, indices)
+    if hp.voc_anomaly_detection:
+        # collections of data for analyzing the batch
+        src_mel_data = [x[0] for x in batch]
+        src_wav_data = [x[1] for x in batch]
+        indices = [x[2] for x in batch]
+    src_data = (src_mel_data, src_wav_data, indices) if hp.voc_anomaly_detection else (None, None, None)
 
     # preprocessing for vocoder training
     mel_win = hp.voc_seq_len // hp.hop_length + 2 * hp.voc_pad

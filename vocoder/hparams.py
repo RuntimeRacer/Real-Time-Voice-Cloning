@@ -37,6 +37,8 @@ voc_pad = 2                         # this will pad the input so that the resnet
 voc_seq_len = hop_length * 5        # must be a multiple of hop_length
 
 # Anomaly detection
+voc_anomaly_detection = False      # Enables Loss anomaly detection. Dataloader will collect more metadata.
+                                   # Reduces training Performance by ~20%
 voc_anomaly_trigger_multiplier = 6 # Threshold for raising anomaly detection. It is a Multiplier of average loss change
 
 # Progressive training schedule
@@ -44,25 +46,13 @@ voc_anomaly_trigger_multiplier = 6 # Threshold for raising anomaly detection. It
 # loops = amount of loops through the dataset per epoch
 # init_lr = inital sgdr learning rate
 # final_lr = amount of loops through the dataset per epoch
-# voc_tts_schedule_MOL=[
-#     (2, 5e-3, 1e-3),
-#     (8, 1e-3, 5e-4),
-#     (32, 5e-4, 1e-4),
-#     (1024, 1e-4, 1e-4),
-#     (128, 1e-4, 5e-5),
-#     (64, 5e-5, 1e-5),
-# ]
 voc_tts_schedule=[
-    (4, 1e-3, 1e-7),
-    (8, 9e-4, 1e-7),
-    (16, 8e-4, 1e-7),
-    (32, 7e-4, 1e-7),
-    (64, 6e-4, 1e-7),
-    (128, 5e-4, 1e-7),
-    (256, 4e-4, 1e-7),
-    (512, 3e-4, 1e-7),
-    (1024, 2e-4, 1e-7),
-    (2048, 1e-4, 1e-7),
+    (2, 5e-3, 1e-3),
+    (8, 1e-3, 5e-4),
+    (32, 5e-4, 2e-4),
+    (1024, 2e-4, 2e-4),
+    (128, 1e-4, 5e-5),
+    (64, 5e-5, 1e-5),
 ]
 
 # Generating / Synthesizing

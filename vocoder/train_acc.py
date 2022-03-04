@@ -199,8 +199,9 @@ def train_acc(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, groun
                 y = y.unsqueeze(-1)
 
                 # Copy results of forward pass for analysis of needed
-                cp_y_hat = torch.clone(y_hat)
-                cp_y = torch.clone(y)
+                if hp.voc_anomaly_detection:
+                    cp_y_hat = torch.clone(y_hat)
+                    cp_y = torch.clone(y)
 
                 # Backward pass
                 loss = loss_func(y_hat, y)
@@ -218,7 +219,12 @@ def train_acc(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, groun
                 else:
                     currentLossDiff = abs(lastLoss - loss.item())
 
-                if step > 5000 and avgLossCount > 50 and currentLossDiff > (avgLossDiff * hp.voc_anomaly_trigger_multiplier) or math.isnan(currentLossDiff) or math.isnan(loss.item()): # Give it a few steps to normalize, then do the check
+                if hp.voc_anomaly_detection and \
+                        (step > 5000 and \
+                        avgLossCount > 50 and \
+                        currentLossDiff > (avgLossDiff * hp.voc_anomaly_trigger_multiplier) \
+                        or math.isnan(currentLossDiff) \
+                        or math.isnan(loss.item())): # Give it a few steps to normalize, then do the check
                     print("WARNING - Anomaly detected! (Step {}, Thread {}) - Avg Loss Diff: {}, Current Loss Diff: {}".format(step, accelerator.process_index, avgLossDiff, currentLossDiff))
                     individual_loss = loss_func(cp_y_hat, cp_y, reduce=False)
                     individual_loss = torch.mean(individual_loss, 1, True).tolist()
