@@ -49,10 +49,12 @@ voc_anomaly_trigger_multiplier = 6 # Threshold for raising anomaly detection. It
 voc_tts_schedule=[
     (2, 5e-3, 1e-3),
     (8, 1e-3, 5e-4),
-    (32, 5e-4, 2e-4),
-    (1024, 2e-4, 2e-4),
+    (32, 5e-4, 1e-4),
+    (1024, 1e-4, 1e-4),
     (128, 1e-4, 5e-5),
+    (512, 5e-5, 5e-5),
     (64, 5e-5, 1e-5),
+    (256, 1e-5, 1e-5),
 ]
 
 # Generating / Synthesizing
