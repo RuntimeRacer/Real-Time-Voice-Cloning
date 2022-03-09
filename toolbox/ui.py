@@ -340,16 +340,19 @@ class UI(QDialog):
         encoder_fpaths = list(encoder_models_dir.glob("*.pt"))
         if len(encoder_fpaths) == 0:
             raise Exception("No encoder models found in %s" % encoder_models_dir)
+        encoder_fpaths.sort()
         self.repopulate_box(self.encoder_box, [(f.stem, f) for f in encoder_fpaths])
         
         # Synthesizer
         synthesizer_fpaths = list(synthesizer_models_dir.glob("**/*.pt"))
         if len(synthesizer_fpaths) == 0:
             raise Exception("No synthesizer models found in %s" % synthesizer_models_dir)
+        synthesizer_fpaths.sort()
         self.repopulate_box(self.synthesizer_box, [(f.stem, f) for f in synthesizer_fpaths])
 
         # Vocoder
         vocoder_fpaths = list(vocoder_models_dir.glob("**/*.pt"))
+        vocoder_fpaths.sort()
         vocoder_items = [(f.stem, f) for f in vocoder_fpaths] + [("Griffin-Lim", None)]
         self.repopulate_box(self.vocoder_box, vocoder_items)
         
