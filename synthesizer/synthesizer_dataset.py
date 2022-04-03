@@ -23,6 +23,7 @@ class SynthesizerDataset(Dataset):
         embed_fpaths = [embed_dir.joinpath(fname) for fname in embed_fnames]
         self.samples_fpaths = list(zip(mel_fpaths, embed_fpaths))
         self.samples_texts = [x[5].strip() for x in metadata if int(x[4])]
+        #self.samples_texts = [np.asarray(text_to_sequence(x[5].strip(), hparams.tts_cleaner_names)).astype(np.int32) for x in metadata if int(x[4])]
         self.metadata = metadata
         self.hparams = hparams
         
@@ -42,10 +43,11 @@ class SynthesizerDataset(Dataset):
 
         # Get the text and clean it
         text = text_to_sequence(self.samples_texts[index], self.hparams.tts_cleaner_names)
-        
+
         # Convert the list returned by text_to_sequence to a numpy array
         text = np.asarray(text).astype(np.int32)
 
+        #return self.samples_texts[index], mel.astype(np.float32), embed.astype(np.float32), index
         return text, mel.astype(np.float32), embed.astype(np.float32), index
 
     def __len__(self):

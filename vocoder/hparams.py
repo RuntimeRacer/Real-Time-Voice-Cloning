@@ -21,7 +21,7 @@ mu_law = True                       # Recommended to suppress noise if using raw
 
 
 # WAVERNN / VOCODER --------------------------------------------------------------------------------
-voc_mode = 'MOL'                    # either 'RAW' (softmax on raw bits) or 'MOL' (sample from mixture of logistics)
+voc_mode = 'RAW'                    # either 'RAW' (softmax on raw bits) or 'MOL' (sample from mixture of logistics)
 voc_upsample_factors = (5, 5, 8)    # NB - this needs to correctly factorise hop_length
 voc_rnn_dims = 512
 voc_fc_dims = 512
@@ -30,7 +30,7 @@ voc_res_out_dims = 128
 voc_res_blocks = 10
 
 # Training
-voc_batch_size = 360                # Rule of Thumb: 12 units per GB of VRAM of smallest card
+voc_batch_size = 320                # Rule of Thumb: 12 units per GB of VRAM of smallest card
 voc_gen_at_checkpoint = 5           # number of samples to generate at each checkpoint
 voc_pad = 2                         # this will pad the input so that the resnet can 'see' wider 
                                     # than input length
@@ -48,16 +48,12 @@ voc_anomaly_trigger_multiplier = 6 # Threshold for raising anomaly detection. It
 # final_lr = amount of loops through the dataset per epoch
 voc_tts_schedule=[
     (2, 5e-3, 1e-3),
-    (8, 1e-3, 5e-4),
-    (32, 5e-4, 1e-4),
+    (4, 1e-3, 5e-4),
+    (8, 5e-4, 1e-4),
     (1024, 1e-4, 1e-4),
-    (128, 1e-4, 5e-5),
-    (512, 5e-5, 5e-5),
-    (64, 5e-5, 1e-5),
-    (256, 1e-5, 1e-5),
 ]
 
 # Generating / Synthesizing
 voc_gen_batched = True              # very fast (realtime+) single utterance batched generation
-voc_target = 16000                  # target number of samples to be generated in each batch entry
-voc_overlap = 800                   # number of samples for crossfading between batches
+voc_target = 3000                  # target number of samples to be generated in each batch entry
+voc_overlap = 1500                   # number of samples for crossfading between batches

@@ -138,7 +138,7 @@ def train_acc(run_id: str, syn_dir: str, models_dir: str, save_every: int, threa
         current_step = model.get_step() + 1
 
         # Fetch params from session
-        r, loops, batch_size = session
+        r, loops, batch_size, sgdr_init_lr, sgdr_final_lr = session
         
         # Update Model params
         model.r = r
@@ -161,8 +161,8 @@ def train_acc(run_id: str, syn_dir: str, models_dir: str, save_every: int, threa
         training_steps = np.ceil(max_step - current_step).astype(np.int32)
 
         # Calc SGDR values
-        sgdr_lr_stepping = (hparams.sgdr_init_lr - hparams.sgdr_final_lr) / np.ceil((total_samples * loops) / overall_batch_size).astype(np.int32)
-        lr = hparams.sgdr_init_lr - (sgdr_lr_stepping * ((current_step-1) - epoch_steps))
+        sgdr_lr_stepping = (sgdr_init_lr - sgdr_final_lr) / np.ceil((total_samples * loops) / overall_batch_size).astype(np.int32)
+        lr = sgdr_init_lr - (sgdr_lr_stepping * ((current_step-1) - epoch_steps))
 
         # Do we need to change to the next session?
         if current_step >= max_step:
@@ -200,7 +200,7 @@ def train_acc(run_id: str, syn_dir: str, models_dir: str, save_every: int, threa
                     break
 
                 # Update lr
-                lr = hparams.sgdr_init_lr - (sgdr_lr_stepping * ((current_step-1) - epoch_steps))
+                lr = sgdr_init_lr - (sgdr_lr_stepping * ((current_step-1) - epoch_steps))
                 for p in optimizer.param_groups:
                     p["lr"] = lr
 
@@ -345,6 +345,11 @@ def eval_model(attention, mel_prediction, target_spectrogram, input_seq, step,
     # save predicted mel spectrogram to disk (debug)
     mel_output_fpath = mel_output_dir.joinpath("mel-prediction-step-{}_sample_{}.npy".format(step, sample_num))
     np.save(str(mel_output_fpath), mel_prediction, allow_pickle=False)
+
+    # Save target wav for comparison
+    target_wav = audio.inv_mel_spectrogram(target_spectrogram.T, hparams)
+    target_wav_fpath = wav_dir.joinpath("step-{}-wave-from-mel_sample_{}_target.wav".format(step, sample_num))
+    audio.save_wav(target_wav, str(target_wav_fpath), sr=hparams.sample_rate)
 
     # save griffin lim inverted wav for debug (mel -> wav)
     wav = audio.inv_mel_spectrogram(mel_prediction.T, hparams)

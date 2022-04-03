@@ -59,13 +59,13 @@ hparams = HParams(
         # loops      = iteration loops over whole dataset
         # batch_size = amount of dataset items to train on per step
 
-        tts_schedule=[(7, 1, 112),
-                      (6, 2, 100),
-                      (5, 4, 88),
-                      (4, 8, 76),
-                      (3, 16, 64),
-                      (2, 16, 44),
-                      (1, 16, 24)],
+        tts_schedule=[(7, 1, 112, 1e-3, 1e-6),
+                      (6, 2, 100, 1e-3, 1e-6),
+                      (5, 4, 88, 5e-4, 5e-7),
+                      (4, 8, 76, 2e-4, 5e-7),
+                      (3, 16, 64, 1e-4, 1e-7),
+                      (2, 16, 44, 5e-5, 5e-8),
+                      (1, 16, 22, 1e-5, 1e-8)],
 
         #
         # Constantly adapt batch size according to reduction factor
