@@ -18,3 +18,4 @@ numba
 webrtcvad
 sox
 webvtt-py
+accelerate==0.4.0

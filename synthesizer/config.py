@@ -5,7 +5,7 @@ datasets = {
         "transcript_extension": ".txt"
     },
     "LibriTTS": {
-        "directories": ["train-clean-100", "train-clean-360"],
+        "directories": ["train-clean-100", "train-clean-360", "train-other-500"],
         "audio_extensions": [".wav", ".flac"],
         "transcript_extension": ".original.txt"
         #"transcript_extension": ".normalized.txt"

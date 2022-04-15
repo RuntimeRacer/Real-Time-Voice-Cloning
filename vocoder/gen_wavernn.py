@@ -1,11 +1,10 @@
 from vocoder.models.fatchord_version import  WaveRNN
 from vocoder.audio import *
 
-
 def gen_testset(model: WaveRNN, test_set, samples, batched, target, overlap, save_path):
-    k = model.get_step() // 1000
+    step = model.get_step()
 
-    for i, (m, x) in enumerate(test_set, 1):
+    for i, (m, x, idx) in enumerate(test_set, 1):
         if i > samples: 
             break
 
@@ -20,11 +19,11 @@ def gen_testset(model: WaveRNN, test_set, samples, batched, target, overlap, sav
         else :
             x = label_2_float(x, bits)
 
-        save_wav(x, save_path.joinpath("%dk_steps_%d_target.wav" % (k, i)))
+        save_wav(x, save_path.joinpath("%d_steps_%d_target.wav" % (step, i)))
         
         batch_str = "gen_batched_target%d_overlap%d" % (target, overlap) if batched else \
             "gen_not_batched"
-        save_str = save_path.joinpath("%dk_steps_%d_%s.wav" % (k, i, batch_str))
+        save_str = save_path.joinpath("%d_steps_%d_%s.wav" % (step, i, batch_str))
 
         wav = model.generate(m, batched, target, overlap, hp.mu_law)
         save_wav(wav, save_str)

@@ -28,7 +28,7 @@ if __name__ == "__main__":
     parser.add_argument("--visdom_server", type=str, default="http://localhost")
     parser.add_argument("--no_visdom", action="store_true", help= \
         "Disable visdom.")
-    parser.add_argument("-t", "--threads", type=int, default=8)
+    parser.add_argument("-t", "--threads", type=int, default=1)
     parser.add_argument("--hparams", default="",
                         help="Hyperparameter overrides as a comma-separated list of name=value "
 							 "pairs")

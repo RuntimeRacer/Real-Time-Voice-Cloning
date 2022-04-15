@@ -1,13 +1,12 @@
+import argparse
+from pathlib import Path
+
 from utils.argutils import print_args
 from vocoder.train import train
-from pathlib import Path
-import argparse
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Trains the vocoder from the synthesizer audios and the GTA synthesized mels, "
-                    "or ground truth mels.",
+        description="Trains the vocoder from the synthesizer audios and the GTA synthesized mels, or ground truth mels.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     
@@ -42,7 +41,9 @@ if __name__ == "__main__":
     parser.add_argument("--visdom_server", type=str, default="http://localhost")
     parser.add_argument("--no_visdom", action="store_true", help= \
         "Disable visdom.")
-    parser.add_argument("-t", "--threads", type=int, default=8)
+    parser.add_argument("-ts", "--testset_every", type=int, default=5000, help= \
+        "Number of steps between generation of a testset.")
+    parser.add_argument("-t", "--threads", type=int, default=2)
     args = parser.parse_args()
 
     # Process the arguments

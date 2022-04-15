@@ -164,7 +164,7 @@ def plot_embedding_as_heatmap(embed, ax=None, title="", shape=None, color_range=
         ax = plt.gca()
     
     if shape is None:
-        height = int(np.sqrt(len(embed)))
+        height = int(len(embed)/16)
         shape = (height, -1)
     embed = embed.reshape(shape)
     

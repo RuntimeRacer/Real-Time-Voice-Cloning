@@ -53,12 +53,21 @@ class Toolbox:
         self.datasets_root = datasets_root
         self.utterances = set()
         self.current_generated = (None, None, None, None) # speaker_name, spec, breaks, wav
+        self.current_voc_embed = None
         
         self.synthesizer = None # type: Synthesizer
         self.current_wav = None
         self.waves_list = []
         self.waves_count = 0
         self.waves_namelist = []
+
+        # Autotune
+        self.autotune_active = False
+        self.autotune_iteration = 0
+        self.autotune_best_seed = None
+        self.autotune_best_loss = None
+        self.autotune_current_seed = None
+        self.autotune_current_loss = None
 
         # Check for webrtcvad (enables removal of silences in vocoder output)
         try:
@@ -121,7 +130,9 @@ class Toolbox:
         self.ui.generate_button.clicked.connect(func)
         self.ui.synthesize_button.clicked.connect(self.synthesize)
         self.ui.vocode_button.clicked.connect(self.vocode)
-        self.ui.random_seed_checkbox.clicked.connect(self.update_seed_textbox)
+        self.ui.random_seed_checkbox.clicked.connect(self.update_seed_features)
+        func = lambda: self.autotune()
+        self.ui.autotune_button.clicked.connect(func)
 
         # UMAP legend
         self.ui.clear_button.clicked.connect(self.clear_utterances)
@@ -198,6 +209,9 @@ class Toolbox:
         # Plot it
         self.ui.draw_embed(embed, name, "current")
         self.ui.draw_umap_projections(self.utterances)
+
+        # Clear all cache
+        torch.cuda.empty_cache()
         
     def clear_utterances(self):
         self.utterances.clear()
@@ -212,7 +226,10 @@ class Toolbox:
             seed = int(self.ui.seed_textbox.text())
             self.ui.populate_gen_options(seed, self.trim_silences)
         else:
-            seed = None
+            # Generate random seed
+            seed = torch.seed()
+            self.ui.log("Using seed: %d" % seed)
+            print("Using seed: %d" % seed)
 
         if seed is not None:
             torch.manual_seed(seed)
@@ -231,6 +248,9 @@ class Toolbox:
         self.ui.draw_spec(spec, "generated")
         self.current_generated = (self.ui.selected_utterance.speaker_name, spec, breaks, None)
         self.ui.set_loading(0)
+
+        # Clear GPU Memory
+        torch.cuda.empty_cache()
 
     def vocode(self):
         speaker_name, spec, breaks, _ = self.current_generated
@@ -278,7 +298,8 @@ class Toolbox:
 
         # Play it
         wav = wav / np.abs(wav).max() * 0.97
-        self.ui.play(wav, Synthesizer.sample_rate)
+        if not self.autotune_active:
+            self.ui.play(wav, Synthesizer.sample_rate)
 
         # Name it (history displayed in combobox)
         # TODO better naming for the combobox items?
@@ -309,16 +330,20 @@ class Toolbox:
         if not encoder.is_loaded():
             self.init_encoder()
         encoder_wav = encoder.preprocess_wav(wav)
-        embed, partial_embeds, _ = encoder.embed_utterance(encoder_wav, return_partials=True)
+        self.current_voc_embed, partial_embeds, _ = encoder.embed_utterance(encoder_wav, return_partials=True)
         
         # Add the utterance
         name = speaker_name + "_gen_%05d" % np.random.randint(100000)
-        utterance = Utterance(name, speaker_name, wav, spec, embed, partial_embeds, True)
+        utterance = Utterance(name, speaker_name, wav, spec, self.current_voc_embed, partial_embeds, True)
         self.utterances.add(utterance)
         
         # Plot it
-        self.ui.draw_embed(embed, name, "generated")
-        self.ui.draw_umap_projections(self.utterances)
+        if not self.autotune_active:
+            self.ui.draw_embed(self.current_voc_embed, name, "generated")
+            self.ui.draw_umap_projections(self.utterances)
+
+        # Clear GPU Memory
+        torch.cuda.empty_cache()
         
     def init_encoder(self):
         model_fpath = self.ui.current_encoder_fpath
@@ -353,5 +378,72 @@ class Toolbox:
         self.ui.log("Done (%dms)." % int(1000 * (timer() - start)), "append")
         self.ui.set_loading(0)
 
-    def update_seed_textbox(self):
-       self.ui.update_seed_textbox() 
+    def update_seed_features(self):
+       self.ui.update_seed_features()
+
+    def autotune(self):
+        # Abort if too few chars provided
+        if len(self.ui.text_prompt.toPlainText()) < 40:
+            self.ui.log("Autotuning is only possible with at least 40 chars of text provided.")
+            return
+
+        if self.autotune_active:
+            # Disable Autotune
+            self.autotune_active = False
+            # Update UI
+            self.ui.autotune_switch(False)
+            # Put best seed into seed field
+            self.ui.log("Autotune: Finishing autotune. Best seed found: %d. Storing it in toolbox seed field." % self.autotune_best_seed)
+            self.ui.seed_textbox.setText(str(self.autotune_best_seed_seed))
+        else:
+            # Mark enabled
+            self.autotune_active = True
+            # Update UI
+            self.ui.autotune_switch(True)
+
+            # Prepare autotune vars
+            self.autotune_iteration = 0
+            self.autotune_best_seed = None
+            self.autotune_best_loss = None
+            self.autotune_current_seed = None
+            self.autotune_current_loss = None
+
+            # Start autotune
+            self.ui.log("Autotune started...")
+            print("Autotune started...")
+            while self.autotune_active:
+                self.autotune_iteration += 1
+                self.ui.log("Autotune iteration: %d" % self.autotune_iteration)
+                print("Autotune iteration: %d" % self.autotune_iteration)
+                # 1. Generate a random seed
+                self.autotune_current_seed = torch.seed()
+                self.ui.seed_textbox.setText(str(self.autotune_current_seed))
+                self.ui.log("Autotune current seed: %d" % self.autotune_current_seed)
+                print("Autotune current seed: %d" % self.autotune_current_seed)
+                self.ui.log("Autotune: Performing iteration...")
+                print("Autotune: Performing iteration...")
+                # 2. Synthesize a mel spectogram using that seed
+                self.synthesize()
+                # 3. Vocode wav for the mel
+                self.vocode()
+                # 4. Calculate distance between embed and output of current seed
+                #device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+                reference_embed = torch.from_numpy(self.ui.selected_utterance.embed)
+                current_embed = torch.from_numpy(self.current_voc_embed)
+                distance = torch.dist(reference_embed, current_embed)
+                self.autotune_current_loss = distance.item()
+                self.ui.log("Autotune current loss: %f" % self.autotune_current_loss)
+                print("Autotune current loss: %f" % self.autotune_current_loss)
+                # 5. Update values if loss is lower
+                if self.autotune_best_loss == None or self.autotune_current_loss < self.autotune_best_loss:
+                    self.ui.log("Autotune: Better Seed (%d) found! Storing seed in memory." % self.autotune_current_seed)
+                    print("Autotune: Better Seed (%d) found! Storing seed in memory." % self.autotune_current_seed)
+                    self.autotune_best_seed = self.autotune_current_seed
+                    self.autotune_best_loss = self.autotune_current_loss
+
+
+
+
+
+
+
