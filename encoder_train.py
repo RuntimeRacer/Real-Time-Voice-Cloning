@@ -38,7 +38,7 @@ if __name__ == "__main__":
     parser.add_argument("--visdom_server", type=str, default="http://localhost")
     parser.add_argument("--no_visdom", action="store_true", help= \
         "Disable visdom.")
-    parser.add_argument("-t", "--threads", type=int, default=8)
+    parser.add_argument("-t", "--threads", type=int, default=4)
     parser.add_argument("-e", "--end_after", type=int, help= \
         "Amount of steps to end training after; saving the model.")
     args = parser.parse_args()
