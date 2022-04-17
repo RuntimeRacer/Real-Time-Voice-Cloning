@@ -10,6 +10,7 @@ sounddevice
 SoundFile
 Unidecode
 inflect
+phonemizer>=0.2.10
 PyQt5
 multiprocess
 numba

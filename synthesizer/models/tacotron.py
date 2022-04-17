@@ -6,20 +6,7 @@ import torch.nn.functional as F
 from pathlib import Path
 from typing import Union
 
-
-class HighwayNetwork(nn.Module):
-    def __init__(self, size):
-        super().__init__()
-        self.W1 = nn.Linear(size, size)
-        self.W2 = nn.Linear(size, size)
-        self.W1.bias.data.fill_(0.)
-
-    def forward(self, x):
-        x1 = self.W1(x)
-        x2 = self.W2(x)
-        g = torch.sigmoid(x2)
-        y = g * F.relu(x1) + (1. - g) * x
-        return y
+from synthesizer.models.common_layers import HighwayNetwork, BatchNormConv
 
 
 class Encoder(nn.Module):
@@ -71,19 +58,6 @@ class Encoder(nn.Module):
         # Concatenate the tiled speaker embedding with the encoder output
         x = torch.cat((x, e), 2)
         return x
-
-
-class BatchNormConv(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel, relu=True):
-        super().__init__()
-        self.conv = nn.Conv1d(in_channels, out_channels, kernel, stride=1, padding=kernel // 2, bias=False)
-        self.bnorm = nn.BatchNorm1d(out_channels)
-        self.relu = relu
-
-    def forward(self, x):
-        x = self.conv(x)
-        x = F.relu(x) if self.relu is True else x
-        return self.bnorm(x)
 
 
 class CBHG(nn.Module):
