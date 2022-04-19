@@ -2,7 +2,7 @@ import argparse
 import os
 
 from synthesizer.hparams import hparams_tacotron
-from synthesizer.synthesize import run_synthesis_acc
+from synthesizer.synthesize import run_synthesis
 from utils.argutils import print_args
 
 if __name__ == "__main__":
@@ -60,5 +60,5 @@ if __name__ == "__main__":
                 "use --no_trim to disable this error message.")
     del args.no_trim
 
-    run_synthesis_acc(args.in_dir, args.out_dir, args.model_dir, modified_hp, args.skip_existing, args.threads)
+    run_synthesis(args.in_dir, args.out_dir, args.model_dir, modified_hp, args.skip_existing, args.threads)
 
