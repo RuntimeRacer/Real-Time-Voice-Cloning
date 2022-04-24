@@ -18,6 +18,8 @@ from synthesizer.utils.text import sequence_to_text
 from synthesizer.visualizations import Visualizations
 from vocoder.display import *
 
+from hparams.config import tacotron as hp_tacotron, sp, preprocessing, sv2tts
+
 
 def np_now(x: torch.Tensor): return x.detach().cpu().numpy()
 
@@ -25,7 +27,7 @@ def time_string():
     return datetime.now().strftime("%Y-%m-%d %H:%M")
 
 def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: int,
-          backup_every: int, force_restart:bool, vis_every: int, visdom_server: str, no_visdom: bool, hparams):
+          backup_every: int, force_restart:bool, vis_every: int, visdom_server: str, no_visdom: bool):
 
     syn_dir = Path(syn_dir)
     models_dir = Path(models_dir)
@@ -63,20 +65,20 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: 
 
     # Instantiate Tacotron Model
     print("{} - Initialising Tacotron Model...".format(device))
-    model = Tacotron(embed_dims=hparams.tts_embed_dims,
+    model = Tacotron(embed_dims=hp_tacotron.embed_dims,
                      num_chars=len(symbols),
-                     encoder_dims=hparams.tts_encoder_dims,
-                     decoder_dims=hparams.tts_decoder_dims,
-                     n_mels=hparams.num_mels,
-                     fft_bins=hparams.num_mels,
-                     postnet_dims=hparams.tts_postnet_dims,
-                     encoder_K=hparams.tts_encoder_K,
-                     lstm_dims=hparams.tts_lstm_dims,
-                     postnet_K=hparams.tts_postnet_K,
-                     num_highways=hparams.tts_num_highways,
-                     dropout=hparams.tts_dropout,
-                     stop_threshold=hparams.tts_stop_threshold,
-                     speaker_embedding_size=hparams.speaker_embedding_size).to(device)
+                     encoder_dims=hp_tacotron.encoder_dims,
+                     decoder_dims=hp_tacotron.decoder_dims,
+                     n_mels=sp.num_mels,
+                     fft_bins=sp.num_mels,
+                     postnet_dims=hp_tacotron.postnet_dims,
+                     encoder_K=hp_tacotron.encoder_K,
+                     lstm_dims=hp_tacotron.lstm_dims,
+                     postnet_K=hp_tacotron.postnet_K,
+                     num_highways=hp_tacotron.num_highways,
+                     dropout=hp_tacotron.dropout,
+                     stop_threshold=hp_tacotron.stop_threshold,
+                     speaker_embedding_size=sv2tts.speaker_embedding_size).to(device)
 
     # Initialize the optimizer
     optimizer = optim.Adam(model.parameters())
@@ -107,7 +109,7 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: 
     metadata_fpath = syn_dir.joinpath("train.json")
     mel_dir = syn_dir.joinpath("mels")
     embed_dir = syn_dir.joinpath("embeds")
-    dataset = SynthesizerDataset(metadata_fpath, mel_dir, embed_dir, hparams)
+    dataset = SynthesizerDataset(metadata_fpath, mel_dir, embed_dir)
 
     # Initialize the visualization environment
     vis = Visualizations(run_id, vis_every, server=visdom_server, disabled=no_visdom)
@@ -126,7 +128,7 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: 
     max_step = 0
 
     # Iterate over training schedule
-    for i, session in enumerate(hparams.tts_schedule):
+    for i, session in enumerate(hp_tacotron.tts_schedule):
         # Update epoch information
         epoch += 1
         epoch_steps = max_step
@@ -145,7 +147,7 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: 
 
         # Init dataloader
         data_loader = DataLoader(dataset,
-                                 collate_fn=lambda batch: collate_synthesizer(batch, r, hparams),
+                                 collate_fn=lambda batch: collate_synthesizer(batch, r),
                                  batch_size=batch_size,
                                  num_workers=threads,
                                  shuffle=True,
@@ -167,7 +169,7 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: 
         # Do we need to change to the next session?
         if current_step >= max_step:
             # Are there no further sessions than the current one?
-            if i == len(hparams.tts_schedule) - 1:
+            if i == len(hp_tacotron.tts_schedule) - 1:
                 # We have completed training. Save the model and exit
                 with accelerator.local_main_process_first():
                     if accelerator.is_local_main_process:
@@ -227,8 +229,8 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: 
                 optimizer.zero_grad()
                 accelerator.backward(loss)
 
-                if hparams.tts_clip_grad_norm is not None:
-                    grad_norm = accelerator.clip_grad_norm_(model.parameters(), hparams.tts_clip_grad_norm)
+                if hp_tacotron.tts_clip_grad_norm is not None:
+                    grad_norm = accelerator.clip_grad_norm_(model.parameters(), hp_tacotron.tts_clip_grad_norm)
                     #if np.isnan(grad_norm.cpu()):
                     #    print("grad_norm was NaN!")
 
@@ -272,10 +274,10 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: 
                 # Evaluate model to generate samples
                 # Accelerator: Only in main process
                 if accelerator.is_local_main_process:
-                    epoch_eval = hparams.tts_eval_interval == -1 and step == max_step  # If epoch is done
-                    step_eval = hparams.tts_eval_interval > 0 and step % hparams.tts_eval_interval == 0  # Every N steps
+                    epoch_eval = hp_tacotron.tts_eval_interval == -1 and step == max_step  # If epoch is done
+                    step_eval = hp_tacotron.tts_eval_interval > 0 and step % hp_tacotron.tts_eval_interval == 0  # Every N steps
                     if epoch_eval or step_eval:
-                        for sample_idx in range(hparams.tts_eval_num_samples):
+                        for sample_idx in range(hp_tacotron.tts_eval_num_samples):
                             # At most, generate samples equal to number in the batch
                             if sample_idx + 1 <= len(texts):
                                 # Remove padding from mels using frame length in metadata
@@ -293,8 +295,7 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: 
                                            mel_output_dir=mel_output_dir,
                                            wav_dir=wav_dir,
                                            sample_num=sample_idx + 1,
-                                           loss=loss,
-                                           hparams=hparams)
+                                           loss=loss)
 
                 # Break out of loop to update training schedule
                 if step >= max_step:
@@ -337,7 +338,7 @@ def load(model, device, path, optimizer=None):
         optimizer.load_state_dict(checkpoint["optimizer_state"])
 
 def eval_model(attention, mel_prediction, target_spectrogram, input_seq, step,
-               plot_dir, mel_output_dir, wav_dir, sample_num, loss, hparams):
+               plot_dir, mel_output_dir, wav_dir, sample_num, loss):
     # Save some results for evaluation
     attention_path = str(plot_dir.joinpath("attention_step_{}_sample_{}".format(step, sample_num)))
     save_attention(attention, attention_path)
@@ -347,19 +348,19 @@ def eval_model(attention, mel_prediction, target_spectrogram, input_seq, step,
     np.save(str(mel_output_fpath), mel_prediction, allow_pickle=False)
 
     # Save target wav for comparison
-    target_wav = audio.inv_mel_spectrogram(target_spectrogram.T, hparams)
+    target_wav = audio.inv_mel_spectrogram(target_spectrogram.T)
     target_wav_fpath = wav_dir.joinpath("step-{}-wave-from-mel_sample_{}_target.wav".format(step, sample_num))
-    audio.save_wav(target_wav, str(target_wav_fpath), sr=hparams.sample_rate)
+    audio.save_wav(target_wav, str(target_wav_fpath), sr=sp.sample_rate)
 
     # save griffin lim inverted wav for debug (mel -> wav)
-    wav = audio.inv_mel_spectrogram(mel_prediction.T, hparams)
+    wav = audio.inv_mel_spectrogram(mel_prediction.T)
     wav_fpath = wav_dir.joinpath("step-{}-wave-from-mel_sample_{}.wav".format(step, sample_num))
-    audio.save_wav(wav, str(wav_fpath), sr=hparams.sample_rate)
+    audio.save_wav(wav, str(wav_fpath), sr=sp.sample_rate)
 
     # save real and predicted mel-spectrogram plot to disk (control purposes)
     spec_fpath = plot_dir.joinpath("step-{}-mel-spectrogram_sample_{}.png".format(step, sample_num))
     title_str = "{}, {}, step={}, loss={:.5f}".format("Tacotron", time_string(), step, loss)
     plot_spectrogram(mel_prediction, str(spec_fpath), title=title_str,
                      target_spectrogram=target_spectrogram,
-                     max_len=target_spectrogram.size // hparams.num_mels)
+                     max_len=target_spectrogram.size // sp.num_mels)
     print("Input at step {}: {}".format(step, sequence_to_text(input_seq)))

@@ -2,12 +2,13 @@ from multiprocess.pool import ThreadPool
 from synthesizer import audio
 from functools import partial
 from itertools import chain
-from encoder import config, inference as encoder
+from encoder import inference as encoder
 from pathlib import Path
 from utils import logmmse
 from tqdm import tqdm
 from audioread.exceptions import NoBackendError
 from shutil import copyfile
+from hparams.config import sp, preprocessing
 import numpy as np
 import librosa
 import time
@@ -21,7 +22,7 @@ def save_metadata_progress(metadata: dict, metadata_fpath: Path):
         json.dump(metadata, metadata_file)
     print("Saved %d training metadata entries to %s." % (len(metadata), metadata_fpath))
 
-def synthesizer_preprocess_dataset(datasets_root: Path, out_dir: Path, n_processes: int, skip_existing: bool, hparams, no_alignments: bool, dataset_name: str, subfolders: str, audio_extensions: list, transcript_extension: str):
+def synthesizer_preprocess_dataset(datasets_root: Path, out_dir: Path, n_processes: int, skip_existing: bool, no_alignments: bool, dataset_name: str, subfolders: str, audio_extensions: list, transcript_extension: str):
     # Gather the input directories
     dataset_root = datasets_root.joinpath(dataset_name)
     input_dirs = [dataset_root.joinpath(subfolder.strip()) for subfolder in subfolders]
@@ -55,7 +56,7 @@ def synthesizer_preprocess_dataset(datasets_root: Path, out_dir: Path, n_process
     atexit.register(save_metadata_progress, metadata, metadata_fpath)
 
     # Preprocess the dataset
-    func = partial(preprocess_speaker, out_dir=out_dir, skip_existing=skip_existing, hparams=hparams, no_alignments=no_alignments, audio_extensions=audio_extensions, transcript_extension=transcript_extension)
+    func = partial(preprocess_speaker, out_dir=out_dir, skip_existing=skip_existing, no_alignments=no_alignments, audio_extensions=audio_extensions, transcript_extension=transcript_extension)
     job = ThreadPool(n_processes).imap(func, speaker_dirs)
     for speaker_metadata in tqdm(job, dataset_name, len(speaker_dirs), unit="speakers"):
         speaker_dir = str(speaker_metadata["speaker_dir"])
@@ -76,14 +77,14 @@ def synthesizer_preprocess_dataset(datasets_root: Path, out_dir: Path, n_process
             metadata_lines.extend([line.split("|") for line in utterances])
     mel_frames = sum([int(m[4]) for m in metadata_lines])
     timesteps = sum([int(m[3]) for m in metadata_lines])
-    sample_rate = hparams.sample_rate
+    sample_rate = sp.sample_rate
     hours = (timesteps / sample_rate) / 3600
     print("The dataset consists of %d utterances, %d mel frames, %d audio timesteps (%.2f hours)." % (len(metadata_lines), mel_frames, timesteps, hours))
     print("Max input length (text chars): %d" % max(len(m[5]) for m in metadata_lines))
     print("Max mel frames length: %d" % max(int(m[4]) for m in metadata_lines))
     print("Max audio timesteps length: %d" % max(int(m[3]) for m in metadata_lines))
 
-def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, hparams, no_alignments: bool, audio_extensions: list, transcript_extension: str):
+def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, no_alignments: bool, audio_extensions: list, transcript_extension: str):
     speaker_metadata = {
         "speaker_dir": speaker_dir,
         "metadata": []
@@ -105,14 +106,14 @@ def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, hparams,
                 # Load the audio waveform
                 wav = None
                 try:
-                    wav, _ = librosa.load(str(wav_fpath), hparams.sample_rate)
+                    wav, _ = librosa.load(str(wav_fpath), sp.sample_rate)
                 except (ValueError, RuntimeError, NoBackendError) as err:
                     # Unable to load.
                     print("Unable to load audio file {0}: {1}".format(wav_fpath, err))
                     continue
 
-                if hparams.rescale:
-                    wav = wav / np.abs(wav).max() * hparams.rescaling_max
+                if preprocessing.rescale:
+                    wav = wav / np.abs(wav).max() * preprocessing.rescaling_max
 
                 # Get the corresponding text
                 # Check for .txt (for compatibility with other datasets)
@@ -136,7 +137,7 @@ def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, hparams,
                     continue
 
                 # Process the utterance
-                output = process_utterance(wav, text, out_dir, mel_outpath, wav_outpath, utterance_id, hparams)
+                output = process_utterance(wav, text, out_dir, mel_outpath, wav_outpath, utterance_id)
                 if output is not None:
                     speaker_metadata["metadata"].append(output)
 
@@ -175,7 +176,7 @@ def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, hparams,
             end_times = list(map(float, end_times.replace("\"", "").split(",")))
 
             # Process each sub-utterance
-            wavs, texts = split_on_silences(wav_fpath, words, end_times, hparams, transcript)
+            wavs, texts = split_on_silences(wav_fpath, words, end_times, transcript)
             for i, (wav, text) in enumerate(zip(wavs, texts)):
                 sub_basename = "%s_%02d" % (wav_fname, i)
 
@@ -186,18 +187,18 @@ def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, hparams,
                     continue
 
                 # Process the utterance
-                output = process_utterance(wav, text, out_dir, mel_outpath, wav_outpath, sub_basename, hparams)
+                output = process_utterance(wav, text, out_dir, mel_outpath, wav_outpath, sub_basename)
                 if output is not None:
                     speaker_metadata["metadata"].append(output)
 
     return speaker_metadata
 
 
-def split_on_silences(wav_fpath, words, end_times, hparams, transcript):
+def split_on_silences(wav_fpath, words, end_times, transcript):
     # Load the audio waveform
-    wav, _ = librosa.load(str(wav_fpath), hparams.sample_rate)
-    if hparams.rescale:
-        wav = wav / np.abs(wav).max() * hparams.rescaling_max
+    wav, _ = librosa.load(str(wav_fpath), sp.sample_rate)
+    if preprocessing.rescale:
+        wav = wav / np.abs(wav).max() * preprocessing.rescaling_max
 
     words = np.array(words)
     start_times = np.array([0.0] + end_times[:-1])
@@ -214,16 +215,16 @@ def split_on_silences(wav_fpath, words, end_times, hparams, transcript):
     # assert words[0] == "" and words[-1] == ""
 
     # Find pauses that are too long
-    mask = (words == "") & (end_times - start_times >= hparams.silence_min_duration_split)
+    mask = (words == "") & (end_times - start_times >= preprocessing.silence_min_duration_split)
     mask[0] = mask[-1] = True
     breaks = np.where(mask)[0]
 
     # Profile the noise from the silences and perform noise reduction on the waveform
     silence_times = [[start_times[i], end_times[i]] for i in breaks]
-    silence_times = (np.array(silence_times) * hparams.sample_rate).astype(np.int)
+    silence_times = (np.array(silence_times) * sp.sample_rate).astype(np.int)
     noisy_wav = np.concatenate([wav[stime[0]:stime[1]] for stime in silence_times])
-    if len(noisy_wav) > hparams.sample_rate * 0.02:
-        profile = logmmse.profile_noise(noisy_wav, hparams.sample_rate)
+    if len(noisy_wav) > sp.sample_rate * 0.02:
+        profile = logmmse.profile_noise(noisy_wav, sp.sample_rate)
         wav = logmmse.denoise(wav, profile, eta=0)
 
     # Re-attach segments that are too short
@@ -231,14 +232,14 @@ def split_on_silences(wav_fpath, words, end_times, hparams, transcript):
     segment_durations = [start_times[end] - end_times[start] for start, end in segments]
     i = 0
     while i < len(segments) and len(segments) > 1:
-        if segment_durations[i] < hparams.utterance_min_duration:
+        if segment_durations[i] < preprocessing.utterance_min_duration:
             # See if the segment can be re-attached with the right or the left segment
             left_duration = float("inf") if i == 0 else segment_durations[i - 1]
             right_duration = float("inf") if i == len(segments) - 1 else segment_durations[i + 1]
             joined_duration = segment_durations[i] + min(left_duration, right_duration)
 
             # Do not re-attach if it causes the joined utterance to be too long
-            if joined_duration > hparams.hop_size * hparams.max_mel_frames / hparams.sample_rate:
+            if joined_duration > sp.hop_size * preprocessing.max_mel_frames / sp.sample_rate:
                 i += 1
                 continue
 
@@ -252,7 +253,7 @@ def split_on_silences(wav_fpath, words, end_times, hparams, transcript):
 
     # Split the utterance
     segment_times = [[end_times[start], start_times[end]] for start, end in segments]
-    segment_times = (np.array(segment_times) * hparams.sample_rate).astype(np.int)
+    segment_times = (np.array(segment_times) * sp.sample_rate).astype(np.int)
     wavs = [wav[segment_time[0]:segment_time[1]] for segment_time in segment_times]
     texts = [" ".join(words[start + 1:end]).replace("  ", " ") for start, end in segments]
 
@@ -273,7 +274,7 @@ def split_on_silences(wav_fpath, words, end_times, hparams, transcript):
     return wavs, texts
 
 
-def process_utterance(wav: np.ndarray, text: str, out_dir: Path, mel_fpath: Path, wav_fpath: Path, basename: str, hparams):
+def process_utterance(wav: np.ndarray, text: str, out_dir: Path, mel_fpath: Path, wav_fpath: Path, basename: str):
     ## FOR REFERENCE:
     # For you not to lose your head if you ever wish to change things here or implement your own
     # synthesizer.
@@ -287,20 +288,20 @@ def process_utterance(wav: np.ndarray, text: str, out_dir: Path, mel_fpath: Path
     #   of the wav and of the mel spectrogram. See the vocoder data loader.
 
     # Trim silence
-    if hparams.trim_silence:
+    if preprocessing.trim_silence:
         wav = encoder.preprocess_wav(wav, normalize=False, trim_silence=True)
     
     # Skip utterances that are too short
-    if len(wav) < hparams.utterance_min_duration * hparams.sample_rate:
+    if len(wav) < preprocessing.utterance_min_duration * sp.sample_rate:
         #print("Skipped utterance {0} because it's too short".format(basename))
         return None
 
     # Compute the mel spectrogram
-    mel_spectrogram = audio.melspectrogram(wav, hparams).astype(np.float32)
+    mel_spectrogram = audio.melspectrogram(wav).astype(np.float32)
     mel_frames = mel_spectrogram.shape[1]
 
     # Skip utterances that are too long
-    if mel_frames > hparams.max_mel_frames and hparams.clip_mels_length:
+    if mel_frames > preprocessing.max_mel_frames and preprocessing.clip_mels_length:
         #print("Skipped utterance {0} because it's too long.".format(basename))
         return None
 

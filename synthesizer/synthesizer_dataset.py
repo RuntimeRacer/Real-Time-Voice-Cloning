@@ -5,9 +5,11 @@ from pathlib import Path
 from synthesizer.utils.text import text_to_sequence
 import json
 
+from hparams.config import sp, preprocessing
+
 
 class SynthesizerDataset(Dataset):
-    def __init__(self, metadata_fpath: Path, mel_dir: Path, embed_dir: Path, hparams):
+    def __init__(self, metadata_fpath: Path, mel_dir: Path, embed_dir: Path):
         self.metadata_fpath = metadata_fpath
         print("Using inputs from:\n\t%s\n\t%s\n\t%s" % (self.metadata_fpath, mel_dir, embed_dir))
 
@@ -23,9 +25,8 @@ class SynthesizerDataset(Dataset):
         embed_fpaths = [embed_dir.joinpath(fname) for fname in embed_fnames]
         self.samples_fpaths = list(zip(mel_fpaths, embed_fpaths))
         self.samples_texts = [x[5].strip() for x in metadata if int(x[4])]
-        #self.samples_texts = [np.asarray(text_to_sequence(x[5].strip(), hparams.tts_cleaner_names)).astype(np.int32) for x in metadata if int(x[4])]
+        #self.samples_texts = [np.asarray(text_to_sequence(x[5].strip(), preprocessing.tts_cleaner_names)).astype(np.int32) for x in metadata if int(x[4])]
         self.metadata = metadata
-        self.hparams = hparams
         
         print("Found %d samples" % len(self.samples_fpaths))
     
@@ -42,7 +43,7 @@ class SynthesizerDataset(Dataset):
         embed = np.load(embed_path)
 
         # Get the text and clean it
-        text = text_to_sequence(self.samples_texts[index], self.hparams.tts_cleaner_names)
+        text = text_to_sequence(self.samples_texts[index], preprocessing.tts_cleaner_names)
 
         # Convert the list returned by text_to_sequence to a numpy array
         text = np.asarray(text).astype(np.int32)
@@ -70,7 +71,7 @@ class SynthesizerDataset(Dataset):
         return log_string
 
 
-def collate_synthesizer(batch, r, hparams):
+def collate_synthesizer(batch, r):
     # Text
     x_lens = [len(x[0]) for x in batch]
     max_x_len = max(x_lens)
@@ -86,8 +87,8 @@ def collate_synthesizer(batch, r, hparams):
 
     # WaveRNN mel spectrograms are normalized to [0, 1] so zero padding adds silence
     # By default, SV2TTS uses symmetric mels, where -1*max_abs_value is silence.
-    if hparams.symmetric_mels:
-        mel_pad_value = -1 * hparams.max_abs_value
+    if preprocessing.symmetric_mels:
+        mel_pad_value = -1 * sp.max_abs_value
     else:
         mel_pad_value = 0
 

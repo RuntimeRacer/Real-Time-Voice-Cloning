@@ -1,28 +1,27 @@
 import atexit
 import json
 import os
-import platform
 import time
 from pathlib import Path
 
 import numpy as np
-import torch
 from accelerate import Accelerator
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from synthesizer.hparams import hparams_debug_string
+from hparams.config import tacotron as hp_tacotron, sp, preprocessing, sv2tts
+
 from synthesizer.models.tacotron import Tacotron
 from synthesizer.synthesizer_dataset import (SynthesizerDataset,
                                              collate_synthesizer)
 from synthesizer.utils.symbols import symbols
 
 
-def run_synthesis(in_dir, out_dir, model_dir, hparams, skip_existing, threads=2):
+def run_synthesis(in_dir, out_dir, model_dir, skip_existing, threads=2):
     # This generates ground truth-aligned mels for vocoder training
     synth_dir = Path(out_dir).joinpath("mels_gta")
     synth_dir.mkdir(exist_ok=True, parents=True)
-    print(hparams_debug_string())
+    print(str(hp_tacotron))
 
     # Initialize Accelerator
     accelerator = Accelerator()
@@ -32,20 +31,20 @@ def run_synthesis(in_dir, out_dir, model_dir, hparams, skip_existing, threads=2)
     print("Synthesizer using device:", device)
 
     # Instantiate Tacotron model
-    model = Tacotron(embed_dims=hparams.tts_embed_dims,
+    model = Tacotron(embed_dims=hp_tacotron.embed_dims,
                      num_chars=len(symbols),
-                     encoder_dims=hparams.tts_encoder_dims,
-                     decoder_dims=hparams.tts_decoder_dims,
-                     n_mels=hparams.num_mels,
-                     fft_bins=hparams.num_mels,
-                     postnet_dims=hparams.tts_postnet_dims,
-                     encoder_K=hparams.tts_encoder_K,
-                     lstm_dims=hparams.tts_lstm_dims,
-                     postnet_K=hparams.tts_postnet_K,
-                     num_highways=hparams.tts_num_highways,
+                     encoder_dims=hp_tacotron.encoder_dims,
+                     decoder_dims=hp_tacotron.decoder_dims,
+                     n_mels=sp.num_mels,
+                     fft_bins=sp.num_mels,
+                     postnet_dims=hp_tacotron.postnet_dims,
+                     encoder_K=hp_tacotron.encoder_K,
+                     lstm_dims=hp_tacotron.lstm_dims,
+                     postnet_K=hp_tacotron.postnet_K,
+                     num_highways=hp_tacotron.num_highways,
                      dropout=0., # Use zero dropout for gta mels
-                     stop_threshold=hparams.tts_stop_threshold,
-                     speaker_embedding_size=hparams.speaker_embedding_size)
+                     stop_threshold=hp_tacotron.stop_threshold,
+                     speaker_embedding_size=sv2tts.speaker_embedding_size)
 
     # Load the weights
     model_dir = Path(model_dir)
@@ -66,10 +65,10 @@ def run_synthesis(in_dir, out_dir, model_dir, hparams, skip_existing, threads=2)
     mel_dir = in_dir.joinpath("mels")
     embed_dir = in_dir.joinpath("embeds")
 
-    dataset = SynthesizerDataset(metadata_fpath, mel_dir, embed_dir, hparams)
+    dataset = SynthesizerDataset(metadata_fpath, mel_dir, embed_dir)
     data_loader = DataLoader(dataset,
-                             collate_fn=lambda batch: collate_synthesizer(batch, r, hparams),
-                             batch_size=hparams.synthesis_batch_size,
+                             collate_fn=lambda batch: collate_synthesizer(batch, r),
+                             batch_size=preprocessing.synthesis_batch_size,
                              num_workers=threads,
                              shuffle=False,
                              pin_memory=True)

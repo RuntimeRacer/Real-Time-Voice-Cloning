@@ -1,7 +1,6 @@
 import argparse
 import os
 
-from synthesizer.hparams import hparams_tacotron
 from synthesizer.synthesize import run_synthesis
 from utils.argutils import print_args
 
@@ -39,7 +38,6 @@ if __name__ == "__main__":
         "interrupted.")
     args = parser.parse_args()
     print_args(args, parser)
-    modified_hp = hparams_tacotron.parse(args.hparams)
     
     if not hasattr(args, "in_dir"):
         args.in_dir = os.path.join(args.datasets_root, "SV2TTS", "synthesizer")
@@ -60,5 +58,5 @@ if __name__ == "__main__":
                 "use --no_trim to disable this error message.")
     del args.no_trim
 
-    run_synthesis(args.in_dir, args.out_dir, args.model_dir, modified_hp, args.skip_existing, args.threads)
+    run_synthesis(args.in_dir, args.out_dir, args.model_dir, args.skip_existing, args.threads)
 

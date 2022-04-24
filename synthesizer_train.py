@@ -1,4 +1,3 @@
-from synthesizer.hparams import hparams_tacotron
 from synthesizer.train import train
 from utils.argutils import print_args
 import argparse
@@ -34,8 +33,6 @@ if __name__ == "__main__":
 							 "pairs")
     args = parser.parse_args()
     print_args(args, parser)
-
-    args.hparams = hparams_tacotron.parse(args.hparams)
 
     # Run the training
     train(**vars(args))

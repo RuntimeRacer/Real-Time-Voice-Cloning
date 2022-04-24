@@ -1,5 +1,4 @@
 from synthesizer.preprocess import synthesizer_preprocess_dataset
-from synthesizer.hparams import hparams_tacotron
 from synthesizer import config
 from utils.argutils import print_args
 from pathlib import Path
@@ -57,9 +56,6 @@ if __name__ == "__main__":
 
     # Print the arguments
     print_args(args, parser)
-    
-    # Add hparams to args
-    args.hparams = hparams_tacotron.parse(args.hparams)
 
     # Convert args object to param dict for function
     args = vars(args)

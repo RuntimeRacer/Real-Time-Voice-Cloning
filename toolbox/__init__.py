@@ -1,4 +1,5 @@
 from toolbox.ui import UI
+from hparams.config import sp
 from encoder import inference as encoder
 from synthesizer.inference import Synthesizer
 from vocoder import inference as vocoder
@@ -110,13 +111,13 @@ class Toolbox:
         self.ui.browser_browse_button.clicked.connect(func)
         func = lambda: self.ui.draw_utterance(self.ui.selected_utterance, "current")
         self.ui.utterance_history.currentIndexChanged.connect(func)
-        func = lambda: self.ui.play(self.ui.selected_utterance.wav, Synthesizer.sample_rate)
+        func = lambda: self.ui.play(self.ui.selected_utterance.wav, sp.sample_rate)
         self.ui.play_button.clicked.connect(func)
         self.ui.stop_button.clicked.connect(self.ui.stop)
         self.ui.record_button.clicked.connect(self.record)
 
         #Audio
-        self.ui.setup_audio_devices(Synthesizer.sample_rate)
+        self.ui.setup_audio_devices(sp.sample_rate)
 
         #Wav playback & save
         func = lambda: self.replay_last_wav()
@@ -141,10 +142,10 @@ class Toolbox:
         self.current_wav = self.waves_list[index]
 
     def export_current_wave(self):
-        self.ui.save_audio_file(self.current_wav, Synthesizer.sample_rate)
+        self.ui.save_audio_file(self.current_wav, sp.sample_rate)
 
     def replay_last_wav(self):
-        self.ui.play(self.current_wav, Synthesizer.sample_rate)
+        self.ui.play(self.current_wav, sp.sample_rate)
 
     def reset_ui(self, encoder_models_dir, synthesizer_models_dir, vocoder_models_dir, seed):
         self.ui.populate_browser(self.datasets_root, recognized_datasets, 0, True)
@@ -271,7 +272,7 @@ class Toolbox:
             self.init_vocoder()
 
         def vocoder_progress(i, seq_len, b_size, gen_rate):
-            real_time_factor = (gen_rate / Synthesizer.sample_rate) * 1000
+            real_time_factor = (gen_rate / sp.sample_rate) * 1000
             line = "Waveform generation: %d/%d (batch size: %d, rate: %.1fkHz - %.2fx real time)" \
                    % (i * b_size, seq_len * b_size, b_size, gen_rate, real_time_factor)
             self.ui.log(line, "overwrite")
@@ -286,10 +287,10 @@ class Toolbox:
         self.ui.log(" Done!", "append")
         
         # Add breaks
-        b_ends = np.cumsum(np.array(breaks) * Synthesizer.hparams.hop_size)
+        b_ends = np.cumsum(np.array(breaks) * sp.hop_size)
         b_starts = np.concatenate(([0], b_ends[:-1]))
         wavs = [wav[start:end] for start, end, in zip(b_starts, b_ends)]
-        breaks = [np.zeros(int(0.15 * Synthesizer.sample_rate))] * len(breaks)
+        breaks = [np.zeros(int(0.15 * sp.sample_rate))] * len(breaks)
         wav = np.concatenate([i for w, b in zip(wavs, breaks) for i in (w, b)])
 
         # Trim excessive silences
@@ -299,7 +300,7 @@ class Toolbox:
         # Play it
         wav = wav / np.abs(wav).max() * 0.97
         if not self.autotune_active:
-            self.ui.play(wav, Synthesizer.sample_rate)
+            self.ui.play(wav, sp.sample_rate)
 
         # Name it (history displayed in combobox)
         # TODO better naming for the combobox items?
@@ -361,7 +362,7 @@ class Toolbox:
         self.ui.log("Loading the synthesizer %s... " % model_fpath)
         self.ui.set_loading(1)
         start = timer()
-        self.synthesizer = Synthesizer(model_fpath)
+        self.synthesizer = Synthesizer(model_type='tacotron', model_fpath=model_fpath) # FIXME: Selector for model type / autodetect in synthesizer
         self.ui.log("Done (%dms)." % int(1000 * (timer() - start)), "append")
         self.ui.set_loading(0)
            

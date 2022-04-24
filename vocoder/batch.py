@@ -1,4 +1,5 @@
 from vocoder.audio import *
+from hparams.config import wavernn as hp_wavernn
 import json
 from pathlib import Path
 
@@ -23,8 +24,8 @@ def analyse_and_export_batch(batch, dataset, individual_loss, save_path):
         wav_filename = "{}.wav".format(wav_path.with_suffix("").name)
 
         # Convert mels
-        bits = 16 if hp.voc_mode == 'MOL' else hp.bits
-        if hp.mu_law and hp.voc_mode != 'MOL':
+        bits = 16 if hp_wavernn.mode == 'MOL' else hp_wavernn.bits
+        if hp_wavernn.mu_law and hp_wavernn.mode != 'MOL':
             wav_mel = decode_mu_law(wav_mel, 2 ** bits, from_labels=True)
         else:
             wav_mel = label_2_float(wav_mel, bits)

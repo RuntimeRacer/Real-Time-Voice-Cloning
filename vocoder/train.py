@@ -10,7 +10,7 @@ from accelerate import Accelerator
 from torch import optim
 from torch.utils.data import DataLoader
 
-import vocoder.hparams as hp
+from hparams.config import wavernn as hp_wavernn, sp
 from vocoder.batch import analyse_and_export_batch
 from vocoder.display import simple_table, stream
 from vocoder.distribution import discretized_mix_logistic_loss
@@ -25,7 +25,7 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
           save_every: int, backup_every: int, force_restart: bool,
           vis_every: int, visdom_server: str, no_visdom: bool, testset_every: int, threads: int):
     # Check to make sure the hop length is correctly factorised
-    assert np.cumprod(hp.voc_upsample_factors)[-1] == hp.hop_length
+    assert np.cumprod(hp_wavernn.upsample_factors)[-1] == sp.hop_size
 
     # Initialize Accelerator
     accelerator = Accelerator()
@@ -43,18 +43,18 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
     # Instantiate the model
     print("{} - Initializing the model...".format(device))
     model = WaveRNN(
-        rnn_dims=hp.voc_rnn_dims,
-        fc_dims=hp.voc_fc_dims,
-        bits=hp.bits,
-        pad=hp.voc_pad,
-        upsample_factors=hp.voc_upsample_factors,
-        feat_dims=hp.num_mels,
-        compute_dims=hp.voc_compute_dims,
-        res_out_dims=hp.voc_res_out_dims,
-        res_blocks=hp.voc_res_blocks,
-        hop_length=hp.hop_length,
-        sample_rate=hp.sample_rate,
-        mode=hp.voc_mode
+        rnn_dims=hp_wavernn.rnn_dims,
+        fc_dims=hp_wavernn.fc_dims,
+        bits=hp_wavernn.bits,
+        pad=hp_wavernn.pad,
+        upsample_factors=hp_wavernn.upsample_factors,
+        feat_dims=sp.num_mels,
+        compute_dims=hp_wavernn.compute_dims,
+        res_out_dims=hp_wavernn.res_out_dims,
+        res_blocks=hp_wavernn.res_blocks,
+        hop_length=sp.hop_size,
+        sample_rate=sp.sample_rate,
+        mode=hp_wavernn.mode
     )
 
     loss_func = F.cross_entropy if model.mode == "RAW" else discretized_mix_logistic_loss
@@ -105,7 +105,7 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
     epoch = 0
     max_step = 0
 
-    for i, session in enumerate(hp.voc_tts_schedule):
+    for i, session in enumerate(hp_wavernn.voc_tts_schedule):
         # Update epoch information
         epoch += 1
         epoch_steps = max_step
@@ -119,7 +119,7 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
         # Init dataloader
         data_loader = DataLoader(dataset,
                                  collate_fn=collate_vocoder,
-                                 batch_size=hp.voc_batch_size,
+                                 batch_size=hp_wavernn.batch_size,
                                  num_workers=threads,
                                  shuffle=True,
                                  pin_memory=True)
@@ -135,7 +135,7 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
 
         # Iterate over whole dataset for X loops according to schedule
         total_samples = len(dataset)
-        overall_batch_size = hp.voc_batch_size * accelerator.state.num_processes  # Split training steps by amount of overall batch
+        overall_batch_size = hp_wavernn.batch_size * accelerator.state.num_processes  # Split training steps by amount of overall batch
         max_step = np.ceil((total_samples * loops) / overall_batch_size).astype(np.int32) + epoch_steps
         training_steps = np.ceil(max_step - current_step).astype(np.int32)
 
@@ -146,7 +146,7 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
         # Do we need to change to the next session?
         if current_step >= max_step:
             # Are there no further sessions than the current one?
-            if i == len(hp.voc_tts_schedule) - 1:
+            if i == len(hp_wavernn.voc_tts_schedule) - 1:
                 # We have completed training. Save the model and exit
                 with accelerator.local_main_process_first():
                     if accelerator.is_local_main_process:
@@ -160,10 +160,10 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
         if accelerator.is_local_main_process:
             simple_table([("Epoch", epoch),
                           (f"Remaining Steps in current epoch", str(training_steps) + " Steps"),
-                          ('Batch size', hp.voc_batch_size),
+                          ('Batch size', hp_wavernn.batch_size),
                           ("Init LR", lr),
                           ("LR Stepping", sgdr_lr_stepping),
-                          ('Sequence Len', hp.voc_seq_len)])
+                          ('Sequence Len', hp_wavernn.seq_len)])
 
         for p in optimizer.param_groups:
             p["lr"] = lr
@@ -199,7 +199,7 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
                 y = y.unsqueeze(-1)
 
                 # Copy results of forward pass for analysis of needed
-                if hp.voc_anomaly_detection:
+                if hp_wavernn.anomaly_detection:
                     cp_y_hat = torch.clone(y_hat)
                     cp_y = torch.clone(y)
 
@@ -219,10 +219,10 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
                 else:
                     currentLossDiff = abs(lastLoss - loss.item())
 
-                if hp.voc_anomaly_detection and \
+                if hp_wavernn.anomaly_detection and \
                         (step > 5000 and \
                         avgLossCount > 50 and \
-                        currentLossDiff > (avgLossDiff * hp.voc_anomaly_trigger_multiplier) \
+                        currentLossDiff > (avgLossDiff * hp_wavernn.anomaly_trigger_multiplier) \
                         or math.isnan(currentLossDiff) \
                         or math.isnan(loss.item())): # Give it a few steps to normalize, then do the check
                     print("WARNING - Anomaly detected! (Step {}, Thread {}) - Avg Loss Diff: {}, Current Loss Diff: {}".format(step, accelerator.process_index, avgLossDiff, currentLossDiff))
@@ -274,8 +274,8 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
                 # Accelerator: Only in main process
                 if accelerator.is_local_main_process and testset_every != 0 and step % testset_every == 0:
                     eval_model = accelerator.unwrap_model(model)
-                    gen_testset(eval_model, test_loader, hp.voc_gen_at_checkpoint, hp.voc_gen_batched,
-                                hp.voc_target, hp.voc_overlap, model_dir)
+                    gen_testset(eval_model, test_loader, hp_wavernn.gen_at_checkpoint, hp_wavernn.gen_batched,
+                                hp_wavernn.gen_target, hp_wavernn.gen_overlap, model_dir)
 
                 # Break out of loop to update training schedule
                 if step >= max_step:
@@ -293,8 +293,8 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
                 
                 # Generate a testset after each epoch
                 eval_model = accelerator.unwrap_model(model)
-                gen_testset(eval_model, test_loader, hp.voc_gen_at_checkpoint, hp.voc_gen_batched,
-                            hp.voc_target, hp.voc_overlap, model_dir)
+                gen_testset(eval_model, test_loader, hp_wavernn.gen_at_checkpoint, hp_wavernn.gen_batched,
+                            hp_wavernn.gen_target, hp_wavernn.gen_overlap, model_dir)
 
 def save(accelerator, model, path, optimizer=None):
     # Unwrap Model

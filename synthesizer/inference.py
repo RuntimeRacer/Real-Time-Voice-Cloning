@@ -1,6 +1,6 @@
 import torch
 from synthesizer import audio
-from synthesizer.hparams import hparams_tacotron
+from hparams.config import tacotron as hp_tacotron, sp as hp_sp, sv2tts, preprocessing
 from synthesizer.models.tacotron import Tacotron
 from synthesizer.models.forward_tacotron import ForwardTacotron
 from synthesizer.utils.symbols import symbols
@@ -54,20 +54,20 @@ class Synthesizer:
         """
         if self.model_type is 'tacotron':
             self._model = Tacotron(
-                embed_dims=hparams_tacotron.tts_embed_dims,
+                embed_dims=hp_tacotron.embed_dims,
                 num_chars=len(symbols),
-                encoder_dims=hparams_tacotron.tts_encoder_dims,
-                decoder_dims=hparams_tacotron.tts_decoder_dims,
-                n_mels=hparams_tacotron.num_mels,
-                fft_bins=hparams_tacotron.num_mels,
-                postnet_dims=hparams_tacotron.tts_postnet_dims,
-                encoder_K=hparams_tacotron.tts_encoder_K,
-                lstm_dims=hparams_tacotron.tts_lstm_dims,
-                postnet_K=hparams_tacotron.tts_postnet_K,
-                num_highways=hparams_tacotron.tts_num_highways,
-                dropout=hparams_tacotron.tts_dropout,
-                stop_threshold=hparams_tacotron.tts_stop_threshold,
-                speaker_embedding_size=hparams_tacotron.speaker_embedding_size).to(self.device)
+                encoder_dims=hp_tacotron.encoder_dims,
+                decoder_dims=hp_tacotron.decoder_dims,
+                n_mels=hp_sp.num_mels,
+                fft_bins=hp_sp.num_mels,
+                postnet_dims=hp_tacotron.postnet_dims,
+                encoder_K=hp_tacotron.encoder_K,
+                lstm_dims=hp_tacotron.lstm_dims,
+                postnet_K=hp_tacotron.postnet_K,
+                num_highways=hp_tacotron.num_highways,
+                dropout=hp_tacotron.dropout,
+                stop_threshold=hp_tacotron.stop_threshold,
+                speaker_embedding_size=sv2tts.speaker_embedding_size).to(self.device)
         elif self.model_type is 'forward-tacotron':
             self._model = ForwardTacotron(
 
@@ -107,15 +107,15 @@ class Synthesizer:
                         ("r", self._model.r)])
 
         # Preprocess text inputs
-        inputs = [text_to_sequence(text.strip(), hparams_tacotron.tts_cleaner_names) for text in texts]
+        inputs = [text_to_sequence(text.strip(), preprocessing.cleaner_names) for text in texts]
         if not isinstance(embeddings, list):
             embeddings = [embeddings]
 
         # Batch inputs
-        batched_inputs = [inputs[i:i + hparams_tacotron.synthesis_batch_size]
-                          for i in range(0, len(inputs), hparams_tacotron.synthesis_batch_size)]
-        batched_embeds = [embeddings[i:i + hparams_tacotron.synthesis_batch_size]
-                          for i in range(0, len(embeddings), hparams_tacotron.synthesis_batch_size)]
+        batched_inputs = [inputs[i:i + preprocessing.synthesis_batch_size]
+                          for i in range(0, len(inputs), preprocessing.synthesis_batch_size)]
+        batched_embeds = [embeddings[i:i + preprocessing.synthesis_batch_size]
+                          for i in range(0, len(embeddings), preprocessing.synthesis_batch_size)]
 
         specs = []
         for i, batch in enumerate(batched_inputs, 1):
@@ -140,7 +140,7 @@ class Synthesizer:
             mels = mels.detach().cpu().numpy()
             for m in mels:
                 # Trim silence from end of each spectrogram
-                while np.max(m[:, -1]) < hparams_tacotron.tts_stop_threshold:
+                while np.max(m[:, -1]) < hp_tacotron.stop_threshold:
                     m = m[:, :-1]
                 specs.append(m)
 
@@ -154,9 +154,9 @@ class Synthesizer:
         Loads and preprocesses an audio file under the same conditions the audio files were used to
         train the synthesizer. 
         """
-        wav = librosa.load(str(fpath), hparams_tacotron.sample_rate)[0]
-        if hparams_tacotron.rescale:
-            wav = wav / np.abs(wav).max() * hparams_tacotron.rescaling_max
+        wav = librosa.load(str(fpath), hp_sp.sample_rate)[0]
+        if preprocessing.rescale:
+            wav = wav / np.abs(wav).max() * preprocessing.rescaling_max
         return wav
 
     @staticmethod
@@ -170,7 +170,7 @@ class Synthesizer:
         else:
             wav = fpath_or_wav
         
-        mel_spectrogram = audio.melspectrogram(wav, hparams_tacotron).astype(np.float32)
+        mel_spectrogram = audio.melspectrogram(wav).astype(np.float32)
         return mel_spectrogram
     
     @staticmethod
@@ -179,7 +179,7 @@ class Synthesizer:
         Inverts a mel spectrogram using Griffin-Lim. The mel spectrogram is expected to have been built
         with the same parameters present in hparams.py.
         """
-        return audio.inv_mel_spectrogram(mel, hparams_tacotron)
+        return audio.inv_mel_spectrogram(mel)
 
 
 def pad1d(x, max_len, pad_value=0):
