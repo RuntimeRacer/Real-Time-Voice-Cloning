@@ -451,7 +451,8 @@ class Tacotron(nn.Module):
 
     def init_model(self):
         for p in self.parameters():
-            if p.dim() > 1: nn.init.xavier_uniform_(p)
+            if p.dim() > 1:
+                nn.init.xavier_uniform_(p)
 
     def get_step(self):
         return self.step.data.item()
@@ -483,7 +484,6 @@ class Tacotron(nn.Module):
             torch.save({
                 "model_state": self.state_dict(),
             }, str(path))
-
 
     def num_params(self, print_out=True):
         parameters = filter(lambda p: p.requires_grad, self.parameters())

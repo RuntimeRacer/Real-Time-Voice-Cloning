@@ -74,6 +74,11 @@ preprocessing = HParams(
     cleaner_names=["english_cleaners"],
     min_text_len=2,
     extract_durations_with_dijkstra=True,
+
+    # Attention Scoring during dataset loading
+    filter_attention=True,
+    min_attention_sharpness=0.5,
+    min_attention_alignment=0.95,
 )
 
 # Parameters for Tacotron model
@@ -124,7 +129,77 @@ tacotron = HParams(
 
 # Parameters for ForwardTacotron model
 forward_tacotron = HParams(
+    # Forward-Tacotron Text-to-Speech (TTS)
+    embed_dims=256,
+    series_embed_dims=64,
 
+    # Duration Predictor
+    duration_conv_dims=256,
+    duration_rnn_dims=64,
+    duration_dropout=0.5,
+
+    # Pitch Predictor
+    pitch_conv_dims=256,
+    pitch_rnn_dims=128,
+    pitch_dropout=0.5,
+    pitch_strength=1.,  # set to 0 if you want no pitch conditioning
+
+    # Energy Predictor
+    energy_conv_dims=256,
+    energy_rnn_dims=64,
+    energy_dropout=0.5,
+    energy_strength=1.,  # set to 0 if you want no energy conditioning
+
+    # Prenet (aka. Encoder)
+    prenet_dims=256,
+    prenet_k=16,
+    prenet_num_highways=4,
+    prenet_dropout=0.5,
+
+    # LSTM
+    rnn_dims=512,
+
+    # Postnet (aka. Decoder)
+    postnet_dims=256,
+    postnet_k=8,
+    postnet_num_highways=4,
+    postnet_dropout=0.,
+
+    # Forward Tacotron Training
+    #
+    # (loops, batch_size, init_lr, end_lr)
+    #
+    # loops      = iteration loops over whole dataset
+    # batch_size = amount of dataset items to train on per step
+    #
+    # Learning rate is applying Stochastic Gradient Descent with Restarts (SGDR)
+    # (https://markkhoffmann.medium.com/exploring-stochastic-gradient-descent-with-restarts-sgdr-fa206c38a74e)
+    # init_lr    = learning rate at the begin of the epoch
+    # end_lr     = learning rate at the end of the epoch
+    tts_schedule=[(1, 32, 1e-3, 1e-6),
+                  (2, 32, 1e-3, 1e-6),
+                  (4, 32, 5e-4, 5e-7),
+                  (8, 32, 2e-4, 5e-7),
+                  (16, 32, 1e-4, 1e-7),
+                  (16, 32, 5e-5, 5e-8),
+                  (16, 32, 1e-5, 1e-8)],
+
+    duration_loss_factor=0.1,
+    pitch_loss_factor=0.1,
+    energy_loss_factor=0.1,
+    pitch_zoneout=0.,
+    energy_zoneout=0.,
+    clip_grad_norm=1.0,  # clips the gradient norm to prevent explosion - set to None if not needed
+
+    # Model Evaluation
+    eval_interval=500,
+    # Number of steps between model evaluation (sample generation). Set to -1 to generate after completing epoch, or 0 to disable
+    eval_num_samples=1,  # Makes this number of samples
+)
+
+# Parameters for FastPitch model
+fast_pitch = HParams(
+    
 )
 
 # Parameters for WaveRNN Vocoder

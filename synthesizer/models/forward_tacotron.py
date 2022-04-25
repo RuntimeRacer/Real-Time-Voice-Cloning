@@ -113,6 +113,11 @@ class ForwardTacotron(nn.Module):
         self.pitch_proj = nn.Conv1d(1, 2 * prenet_dims, kernel_size=3, padding=1)
         self.energy_proj = nn.Conv1d(1, 2 * prenet_dims, kernel_size=3, padding=1)
 
+        self.init_model()
+        self.num_params()
+
+        self.register_buffer("step", torch.zeros(1, dtype=torch.long))
+
     def __repr__(self):
         num_params = sum([np.prod(p.size()) for p in self.parameters()])
         return f'ForwardTacotron, num params: {num_params}'
@@ -262,17 +267,48 @@ class ForwardTacotron(nn.Module):
         x = F.pad(x, [0, max_len - x.size(2), 0, 0], 'constant', self.padding_value)
         return x
 
+    def load(self, path, optimizer=None):
+        # Use device of model params as location for loaded state
+        device = next(self.parameters()).device
+        checkpoint = torch.load(str(path), map_location=device)
+        self.load_state_dict(checkpoint["model_state"])
 
-    @classmethod
-    def from_config(cls, config: Dict[str, Any]) -> 'ForwardTacotron':
-        model_config = config['forward_tacotron']['model']
-        model_config['num_chars'] = len(symbols)
-        model_config['n_mels'] = config['dsp']['num_mels']
-        return ForwardTacotron(**model_config)
+        if "optimizer_state" in checkpoint and optimizer is not None:
+            optimizer.load_state_dict(checkpoint["optimizer_state"])
 
-    @classmethod
-    def from_checkpoint(cls, path: Union[Path, str]) -> 'ForwardTacotron':
-        checkpoint = torch.load(path, map_location=torch.device('cpu'))
-        model = ForwardTacotron.from_config(checkpoint['config'])
-        model.load_state_dict(checkpoint['model'])
-        return model
+    def save(self, path, optimizer=None):
+        if optimizer is not None:
+            torch.save({
+                "model_state": self.state_dict(),
+                "optimizer_state": optimizer.state_dict(),
+            }, str(path))
+        else:
+            torch.save({
+                "model_state": self.state_dict(),
+            }, str(path))
+
+    def init_model(self):
+        for p in self.parameters():
+            if p.dim() > 1:
+                nn.init.xavier_uniform_(p)
+
+    def num_params(self, print_out=True):
+        parameters = filter(lambda p: p.requires_grad, self.parameters())
+        parameters = sum([np.prod(p.size()) for p in parameters]) / 1_000_000
+        if print_out:
+            print("Trainable Parameters: %.3fM" % parameters)
+        return parameters
+
+    # @classmethod
+    # def from_config(cls, config: Dict[str, Any]) -> 'ForwardTacotron':
+    #     model_config = config['forward_tacotron']['model']
+    #     model_config['num_chars'] = len(symbols)
+    #     model_config['n_mels'] = config['dsp']['num_mels']
+    #     return ForwardTacotron(**model_config)
+    #
+    # @classmethod
+    # def from_checkpoint(cls, path: Union[Path, str]) -> 'ForwardTacotron':
+    #     checkpoint = torch.load(path, map_location=torch.device('cpu'))
+    #     model = ForwardTacotron.from_config(checkpoint['config'])
+    #     model.load_state_dict(checkpoint['model'])
+    #     return model
