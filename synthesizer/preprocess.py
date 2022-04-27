@@ -10,6 +10,7 @@ from audioread.exceptions import NoBackendError
 from shutil import copyfile
 from hparams.config import sp, preprocessing
 import numpy as np
+import pyworld as pw
 import librosa
 import time
 import atexit
@@ -22,6 +23,7 @@ def save_metadata_progress(metadata: dict, metadata_fpath: Path):
         json.dump(metadata, metadata_file)
     print("Saved %d training metadata entries to %s." % (len(metadata), metadata_fpath))
 
+
 def synthesizer_preprocess_dataset(datasets_root: Path, out_dir: Path, n_processes: int, skip_existing: bool, no_alignments: bool, dataset_name: str, subfolders: str, audio_extensions: list, transcript_extension: str):
     # Gather the input directories
     dataset_root = datasets_root.joinpath(dataset_name)
@@ -32,6 +34,7 @@ def synthesizer_preprocess_dataset(datasets_root: Path, out_dir: Path, n_process
     # Create the output directories for each output file type
     out_dir.joinpath("mels").mkdir(exist_ok=True)
     out_dir.joinpath("audio").mkdir(exist_ok=True)
+    out_dir.joinpath("pitch").mkdir(exist_ok=True)
 
     # Create a metadata file
     metadata_fpath = out_dir.joinpath("train.json")
@@ -75,14 +78,15 @@ def synthesizer_preprocess_dataset(datasets_root: Path, out_dir: Path, n_process
         metadata = json.load(metadata_file)
         for speaker, utterances in metadata.items():
             metadata_lines.extend([line.split("|") for line in utterances])
-    mel_frames = sum([int(m[4]) for m in metadata_lines])
-    timesteps = sum([int(m[3]) for m in metadata_lines])
+    mel_frames = sum([int(m[5]) for m in metadata_lines])
+    timesteps = sum([int(m[4]) for m in metadata_lines])
     sample_rate = sp.sample_rate
     hours = (timesteps / sample_rate) / 3600
     print("The dataset consists of %d utterances, %d mel frames, %d audio timesteps (%.2f hours)." % (len(metadata_lines), mel_frames, timesteps, hours))
-    print("Max input length (text chars): %d" % max(len(m[5]) for m in metadata_lines))
-    print("Max mel frames length: %d" % max(int(m[4]) for m in metadata_lines))
-    print("Max audio timesteps length: %d" % max(int(m[3]) for m in metadata_lines))
+    print("Max input length (text chars): %d" % max(len(m[6]) for m in metadata_lines))
+    print("Max mel frames length: %d" % max(int(m[5]) for m in metadata_lines))
+    print("Max audio timesteps length: %d" % max(int(m[4]) for m in metadata_lines))
+
 
 def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, no_alignments: bool, audio_extensions: list, transcript_extension: str):
     speaker_metadata = {
@@ -102,6 +106,7 @@ def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, no_align
                 # Get out paths
                 mel_outpath = out_dir.joinpath("mels", "mel-%s.npy" % utterance_id)
                 wav_outpath = out_dir.joinpath("audio", "audio-%s.npy" % utterance_id)
+                pitch_outpath = out_dir.joinpath("pitch", "pitch-%s.npy" % utterance_id)
 
                 # Load the audio waveform
                 wav = None
@@ -127,17 +132,17 @@ def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, no_align
                 with text_fpath.open("r") as text_file:
                     text = text.join([line for line in text_file])
                     # Remove unwanted stuff from text
-                    text = text.replace("\"", "")
-                    text = text.replace("\\s", "")
-                    text = text.replace("~", "")
-                    text = text.strip()
+                    # text = text.replace("\"", "")
+                    # text = text.replace("\\s", "")
+                    # text = text.replace("~", "")
+                    # text = text.strip()
 
                 if len(text) == 0:
                     print("No transcript data for utterance {0} found: Missing file {1}. Skipping...\n".format(wav_fpath, text_fpath))
                     continue
 
                 # Process the utterance
-                output = process_utterance(wav, text, out_dir, mel_outpath, wav_outpath, utterance_id)
+                output = process_utterance(wav, text, out_dir, mel_outpath, wav_outpath, pitch_outpath, utterance_id)
                 if output is not None:
                     speaker_metadata["metadata"].append(output)
 
@@ -274,11 +279,11 @@ def split_on_silences(wav_fpath, words, end_times, transcript):
     return wavs, texts
 
 
-def process_utterance(wav: np.ndarray, text: str, out_dir: Path, mel_fpath: Path, wav_fpath: Path, basename: str):
+def process_utterance(wav: np.ndarray, text: str, out_dir: Path, mel_fpath: Path, wav_fpath: Path, pitch_fpath: Path, basename: str):
     ## FOR REFERENCE:
     # For you not to lose your head if you ever wish to change things here or implement your own
     # synthesizer.
-    # - Both the audios and the mel spectrograms are saved as numpy arrays
+    # - The audios, pitch data and the mel spectrograms are saved as numpy arrays
     # - There is no processing done to the audios that will be saved to disk beyond volume
     #   normalization (in split_on_silences)
     # - However, pre-emphasis is applied to the audios before computing the mel spectrogram. This
@@ -287,9 +292,13 @@ def process_utterance(wav: np.ndarray, text: str, out_dir: Path, mel_fpath: Path
     #   without extra padding. This means that you won't have an exact relation between the length
     #   of the wav and of the mel spectrogram. See the vocoder data loader.
 
-    # Trim silence
+    # Trim silence over whole audio
     if preprocessing.trim_silence:
         wav = encoder.preprocess_wav(wav, normalize=False, trim_silence=True)
+
+    # Trim start and end silence
+    if preprocessing.trim_start_end_silence:
+        wav = encoder.audio.trim_silence(wav, preprocessing.trim_silence_top_db)
     
     # Skip utterances that are too short
     if len(wav) < preprocessing.utterance_min_duration * sp.sample_rate:
@@ -305,12 +314,17 @@ def process_utterance(wav: np.ndarray, text: str, out_dir: Path, mel_fpath: Path
         #print("Skipped utterance {0} because it's too long.".format(basename))
         return None
 
+    # Get voice pitch from audio
+    pitch, _ = pw.dio(wav.astype(np.float64), sp.sample_rate,
+                      frame_period=sp.hop_size / sp.sample_rate * 1000).astype(np.float32)
+
     # Write the spectrogram, embed and audio to disk
     np.save(mel_fpath, mel_spectrogram.T, allow_pickle=False)
     np.save(wav_fpath, wav, allow_pickle=False)
+    np.save(pitch_fpath, pitch, allow_pickle=False)
 
     # Return a tuple describing this training example
-    return wav_fpath.name, mel_fpath.name, "embed-%s.npy" % basename, len(wav), mel_frames, text
+    return wav_fpath.name, mel_fpath.name, pitch_fpath.name, "embed-%s.npy" % basename, len(wav), mel_frames, text
 
 
 def embed_utterance(fpaths, encoder_model_fpath):
@@ -338,7 +352,7 @@ def create_embeddings(synthesizer_root: Path, encoder_model_fpath: Path, n_proce
         metadata_dict = json.load(metadata_file)
         for speaker, lines in metadata_dict.items():
             metadata = [line.split("|") for line in lines]
-            fpaths.extend([(wav_dir.joinpath(m[0]), embed_dir.joinpath(m[2])) for m in metadata])
+            fpaths.extend([(wav_dir.joinpath(m[0]), embed_dir.joinpath(m[3])) for m in metadata])
 
     # TODO: improve on the multiprocessing, it's terrible. Disk I/O is the bottleneck here.
     # Embed the utterances in separate threads

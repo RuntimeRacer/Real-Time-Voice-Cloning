@@ -69,6 +69,8 @@ preprocessing = HParams(
     trim_silence=True,  # Use with sample_rate of 16000 for best results
     silence_min_duration_split=0.4,  # Duration in seconds of a silence for an utterance to be split
     utterance_min_duration=0.6,  # Duration in seconds below which utterances are discarded
+    trim_start_end_silence=True,  # Whether to trim leading and trailing silence
+    trim_silence_top_db=60,  # Threshold in decibels below reference to consider silence for trimming
 
     # Text Preprocessing
     cleaner_names=["english_cleaners"],

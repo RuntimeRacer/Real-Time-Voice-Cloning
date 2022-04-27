@@ -74,6 +74,8 @@ def wav_to_mel_spectrogram(wav):
     )
     return frames.astype(np.float32).T
 
+def trim_silence(wav, top_db=60):
+    return librosa.effects.trim(wav, top_db=top_db, frame_length=2048, hop_length=512)[0]
 
 def trim_long_silences(wav):
     """
