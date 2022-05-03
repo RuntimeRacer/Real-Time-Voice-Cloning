@@ -314,6 +314,8 @@ def process_utterance(wav: np.ndarray, text: str, out_dir: Path, mel_fpath: Path
         #print("Skipped utterance {0} because it's too long.".format(basename))
         return None
 
+
+
     # Get voice pitch from audio
     pitch, _ = pw.dio(wav.astype(np.float64), sp.sample_rate,
                       frame_period=sp.hop_size / sp.sample_rate * 1000).astype(np.float32)
@@ -359,4 +361,20 @@ def create_embeddings(synthesizer_root: Path, encoder_model_fpath: Path, n_proce
     func = partial(embed_utterance, encoder_model_fpath=encoder_model_fpath)
     job = ThreadPool(n_processes).imap(func, fpaths)
     list(tqdm(job, "Embedding", len(fpaths), unit="utterances"))
-    
+
+def extract_energies(synthesizer_root: Path, tacotron_model_fpath: Path, n_processes: int):
+    wav_dir = synthesizer_root.joinpath("audio")
+    embed_dir = synthesizer_root.joinpath("embeds")
+    pitch_dir = synthesizer_root.joinpath("pitch")
+    metadata_fpath = synthesizer_root.joinpath("train.json")
+    assert wav_dir.exists() and embed_dir.exists() and pitch_dir.exists() and metadata_fpath.exists()
+
+    # Gather the input wave filepath and the target output embed filepath
+    fpaths = []
+    with metadata_fpath.open("r", encoding="utf-8") as metadata_file:
+        metadata_dict = json.load(metadata_file)
+        for speaker, lines in metadata_dict.items():
+            metadata = [line.split("|") for line in lines]
+            fpaths.extend([(wav_dir.joinpath(m[0]), embed_dir.joinpath(m[3])) for m in metadata])
+
+    # TODO

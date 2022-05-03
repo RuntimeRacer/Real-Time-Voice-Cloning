@@ -9,9 +9,9 @@ from hparams.config import sp, preprocessing
 
 
 class SynthesizerDataset(Dataset):
-    def __init__(self, metadata_fpath: Path, mel_dir: Path, embed_dir: Path):
+    def __init__(self, metadata_fpath: Path, mel_dir: Path, pitch_dir: Path, embed_dir: Path):
         self.metadata_fpath = metadata_fpath
-        print("Using inputs from:\n\t%s\n\t%s\n\t%s" % (self.metadata_fpath, mel_dir, embed_dir))
+        print("Using inputs from:\n\t%s\n\t%s\n\t%s\n\t%s" % (self.metadata_fpath, mel_dir, pitch_dir, embed_dir))
 
         metadata = []
         with self.metadata_fpath.open("r") as metadata_file:
@@ -19,12 +19,14 @@ class SynthesizerDataset(Dataset):
             for speaker, lines in metadata_dict.items():
                 metadata.extend([line.split("|") for line in lines])
         
-        mel_fnames = [x[1] for x in metadata if int(x[4])]
+        mel_fnames = [x[1] for x in metadata if int(x[5])]
         mel_fpaths = [mel_dir.joinpath(fname) for fname in mel_fnames]
-        embed_fnames = [x[2] for x in metadata if int(x[4])]
+        pitch_fnames = [x[2] for x in metadata if int(x[5])]
+        pitch_fpaths = [pitch_dir.joinpath(fname) for fname in pitch_fnames]
+        embed_fnames = [x[3] for x in metadata if int(x[5])]
         embed_fpaths = [embed_dir.joinpath(fname) for fname in embed_fnames]
-        self.samples_fpaths = list(zip(mel_fpaths, embed_fpaths))
-        self.samples_texts = [x[5].strip() for x in metadata if int(x[4])]
+        self.samples_fpaths = list(zip(mel_fpaths, pitch_fpaths, embed_fpaths))
+        self.samples_texts = [x[6].strip() for x in metadata if int(x[5])]
         #self.samples_texts = [np.asarray(text_to_sequence(x[5].strip(), preprocessing.tts_cleaner_names)).astype(np.int32) for x in metadata if int(x[4])]
         self.metadata = metadata
         
@@ -36,8 +38,11 @@ class SynthesizerDataset(Dataset):
         if index is list:
             index = index[0]
 
-        mel_path, embed_path = self.samples_fpaths[index]
+        mel_path, pitch_path, embed_path = self.samples_fpaths[index]
         mel = np.load(mel_path).T.astype(np.float32)
+
+        # Load the pitch
+        pitch = np.load(pitch_path)
         
         # Load the embed
         embed = np.load(embed_path)
@@ -49,7 +54,7 @@ class SynthesizerDataset(Dataset):
         text = np.asarray(text).astype(np.int32)
 
         #return self.samples_texts[index], mel.astype(np.float32), embed.astype(np.float32), index
-        return text, mel.astype(np.float32), embed.astype(np.float32), index
+        return text, mel.astype(np.float32), pitch.astype(np.float32), embed.astype(np.float32), index
 
     def __len__(self):
         return len(self.samples_fpaths)
@@ -95,19 +100,22 @@ def collate_synthesizer(batch, r):
     mel = [pad2d(x[1], max_spec_len, pad_value=mel_pad_value) for x in batch]
     mel = np.stack(mel)
 
+    # Audio Pitch
+    pitch = np.array([x[2] for x in batch])
+
     # Speaker embedding (SV2TTS)
-    embeds = np.array([x[2] for x in batch])
+    embeds = np.array([x[3] for x in batch])
 
     # Index (for vocoder preprocessing)
-    indices = [x[3] for x in batch]
-
+    indices = [x[4] for x in batch]
 
     # Convert all to tensor
     chars = torch.tensor(chars).long()
     mel = torch.tensor(mel)
+    pitch = torch.tensor(pitch)
     embeds = torch.tensor(embeds)
 
-    return chars, mel, embeds, indices
+    return chars, mel, pitch, embeds, indices
 
 def pad1d(x, max_len, pad_value=0):
     return np.pad(x, (0, max_len - len(x)), mode="constant", constant_values=pad_value)

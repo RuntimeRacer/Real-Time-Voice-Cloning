@@ -8,6 +8,7 @@ from torch import optim
 from torch.utils.data import DataLoader
 
 from synthesizer import audio
+from synthesizer.models import base
 from synthesizer.models.tacotron import Tacotron
 from synthesizer.synthesizer_dataset import (SynthesizerDataset,
                                              collate_synthesizer)
@@ -26,7 +27,8 @@ def np_now(x: torch.Tensor): return x.detach().cpu().numpy()
 def time_string():
     return datetime.now().strftime("%Y-%m-%d %H:%M")
 
-def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: int,
+
+def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_every: int, threads: int,
           backup_every: int, force_restart:bool, vis_every: int, visdom_server: str, no_visdom: bool):
 
     syn_dir = Path(syn_dir)
@@ -63,22 +65,12 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: 
     # Let accelerator handle device
     device = accelerator.device
 
-    # Instantiate Tacotron Model
-    print("{} - Initialising Tacotron Model...".format(device))
-    model = Tacotron(embed_dims=hp_tacotron.embed_dims,
-                     num_chars=len(symbols),
-                     encoder_dims=hp_tacotron.encoder_dims,
-                     decoder_dims=hp_tacotron.decoder_dims,
-                     n_mels=sp.num_mels,
-                     fft_bins=sp.num_mels,
-                     postnet_dims=hp_tacotron.postnet_dims,
-                     encoder_K=hp_tacotron.encoder_K,
-                     lstm_dims=hp_tacotron.lstm_dims,
-                     postnet_K=hp_tacotron.postnet_K,
-                     num_highways=hp_tacotron.num_highways,
-                     dropout=hp_tacotron.dropout,
-                     stop_threshold=hp_tacotron.stop_threshold,
-                     speaker_embedding_size=sv2tts.speaker_embedding_size).to(device)
+    # Init the model
+    try:
+        model = base.init_syn_model(model_type, device)
+    except NotImplementedError as e:
+        print(str(e))
+        return
 
     # Initialize the optimizer
     optimizer = optim.Adam(model.parameters())
@@ -88,7 +80,7 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: 
         accelerator.wait_for_everyone()
         with accelerator.local_main_process_first():
             if accelerator.is_local_main_process:
-                print("\nStarting the training of Tacotron from scratch\n")
+                print("\nStarting the training of %s from scratch\n" % model_type)
                 save(accelerator, model, weights_fpath)
 
                 # Embeddings metadata
@@ -108,8 +100,9 @@ def train(run_id: str, syn_dir: str, models_dir: str, save_every: int, threads: 
     # Initialize the dataset
     metadata_fpath = syn_dir.joinpath("train.json")
     mel_dir = syn_dir.joinpath("mels")
+    pitch_dir = syn_dir.joinpath("pitch")
     embed_dir = syn_dir.joinpath("embeds")
-    dataset = SynthesizerDataset(metadata_fpath, mel_dir, embed_dir)
+    dataset = SynthesizerDataset(metadata_fpath, mel_dir, pitch_dir, embed_dir)
 
     # Initialize the visualization environment
     vis = Visualizations(run_id, vis_every, server=visdom_server, disabled=no_visdom)

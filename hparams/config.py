@@ -71,6 +71,7 @@ preprocessing = HParams(
     utterance_min_duration=0.6,  # Duration in seconds below which utterances are discarded
     trim_start_end_silence=True,  # Whether to trim leading and trailing silence
     trim_silence_top_db=60,  # Threshold in decibels below reference to consider silence for trimming
+    pitch_max_freq=600,  # Maximum value for pitch frequency to remove outliers (Common pitch range is about 60-300)
 
     # Text Preprocessing
     cleaner_names=["english_cleaners"],
@@ -208,7 +209,7 @@ fast_pitch = HParams(
 wavernn = HParams(
     # Model
     mode='RAW',  # either 'RAW' (softmax on raw bits) or 'MOL' (sample from mixture of logistics)
-    bits=10,  # bit depth of signal
+    bits=9,  # bit depth of signal
     mu_law=True,  # Recommended to suppress noise if using raw bits in hp.voc_mode
     upsample_factors=(5, 5, 8),  # NB - this needs to correctly factorise hop_length
 
