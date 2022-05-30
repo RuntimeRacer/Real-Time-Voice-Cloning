@@ -30,7 +30,6 @@ voc_res_out_dims = 128
 voc_res_blocks = 10
 
 # Training
-voc_batch_size = 320                # Rule of Thumb: 12 units per GB of VRAM of smallest card
 voc_gen_at_checkpoint = 5           # number of samples to generate at each checkpoint
 voc_pad = 2                         # this will pad the input so that the resnet can 'see' wider 
                                     # than input length
@@ -42,15 +41,19 @@ voc_anomaly_detection = False      # Enables Loss anomaly detection. Dataloader 
 voc_anomaly_trigger_multiplier = 6 # Threshold for raising anomaly detection. It is a Multiplier of average loss change
 
 # Progressive training schedule
-# (loops, init_lr, final_lr)
+# (loops, init_lr, final_lr, batch_size)
 # loops = amount of loops through the dataset per epoch
 # init_lr = inital sgdr learning rate
 # final_lr = amount of loops through the dataset per epoch
+# batch_size = Size of the batches used for inference. Rule of Thumb: Max. 12 units per GB of VRAM of smallest card.
 voc_tts_schedule=[
-    (2, 5e-3, 1e-3),
-    (4, 1e-3, 5e-4),
-    (8, 5e-4, 1e-4),
-    (1024, 1e-4, 1e-4),
+    (1, 5e-3, 1e-3, 120),
+    (2, 1e-3, 5e-4, 160),
+    (4, 5e-4, 1e-4, 200),
+    (256, 1e-4, 1e-4, 240),
+    (256, 1e-4, 5e-5, 280),
+    (256, 5e-5, 1e-5, 320),
+    (256, 1e-5, 1e-5, 360),
 ]
 
 # Generating / Synthesizing

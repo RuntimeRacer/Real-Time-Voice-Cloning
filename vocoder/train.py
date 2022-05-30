@@ -116,10 +116,13 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
         # Get the current step being processed
         current_step = model.get_step() + 1
 
+        # Get session info
+        loops, sgdr_init_lr, sgdr_final_lr, batch_size = session
+
         # Init dataloader
         data_loader = DataLoader(dataset,
                                  collate_fn=collate_vocoder,
-                                 batch_size=hp.voc_batch_size,
+                                 batch_size=batch_size,
                                  num_workers=threads,
                                  shuffle=True,
                                  pin_memory=True)
@@ -129,9 +132,6 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
 
         # Accelerator code - optimize and prepare model
         model, optimizer, data_loader = accelerator.prepare(model, optimizer, data_loader)
-
-        # Get session info
-        loops, sgdr_init_lr, sgdr_final_lr = session
 
         # Iterate over whole dataset for X loops according to schedule
         total_samples = len(dataset)
@@ -160,8 +160,8 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
         if accelerator.is_local_main_process:
             simple_table([("Epoch", epoch),
                           (f"Remaining Steps in current epoch", str(training_steps) + " Steps"),
-                          ('Batch size', hp.voc_batch_size),
-                          ("Init LR", lr),
+                          ('Batch size', batch_size),
+                          ("Current init LR", lr),
                           ("LR Stepping", sgdr_lr_stepping),
                           ('Sequence Len', hp.voc_seq_len)])
 

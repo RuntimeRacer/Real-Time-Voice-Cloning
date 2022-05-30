@@ -59,13 +59,13 @@ hparams = HParams(
         # loops      = iteration loops over whole dataset
         # batch_size = amount of dataset items to train on per step
 
-        tts_schedule=[(7, 1, 112, 1e-3, 1e-6),
-                      (6, 2, 100, 1e-3, 1e-6),
-                      (5, 4, 88, 5e-4, 5e-7),
-                      (4, 8, 76, 2e-4, 5e-7),
-                      (3, 16, 64, 1e-4, 1e-7),
-                      (2, 16, 44, 5e-5, 5e-8),
-                      (1, 16, 22, 1e-5, 1e-8)],
+        tts_schedule=[(7, 2, 112, 1e-3, 1e-7),
+                      (6, 4, 100, 9e-4, 1e-7),
+                      (5, 8,  88, 8e-4, 1e-7),
+                      (4, 16, 76, 7e-4, 1e-7),
+                      (3, 32, 64, 5e-4, 1e-7),
+                      (2, 32, 44, 4e-4, 1e-7),
+                      (1, 32, 22, 2e-4, 1e-7)],
 
         #
         # Constantly adapt batch size according to reduction factor
@@ -95,7 +95,7 @@ hparams = HParams(
         max_mel_frames = 1200,
         rescale = True,
         rescaling_max = 0.9,
-        synthesis_batch_size = 24,                  # For vocoder preprocessing and inference. - Rule of Thumb: 1 unit per GB of VRAM of smallest card
+        synthesis_batch_size = 12,                  # For vocoder preprocessing and inference. - Rule of Thumb: 1 unit per GB of VRAM of smallest card
 
         ### Mel Visualization and Griffin-Lim
         signal_normalization = True,
