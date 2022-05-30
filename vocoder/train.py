@@ -135,7 +135,7 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
 
         # Iterate over whole dataset for X loops according to schedule
         total_samples = len(dataset)
-        overall_batch_size = hp.voc_batch_size * accelerator.state.num_processes  # Split training steps by amount of overall batch
+        overall_batch_size = batch_size * accelerator.state.num_processes  # Split training steps by amount of overall batch
         max_step = np.ceil((total_samples * loops) / overall_batch_size).astype(np.int32) + epoch_steps
         training_steps = np.ceil(max_step - current_step).astype(np.int32)
 
