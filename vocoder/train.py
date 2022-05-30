@@ -116,10 +116,13 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
         # Get the current step being processed
         current_step = model.get_step() + 1
 
+        # Get session info
+        loops, sgdr_init_lr, sgdr_final_lr, batch_size = session
+
         # Init dataloader
         data_loader = DataLoader(dataset,
                                  collate_fn=collate_vocoder,
-                                 batch_size=hp_wavernn.batch_size,
+                                 batch_size=batch_size,
                                  num_workers=threads,
                                  shuffle=True,
                                  pin_memory=True)
@@ -135,7 +138,7 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
 
         # Iterate over whole dataset for X loops according to schedule
         total_samples = len(dataset)
-        overall_batch_size = hp_wavernn.batch_size * accelerator.state.num_processes  # Split training steps by amount of overall batch
+        overall_batch_size = batch_size * accelerator.state.num_processes  # Split training steps by amount of overall batch
         max_step = np.ceil((total_samples * loops) / overall_batch_size).astype(np.int32) + epoch_steps
         training_steps = np.ceil(max_step - current_step).astype(np.int32)
 
@@ -160,8 +163,8 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
         if accelerator.is_local_main_process:
             simple_table([("Epoch", epoch),
                           (f"Remaining Steps in current epoch", str(training_steps) + " Steps"),
-                          ('Batch size', hp_wavernn.batch_size),
-                          ("Init LR", lr),
+                          ('Batch size', batch_size),
+                          ("Current init LR", lr),
                           ("LR Stepping", sgdr_lr_stepping),
                           ('Sequence Len', hp_wavernn.seq_len)])
 

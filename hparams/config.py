@@ -115,13 +115,15 @@ tacotron = HParams(
     # init_lr    = learning rate at the begin of the epoch
     # end_lr     = learning rate at the end of the epoch
 
-    tts_schedule=[(7, 1, 112, 1e-3, 1e-6),
-                  (6, 2, 100, 1e-3, 1e-6),
-                  (5, 4, 88, 5e-4, 5e-7),
-                  (4, 8, 76, 2e-4, 5e-7),
-                  (3, 16, 64, 1e-4, 1e-7),
-                  (2, 16, 44, 5e-5, 5e-8),
-                  (1, 16, 22, 1e-5, 1e-8)],
+    tts_schedule=[
+        (7, 1, 112, 1e-3, 1e-7),
+        (6, 2, 100, 9e-4, 1e-7),
+        (5, 4, 88, 8e-4, 1e-7),
+        (4, 8, 76, 7e-4, 1e-7),
+        (3, 16, 64, 5e-4, 1e-7),
+        (2, 16, 44, 4e-4, 1e-7),
+        (1, 16, 22, 2e-4, 1e-7)
+    ],
 
     tts_clip_grad_norm=1.0,  # clips the gradient norm to prevent explosion - set to None if not needed
 
@@ -220,20 +222,23 @@ wavernn = HParams(
     res_blocks=10,
 
     # WaveRNN Training
-    batch_size=320,  # Rule of Thumb: 12 units per GB of VRAM of smallest card
     pad=2,  # this will pad the input so that the resnet can 'see' wider than input length
     seq_len=sp.hop_size * 5,  # must be a multiple of hop_length
 
     # Progressive training schedule
-    # (loops, init_lr, final_lr)
+    # (loops, init_lr, final_lr, batch_size)
     # loops = amount of loops through the dataset per epoch
     # init_lr = inital sgdr learning rate
     # final_lr = amount of loops through the dataset per epoch
+    # batch_size = Size of the batches used for inference. Rule of Thumb: Max. 12 units per GB of VRAM of smallest card.
     voc_tts_schedule=[
-        (2, 5e-3, 1e-3),
-        (4, 1e-3, 5e-4),
-        (8, 5e-4, 1e-4),
-        (1024, 1e-4, 1e-4),
+        (1, 5e-3, 1e-3, 120),
+        (2, 1e-3, 5e-4, 160),
+        (4, 5e-4, 1e-4, 200),
+        (256, 1e-4, 1e-4, 240),
+        (256, 1e-4, 5e-5, 280),
+        (256, 5e-5, 1e-5, 320),
+        (256, 1e-5, 1e-5, 360),
     ],
 
     # Anomaly detection in Training
