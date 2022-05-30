@@ -133,9 +133,6 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
         # Accelerator code - optimize and prepare model
         model, optimizer, data_loader = accelerator.prepare(model, optimizer, data_loader)
 
-        # Get session info
-        loops, sgdr_init_lr, sgdr_final_lr = session
-
         # Iterate over whole dataset for X loops according to schedule
         total_samples = len(dataset)
         overall_batch_size = batch_size * accelerator.state.num_processes  # Split training steps by amount of overall batch
