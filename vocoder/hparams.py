@@ -15,7 +15,7 @@ mel_max_abs_value = _syn_hp.max_abs_value
 preemphasis = _syn_hp.preemphasis
 apply_preemphasis = _syn_hp.preemphasize
 
-bits = 10                           # bit depth of signal
+bits = 9                           # bit depth of signal
 mu_law = True                       # Recommended to suppress noise if using raw bits in hp.voc_mode
                                     # below
 
@@ -53,7 +53,7 @@ voc_tts_schedule=[
     (256, 1e-4, 1e-4, 240),
     (256, 1e-4, 5e-5, 280),
     (256, 5e-5, 1e-5, 320),
-    (256, 1e-5, 1e-5, 360),
+    (2048, 1e-5, 1e-5, 360),
 ]
 
 # Generating / Synthesizing
