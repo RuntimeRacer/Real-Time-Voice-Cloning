@@ -49,7 +49,7 @@ class VocoderDataset(Dataset):
         wav = wav[:mel.shape[1] * sp.hop_size]
         assert len(wav) % sp.hop_size == 0
         
-        # Quantize the wav
+        # Quantize the wav TODO: This can be optimized to be done during preprocessing
         if hp_wavernn.mode == 'RAW':
             if hp_wavernn.mu_law:
                 quant = audio.encode_mu_law(wav, mu=2 ** hp_wavernn.bits)

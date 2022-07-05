@@ -78,6 +78,13 @@ preprocessing = HParams(
     min_text_len=2,
     extract_durations_with_dijkstra=True,
 
+    # Silence tweaks for Prediction models
+    silence_prob_shift=0.25,    # Increase probability for silent characters in periods of silence
+                                # for better durations during non voiced periods
+    silence_threshold=-11,      # normalized mel value below which the voice is considered silent
+                                # minimum mel value = -11.512925465 for zeros in the wav array (=log(1e-5),
+                                # where 1e-5 is a cutoff value)
+
     # Attention Scoring during dataset loading
     filter_attention=True,
     min_attention_sharpness=0.5,

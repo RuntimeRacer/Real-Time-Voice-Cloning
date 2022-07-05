@@ -40,6 +40,7 @@ class SynthesizerDataset(Dataset):
 
         mel_path, pitch_path, embed_path = self.samples_fpaths[index]
         mel = np.load(mel_path).T.astype(np.float32)
+        mel_len = mel.shape[-1]
 
         # Load the pitch
         pitch = np.load(pitch_path)
@@ -54,7 +55,7 @@ class SynthesizerDataset(Dataset):
         text = np.asarray(text).astype(np.int32)
 
         #return self.samples_texts[index], mel.astype(np.float32), embed.astype(np.float32), index
-        return text, mel.astype(np.float32), pitch.astype(np.float32), embed.astype(np.float32), index
+        return text, mel.astype(np.float32), pitch.astype(np.float32), embed.astype(np.float32), index, mel_len
 
     def __len__(self):
         return len(self.samples_fpaths)
@@ -109,13 +110,17 @@ def collate_synthesizer(batch, r):
     # Index (for vocoder preprocessing)
     indices = [x[4] for x in batch]
 
+    # Mel Len (for attention generation)
+    mel_lens = [x[5] for x in batch]
+
     # Convert all to tensor
     chars = torch.tensor(chars).long()
     mel = torch.tensor(mel)
     pitch = torch.tensor(pitch)
     embeds = torch.tensor(embeds)
+    mel_lens = torch.tensor(mel_lens)
 
-    return chars, mel, pitch, embeds, indices
+    return chars, mel, pitch, embeds, indices, mel_lens
 
 def pad1d(x, max_len, pad_value=0):
     return np.pad(x, (0, max_len - len(x)), mode="constant", constant_values=pad_value)

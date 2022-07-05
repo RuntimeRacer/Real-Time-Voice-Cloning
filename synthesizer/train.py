@@ -47,7 +47,7 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
     meta_folder.mkdir(exist_ok=True)
     
     weights_fpath = model_dir.joinpath(run_id).with_suffix(".pt")
-    metadata_fpath = syn_dir.joinpath("train.txt")
+    metadata_fpath = syn_dir.joinpath("train.json")
 
     # Initialize Accelerator
     accelerator = Accelerator()
@@ -98,7 +98,6 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
     print("{0} - Tacotron weights loaded from step {1}".format(device, model.get_step()))
     
     # Initialize the dataset
-    metadata_fpath = syn_dir.joinpath("train.json")
     mel_dir = syn_dir.joinpath("mels")
     pitch_dir = syn_dir.joinpath("pitch")
     embed_dir = syn_dir.joinpath("embeds")
@@ -186,7 +185,7 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
 
         # Training loop
         while current_step < max_step:
-            for step, (texts, mels, embeds, idx) in enumerate(data_loader, current_step):
+            for step, (texts, mels, embeds, idx, mel_lens) in enumerate(data_loader, current_step):
                 current_step = step
                 start_time = time.time()
 

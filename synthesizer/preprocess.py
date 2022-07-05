@@ -3,12 +3,21 @@ from synthesizer import audio
 from functools import partial
 from itertools import chain
 from encoder import inference as encoder
+from synthesizer.models import base
+from synthesizer.synthesizer_dataset import (SynthesizerDataset,
+                                             collate_synthesizer)
+from accelerate import Accelerator
 from pathlib import Path
-from utils import logmmse
+from utils import logmmse, DurationExtractor
+from utils.display import *
 from tqdm import tqdm
 from audioread.exceptions import NoBackendError
 from shutil import copyfile
 from hparams.config import sp, preprocessing
+
+from torch.utils.data import DataLoader
+
+import torch
 import numpy as np
 import pyworld as pw
 import librosa
@@ -340,7 +349,6 @@ def embed_utterance(fpaths, encoder_model_fpath):
     embed = encoder.embed_utterance(wav)
     np.save(embed_fpath, embed, allow_pickle=False)
 
-
 def create_embeddings(synthesizer_root: Path, encoder_model_fpath: Path, n_processes: int):
     wav_dir = synthesizer_root.joinpath("audio")
     metadata_fpath = synthesizer_root.joinpath("train.json")
@@ -362,19 +370,159 @@ def create_embeddings(synthesizer_root: Path, encoder_model_fpath: Path, n_proce
     job = ThreadPool(n_processes).imap(func, fpaths)
     list(tqdm(job, "Embedding", len(fpaths), unit="utterances"))
 
-def extract_energies(synthesizer_root: Path, tacotron_model_fpath: Path, n_processes: int):
-    wav_dir = synthesizer_root.joinpath("audio")
+def create_align_features(synthesizer_root: Path, tacotron_model_fpath: Path, threads: int):
+    # Check paths from preprocessing
+    mel_dir = synthesizer_root.joinpath("mels")
     embed_dir = synthesizer_root.joinpath("embeds")
     pitch_dir = synthesizer_root.joinpath("pitch")
     metadata_fpath = synthesizer_root.joinpath("train.json")
-    assert wav_dir.exists() and embed_dir.exists() and pitch_dir.exists() and metadata_fpath.exists()
+    assert mel_dir.exists() and embed_dir.exists() and pitch_dir.exists() and metadata_fpath.exists()
 
-    # Gather the input wave filepath and the target output embed filepath
-    fpaths = []
-    with metadata_fpath.open("r", encoding="utf-8") as metadata_file:
-        metadata_dict = json.load(metadata_file)
-        for speaker, lines in metadata_dict.items():
-            metadata = [line.split("|") for line in lines]
-            fpaths.extend([(wav_dir.joinpath(m[0]), embed_dir.joinpath(m[3])) for m in metadata])
+    # Initialize the dataset
+    dataset = SynthesizerDataset(metadata_fpath, mel_dir, pitch_dir, embed_dir)
+    total_samples = len(dataset)
 
-    # TODO
+    # Create paths needed
+    durations_dir = synthesizer_root.joinpath("durations")
+    attention_dir = synthesizer_root.joinpath("attention")
+    alignment_dir = synthesizer_root.joinpath("alignment")
+    phoneme_pitch_dir = synthesizer_root.joinpath("phoneme_pitch")
+    phoneme_energy_dir = synthesizer_root.joinpath("phoneme_energy")
+    durations_dir.mkdir(exist_ok=True)
+    attention_dir.mkdir(exist_ok=True)
+    alignment_dir.mkdir(exist_ok=True)
+    phoneme_pitch_dir.mkdir(exist_ok=True)
+    phoneme_energy_dir.mkdir(exist_ok=True)
+
+    # Initialize Accelerator
+    accelerator = Accelerator()
+
+    if accelerator.is_local_main_process:
+        print("Accelerator process count: {0}".format(accelerator.num_processes))
+        print("Checkpoint path: {}".format(tacotron_model_fpath))
+        print("Loading training data from: {}".format(metadata_fpath))
+        print("Using model: Tacotron")
+
+    # Let accelerator handle device
+    device = accelerator.device
+
+    # Init the model
+    try:
+        model = base.init_syn_model('tacotron', device)
+        # Use device of model params as location for loaded state
+        checkpoint = torch.load(str(tacotron_model_fpath), map_location=device)
+        # Load model state
+        model.load_state_dict(checkpoint["model_state"])
+    except NotImplementedError as e:
+        print(str(e))
+        return
+
+    # Ensure correct reduction factor
+    assert model.r == 1, f'Reduction factor of tacotron must be 1 for creating alignment features! ' \
+                         f'Reduction factor was: {model.r}'
+
+    # Init dataloader
+    data_loader = DataLoader(dataset,
+                             collate_fn=lambda batch: collate_synthesizer(batch, model.r),
+                             batch_size=1,
+                             num_workers=threads,
+                             shuffle=True,
+                             pin_memory=True)
+
+    # Accelerator code - optimize and prepare model
+    model, data_loader = accelerator.prepare(model, data_loader)
+
+    # Init the duration extractor
+    duration_extractor = DurationExtractor(silence_threshold=preprocessing.silence_threshold,
+                                           silence_prob_shift=preprocessing.silence_prob_shift)
+
+    # Extract Attention scores and pitch energies
+    sum_att_score = 0
+
+    # Iterator
+    for i, (text, mel, pitch, embed, idx, mel_len) in enumerate(data_loader, 1):
+        # Move elems to device
+        text = text.to(device)
+        mel = mel.to(device)
+        embed = embed.to(device)
+
+        # Forward pass to generate attention data
+        with torch.no_grad():
+            _, _, att_batch, _ = model(text, mel, embed)
+
+        # Continue processing on CPU
+        text = text[0].cpu()
+        mel_len = mel_len[0].cpu()
+        item_id = idx[0] # FIXME: This will likely not work as intended or useful
+        mel = mel[0, :, :mel_len].cpu()
+        att = att_batch[0, :mel_len, :].cpu()
+
+        # we use the standard alignment score and the more accurate attention score from the duration extractor
+        align_score, _ = get_attention_score(att_batch, mel_len, r=1)
+        align_score = float(align_score[0])
+        duration, att_score = duration_extractor(x=text, mel=mel, att=att)
+        duration = np_now(duration).astype(np.int)
+        sum_att_score += att_score
+
+        if np.sum(duration) != mel_len:
+            print(f'WARNINNG: Sum of durations did not match mel length for item {item_id}!')
+
+        # Get mel energy
+        energy = np.linalg.norm(np.exp(mel), axis=0, ord=2)
+        assert np.sum(duration) == mel_len
+
+        # TODO: Not sure what exactly this does...
+        durs_cum = np.cumsum(np.pad(duration, (1, 0)))
+        pitch_char = np.zeros((duration.shape[0],), dtype=np.float32)
+        energy_char = np.zeros((duration.shape[0],), dtype=np.float32)
+        for idx, a, b in zip(range(mel_len), durs_cum[:-1], durs_cum[1:]):
+            values = pitch[a:b][np.where(pitch[a:b] != 0.0)[0]]
+            values = values[np.where(values < preprocessing.pitch_max_freq)[0]]
+            pitch_char[idx] = np.mean(values) if len(values) > 0 else 0.0
+            energy_values = energy[a:b]
+            energy_char[idx] = np.mean(energy_values)if len(energy_values) > 0 else 0.0
+
+        # Save items FIXME: Pre-calculate filename; related to above comment
+        # FIXME: This is gonna be super slow and IO intensive. OK for evaluation but needs refactoring later.
+        np.save(str(durations_dir / f'{item_id}.npy'), duration, allow_pickle=False)
+        np.save(str(attention_dir / f'{item_id}.npy'), att_score, allow_pickle=False)
+        np.save(str(alignment_dir / f'{item_id}.npy'), align_score, allow_pickle=False)
+        np.save(str(phoneme_pitch_dir / f'{item_id}.npy'), pitch_char, allow_pickle=False) # TODO: train_tacotron.py:73 (in FW-Taco repo): Check if this normalization is needed for anything
+        np.save(str(phoneme_energy_dir / f'{item_id}.npy'), energy_char, allow_pickle=False)
+
+        # Update progress
+        bar = progbar(i, total_samples)
+        msg = f'{bar} {i}/{total_samples} Files. Avg attention score: {sum_att_score / i} '
+        stream(msg)
+
+
+def get_attention_score(att, mel_lens, r=1):
+    """
+    Returns a tuple of scores (loc_score, sharp_score), where loc_score measures monotonicity and
+    sharp_score measures the sharpness of attention peaks
+    """
+
+    with torch.no_grad():
+        device = att.device
+        mel_lens = mel_lens.to(device)
+        b, t_max, c_max = att.size()
+
+        # create mel padding mask
+        mel_range = torch.arange(0, t_max, device=device)
+        mel_lens = mel_lens // r
+        mask = (mel_range[None, :] < mel_lens[:, None]).float()
+
+        # score for how adjacent the attention loc is
+        max_loc = torch.argmax(att, dim=2)
+        max_loc_diff = torch.abs(max_loc[:, 1:] - max_loc[:, :-1])
+        loc_score = (max_loc_diff >= 0) * (max_loc_diff <= r)
+        loc_score = torch.sum(loc_score * mask[:, 1:], dim=1)
+        loc_score = loc_score / (mel_lens - 1)
+
+        # score for attention sharpness
+        sharp_score, inds = att.max(dim=2)
+        sharp_score = torch.mean(sharp_score * mask, dim=1)
+
+        return loc_score, sharp_score
+
+def np_now(x: torch.Tensor): return x.detach().cpu().numpy()
