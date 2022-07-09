@@ -19,8 +19,33 @@ from synthesizer.utils.text import sequence_to_text
 from synthesizer.visualizations import Visualizations
 from vocoder.display import *
 
-from config.hparams import tacotron as hp_tacotron, sp, preprocessing, sv2tts
+from config.hparams import tacotron as hp_tacotron, forward_tacotron as hp_forward_tacotron, sp, preprocessing, sv2tts
 
+
+
+class MaskedL1(torch.nn.Module):
+
+    def forward(self, x, target, lens):
+        target.requires_grad = False
+        max_len = target.size(2)
+        mask = pad_mask(lens, max_len)
+        mask = mask.unsqueeze(1).expand_as(x)
+        loss = F.l1_loss(
+            x * mask, target * mask, reduction='sum')
+        return loss / mask.sum()
+
+# Adapted from https://gist.github.com/jihunchoi/f1434a77df9db1bb337417854b398df1
+def pad_mask(lens, max_len):
+    batch_size = lens.size(0)
+    seq_range = torch.arange(0, max_len).long()
+    seq_range = seq_range.unsqueeze(0)
+    seq_range = seq_range.expand(batch_size, max_len)
+    if lens.is_cuda:
+        seq_range = seq_range.cuda()
+    lens = lens.unsqueeze(1)
+    lens = lens.expand_as(seq_range)
+    mask = seq_range < lens
+    return mask.float()
 
 def np_now(x: torch.Tensor): return x.detach().cpu().numpy()
 
@@ -36,18 +61,18 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
     models_dir.mkdir(exist_ok=True)
 
     model_dir = models_dir.joinpath(run_id)
+    model_dir.mkdir(exist_ok=True)
+
     plot_dir = model_dir.joinpath("plots")
     wav_dir = model_dir.joinpath("wavs")
     mel_output_dir = model_dir.joinpath("mel-spectrograms")
     meta_folder = model_dir.joinpath("metas")
-    model_dir.mkdir(exist_ok=True)
     plot_dir.mkdir(exist_ok=True)
     wav_dir.mkdir(exist_ok=True)
     mel_output_dir.mkdir(exist_ok=True)
     meta_folder.mkdir(exist_ok=True)
     
     weights_fpath = model_dir.joinpath(run_id).with_suffix(".pt")
-    metadata_fpath = syn_dir.joinpath("train.json")
 
     # Initialize Accelerator
     accelerator = Accelerator()
@@ -55,7 +80,7 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
     if accelerator.is_local_main_process:
         print("Accelerator process count: {0}".format(accelerator.num_processes))
         print("Checkpoint path: {}".format(weights_fpath))
-        print("Loading training data from: {}".format(metadata_fpath))
+        print("Loading training data from: {}".format(syn_dir))
         print("Using model: Tacotron")
     
     # Book keeping
@@ -98,10 +123,7 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
     print("{0} - Tacotron weights loaded from step {1}".format(device, model.get_step()))
     
     # Initialize the dataset
-    mel_dir = syn_dir.joinpath("mels")
-    pitch_dir = syn_dir.joinpath("pitch")
-    embed_dir = syn_dir.joinpath("embeds")
-    dataset = SynthesizerDataset(metadata_fpath, mel_dir, pitch_dir, embed_dir)
+    dataset = SynthesizerDataset(syn_dir, base.get_model_train_elements(model_type))
 
     # Initialize the visualization environment
     vis = Visualizations(run_id, vis_every, server=visdom_server, disabled=no_visdom)
@@ -185,9 +207,11 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
 
         # Training loop
         while current_step < max_step:
-            for step, (texts, mels, embeds, idx, mel_lens) in enumerate(data_loader, current_step):
+            #for step, (texts, mels, embeds, idx, mel_lens) in enumerate(data_loader, current_step):
+            for step, (idx, utterance_ids, texts, text_lens, mels, mel_lens, embeds, durations, attentions, alignments, phoneme_pitchs, phoneme_energies ) in enumerate(data_loader, current_step):
                 current_step = step
                 start_time = time.time()
+                model.train() # TODO: Verify this works as intended
 
                 # Break out of loop to update training schedule
                 if current_step > max_step:
@@ -198,33 +222,29 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
                 for p in optimizer.param_groups:
                     p["lr"] = lr
 
-                # Generate stop tokens for training
-                stop = torch.ones(mels.shape[0], mels.shape[2])
-                for j, k in enumerate(idx):
-                    stop[j, :int(dataset.metadata[k][4])-1] = 0
-
-                texts = texts.to(device)
-                mels = mels.to(device)
-                embeds = embeds.to(device)
-                stop = stop.to(device)
-
                 # Forward pass
-                m1_hat, m2_hat, attention, stop_pred = model(texts, mels, embeds)
+                loss = None
+                if model_type is base.MODEL_TYPE_TACOTRON:
+                    # Generate stop tokens for training
+                    stop = torch.ones(mels.shape[0], mels.shape[2])
+                    for j, k in enumerate(idx):
+                        stop[j, :int(dataset.metadata[k][2]) - 1] = 0
+                    # Training step
+                    loss, texts, mels, embeds = tacotron_forward_pass(model, device, texts, mels, embeds, stop)
+                elif model_type is base.MODEL_TYPE_FOWRARD_TACOTRON:
+                    # Training step
+                    loss, texts, mels, embeds, durations, mel_lens, phoneme_pitchs, phoneme_energies = forward_tacotron_forward_pass(model, device, texts, text_lens, mels, embeds, durations, mel_lens, phoneme_pitchs, phoneme_energies)
+                else:
+                    raise NotImplementedError("Training not implemented for model of type '%s'. Aborting..." % model_type)
 
                 # Backward pass
-                m1_loss = F.mse_loss(m1_hat, mels) + F.l1_loss(m1_hat, mels)
-                m2_loss = F.mse_loss(m2_hat, mels)
-                stop_loss = F.binary_cross_entropy(stop_pred, stop)
-
-                loss = m1_loss + m2_loss + stop_loss
-
                 optimizer.zero_grad()
                 accelerator.backward(loss)
 
-                if hp_tacotron.tts_clip_grad_norm is not None:
-                    grad_norm = accelerator.clip_grad_norm_(model.parameters(), hp_tacotron.tts_clip_grad_norm)
-                    #if np.isnan(grad_norm.cpu()):
-                    #    print("grad_norm was NaN!")
+                if model_type is base.MODEL_TYPE_TACOTRON and hp_tacotron.tts_clip_grad_norm is not None:
+                    accelerator.clip_grad_norm_(model.parameters(), hp_tacotron.tts_clip_grad_norm)
+                elif model_type is base.MODEL_TYPE_FOWRARD_TACOTRON and hp_forward_tacotron.clip_grad_norm is not None:
+                    accelerator.clip_grad_norm_(model.parameters(), hp_forward_tacotron.clip_grad_norm)
 
                 optimizer.step()
 
@@ -273,7 +293,7 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
                             # At most, generate samples equal to number in the batch
                             if sample_idx + 1 <= len(texts):
                                 # Remove padding from mels using frame length in metadata
-                                mel_length = int(dataset.metadata[idx[sample_idx]][4])
+                                mel_length = int(dataset.metadata[idx[sample_idx]][2])
                                 mel_prediction = np_now(m2_hat[sample_idx]).T[:mel_length]
                                 target_spectrogram = np_now(mels[sample_idx]).T[:mel_length]
                                 attention_len = mel_length // r
@@ -302,6 +322,64 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
                 print("Making a backup (step %d)" % current_step)
                 backup_fpath = Path("{}/{}_{}.pt".format(str(weights_fpath.parent), run_id, current_step))
                 save(accelerator, model, backup_fpath, optimizer)
+
+def tacotron_forward_pass(model, device, texts, mels, embeds, stop):
+    # Move data to device
+    texts = texts.to(device)
+    mels = mels.to(device)
+    embeds = embeds.to(device)
+    stop = stop.to(device)
+
+    # Forward pass
+    m1_hat, m2_hat, attention, stop_pred = model(texts, mels, embeds)
+
+    # Backward pass
+    m1_loss = F.mse_loss(m1_hat, mels) + F.l1_loss(m1_hat, mels)
+    m2_loss = F.mse_loss(m2_hat, mels)
+    stop_loss = F.binary_cross_entropy(stop_pred, stop)
+
+    loss = m1_loss + m2_loss + stop_loss
+
+    return loss, texts, mels, embeds
+
+def forward_tacotron_forward_pass(model, device, texts, text_lens, mels, embeds, durations, mel_lens, phoneme_pitchs, phoneme_energies):
+    # Move data to device
+    texts = texts.to(device)
+    text_lens = text_lens.to(device)
+    mels = mels.to(device)
+    embeds = embeds.to(device)
+    durations = embeds.to(durations)
+    mel_lens = embeds.to(mel_lens)
+    phoneme_pitchs = embeds.to(phoneme_pitchs)
+    phoneme_energies = embeds.to(phoneme_energies)
+
+    # Prepare Pitch & energy values
+    pitch_zoneout_mask = torch.rand(texts.size()) > hp_forward_tacotron.pitch_zoneout
+    energy_zoneout_mask = torch.rand(texts.size()) > hp_forward_tacotron.energy_zoneout
+    pitch_target = phoneme_pitchs.detach().clone()
+    energy_target = phoneme_energies.detach().clone()
+    phoneme_pitchs = phoneme_pitchs * pitch_zoneout_mask.to(device).float()
+    phoneme_energies = phoneme_energies * energy_zoneout_mask.to(device).float()
+
+    # Forward Pass
+    mel_hat, mel_post, dur_hat, pitch_hat, energy_hat = model(texts, mels, durations, embeds, mel_lens, phoneme_pitchs, phoneme_energies)
+
+    # Calculate loss
+    l1_loss = MaskedL1()
+
+    m1_loss = l1_loss(mel_hat, mels, mel_lens)
+    m2_loss = l1_loss(mel_post, mels, mel_lens)
+
+    dur_loss = l1_loss(dur_hat.unsqueeze(1), durations.unsqueeze(1), text_lens)
+    pitch_loss = l1_loss(pitch_hat, pitch_target.unsqueeze(1), text_lens)
+    energy_loss = l1_loss(energy_hat, energy_target.unsqueeze(1), text_lens)
+
+    loss = m1_loss + m2_loss \
+           + hp_forward_tacotron.duration_loss_factor * dur_loss \
+           + hp_forward_tacotron.pitch_loss_factor * pitch_loss \
+           + hp_forward_tacotron.energy_loss_factor * energy_loss
+
+    return loss, texts, mels, embeds, durations, mel_lens, phoneme_pitchs, phoneme_energies
 
 def save(accelerator, model, path, optimizer=None):
     # Unwrap Model

@@ -123,6 +123,7 @@ def collate_synthesizer(batch, r):
 
     # Utterance ID (plain file names)
     utterance_ids = [x[1] for x in batch]
+    utterance_ids = np.stack(utterance_ids)
     
     # Text
     x_lens = [len(x[2]) for x in batch]
@@ -172,7 +173,7 @@ def collate_synthesizer(batch, r):
     phoneme_pitch = torch.tensor(phoneme_pitch)
     phoneme_energy = torch.tensor(phoneme_energy)
 
-    return indices, utterance_ids, chars, mel, spec_lens, embeds, durations, attentions, alignments, phoneme_pitch, phoneme_energy
+    return indices, utterance_ids, chars, x_lens, mel, spec_lens, embeds, durations, attentions, alignments, phoneme_pitch, phoneme_energy
 
 def pad1d(x, max_len, pad_value=0):
     return np.pad(x, (0, max_len - len(x)), mode="constant", constant_values=pad_value)

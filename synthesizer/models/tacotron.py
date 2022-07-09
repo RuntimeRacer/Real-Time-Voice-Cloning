@@ -335,7 +335,9 @@ class Tacotron(nn.Module):
     def forward(self, x, m, speaker_embedding):
         device = next(self.parameters()).device  # use same device as parameters
 
-        self.step += 1
+        if self.training:
+            self.step += 1
+
         batch_size, _, steps  = m.size()
 
         # Initialise all hidden states and pack into tuple
@@ -444,8 +446,6 @@ class Tacotron(nn.Module):
         # For easy visualisation
         attn_scores = torch.cat(attn_scores, 1)
         stop_outputs = torch.cat(stop_outputs, 1)
-
-        self.train()
 
         return mel_outputs, linear, attn_scores
 

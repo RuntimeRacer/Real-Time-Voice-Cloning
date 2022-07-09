@@ -122,14 +122,9 @@ class ForwardTacotron(nn.Module):
         num_params = sum([np.prod(p.size()) for p in self.parameters()])
         return f'ForwardTacotron, num params: {num_params}'
 
-    def forward(self, batch: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        x = batch['x']
-        mel = batch['mel']
-        dur = batch['dur']
-        spk_emb = batch['spk_emb']
-        mel_lens = batch['mel_len']
-        pitch = batch['pitch'].unsqueeze(1)
-        energy = batch['energy'].unsqueeze(1)
+    def forward(self, x, mel, dur, spk_emb, mel_lens, pitch, energy):
+        pitch = pitch.unsqueeze(1)
+        energy = energy.unsqueeze(1)
 
         if self.training:
             self.step += 1
@@ -178,8 +173,9 @@ class ForwardTacotron(nn.Module):
         x_post = self._pad(x_post, mel.size(2))
         x = self._pad(x, mel.size(2))
 
-        return {'mel': x, 'mel_post': x_post,
-                'dur': dur_hat, 'pitch': pitch_hat, 'energy': energy_hat}
+        return x, x_post, dur_hat, pitch_hat, energy_hat
+        #return {'mel': x, 'mel_post': x_post,
+        #        'dur': dur_hat, 'pitch': pitch_hat, 'energy': energy_hat}
 
     def generate(self,
                  x: torch.Tensor,

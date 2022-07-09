@@ -61,3 +61,13 @@ def init_syn_model(model_type, device):
         raise NotImplementedError("Invalid model of type '%s' provided. Aborting..." % model_type)
 
     return model
+
+def get_model_train_elements(model_type):
+    train_elements = []
+    if model_type is MODEL_TYPE_TACOTRON:
+        train_elements = ["mel", "embed"]
+    elif model_type is MODEL_TYPE_FOWRARD_TACOTRON:
+        train_elements = ["mel", "embed", "duration", "attention", "alignment", "phoneme_pitch", "phoneme_energy"]
+    else:
+        raise NotImplementedError("Invalid model of type '%s' provided. Aborting..." % model_type)
+    return train_elements

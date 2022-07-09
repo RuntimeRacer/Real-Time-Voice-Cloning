@@ -314,7 +314,7 @@ def create_embeddings(synthesizer_root: Path, encoder_model_fpath: Path, n_proce
 
 def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path, n_processes: int, threads: int):
     # Initialize the dataset
-    dataset = SynthesizerDataset(synthesizer_root, ["mel","embed"])
+    dataset = SynthesizerDataset(synthesizer_root, base.get_model_train_elements('tacotron'))
     total_samples = len(dataset)
 
     # Create paths needed
@@ -373,7 +373,7 @@ def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path,
     sum_jobs = 0
 
     # Iterator
-    for i, (idx, utterance_id_seq, text_seq, mel_seq, mel_len_seq, embed_seq, _, _, _, _, _ ) in enumerate(data_loader, 1):
+    for i, (idx, utterance_id_seq, text_seq, _, mel_seq, mel_len_seq, embed_seq, _, _, _, _, _ ) in enumerate(data_loader, 1):
         # Move elems to device
         text_seq = text_seq.to(device)
         mel_seq = mel_seq.to(device)
