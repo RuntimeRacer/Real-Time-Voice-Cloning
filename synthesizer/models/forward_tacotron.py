@@ -182,7 +182,7 @@ class ForwardTacotron(nn.Module):
                  spk_emb: torch.Tensor,
                  alpha=1.0,
                  pitch_function: Callable[[torch.Tensor], torch.Tensor] = lambda x: x,
-                 energy_function: Callable[[torch.Tensor], torch.Tensor] = lambda x: x) -> Dict[str, torch.Tensor]:
+                 energy_function: Callable[[torch.Tensor], torch.Tensor] = lambda x: x):
         self.eval()
         with torch.no_grad():
             dur_x = x
@@ -207,7 +207,7 @@ class ForwardTacotron(nn.Module):
     def generate_jit(self,
                      x: torch.Tensor,
                      alpha: float = 1.0,
-                     beta: float = 1.0) -> Dict[str, torch.Tensor]:
+                     beta: float = 1.0):
         with torch.no_grad():
             dur_hat = self.dur_pred(x, alpha=alpha)
             dur_hat = dur_hat.squeeze(2)
@@ -227,7 +227,7 @@ class ForwardTacotron(nn.Module):
                       spk_emb: torch.Tensor,
                       dur_hat: torch.Tensor,
                       pitch_hat: torch.Tensor,
-                      energy_hat: torch.Tensor) -> Dict[str, torch.Tensor]:
+                      energy_hat: torch.Tensor):
         x = self.embedding(x)
         x = x.transpose(1, 2)
         x = self.prenet(x)
@@ -255,8 +255,9 @@ class ForwardTacotron(nn.Module):
         x_post = self.post_proj(x_post)
         x_post = x_post.transpose(1, 2)
 
-        return {'mel': x, 'mel_post': x_post, 'dur': dur_hat,
-                'pitch': pitch_hat, 'energy': energy_hat}
+        return x, x_post, dur_hat, pitch_hat, energy_hat
+        #return {'mel': x, 'mel_post': x_post, 'dur': dur_hat,
+        #        'pitch': pitch_hat, 'energy': energy_hat}
 
     def _pad(self, x: torch.Tensor, max_len: int) -> torch.Tensor:
         x = x[:, :, :max_len]

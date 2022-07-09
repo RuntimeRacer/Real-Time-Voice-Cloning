@@ -18,6 +18,7 @@ from synthesizer.utils.symbols import symbols
 from synthesizer.utils.text import sequence_to_text
 from synthesizer.visualizations import Visualizations
 from vocoder.display import *
+from utils.display import *
 
 from config.hparams import tacotron as hp_tacotron, forward_tacotron as hp_forward_tacotron, sp, preprocessing, sv2tts
 
@@ -230,10 +231,10 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
                     for j, k in enumerate(idx):
                         stop[j, :int(dataset.metadata[k][2]) - 1] = 0
                     # Training step
-                    loss, texts, mels, embeds = tacotron_forward_pass(model, device, texts, mels, embeds, stop)
+                    loss, attention, m2_hat, texts, mels, embeds = tacotron_forward_pass(model, device, texts, mels, embeds, stop)
                 elif model_type is base.MODEL_TYPE_FOWRARD_TACOTRON:
                     # Training step
-                    loss, texts, mels, embeds, durations, mel_lens, phoneme_pitchs, phoneme_energies = forward_tacotron_forward_pass(model, device, texts, text_lens, mels, embeds, durations, mel_lens, phoneme_pitchs, phoneme_energies)
+                    loss, mel_hat, mel_post, pitch_hat, energy_hat, texts, mels, embeds, durations, mel_lens, phoneme_pitchs, phoneme_energies = forward_tacotron_forward_pass(model, device, texts, text_lens, mels, embeds, durations, mel_lens, phoneme_pitchs, phoneme_energies)
                 else:
                     raise NotImplementedError("Training not implemented for model of type '%s'. Aborting..." % model_type)
 
@@ -292,22 +293,50 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
                         for sample_idx in range(hp_tacotron.tts_eval_num_samples):
                             # At most, generate samples equal to number in the batch
                             if sample_idx + 1 <= len(texts):
-                                # Remove padding from mels using frame length in metadata
-                                mel_length = int(dataset.metadata[idx[sample_idx]][2])
-                                mel_prediction = np_now(m2_hat[sample_idx]).T[:mel_length]
-                                target_spectrogram = np_now(mels[sample_idx]).T[:mel_length]
-                                attention_len = mel_length // r
+                                if model_type is base.MODEL_TYPE_TACOTRON:
+                                    # Remove padding from mels using frame length in metadata
+                                    mel_length = int(dataset.metadata[idx[sample_idx]][2])
+                                    mel_prediction = np_now(m2_hat[sample_idx]).T[:mel_length]
+                                    target_spectrogram = np_now(mels[sample_idx]).T[:mel_length]
+                                    attention_len = mel_length // r
 
-                                eval_model(attention=np_now(attention[sample_idx][:, :attention_len]),
-                                           mel_prediction=mel_prediction,
-                                           target_spectrogram=target_spectrogram,
-                                           input_seq=np_now(texts[sample_idx]),
-                                           step=step,
-                                           plot_dir=plot_dir,
-                                           mel_output_dir=mel_output_dir,
-                                           wav_dir=wav_dir,
-                                           sample_num=sample_idx + 1,
-                                           loss=loss)
+                                    eval_tacotron_model(attention=np_now(attention[sample_idx][:, :attention_len]),
+                                                        mel_prediction=mel_prediction,
+                                                        target_spectrogram=target_spectrogram,
+                                                        input_seq=np_now(texts[sample_idx]),
+                                                        step=step,
+                                                        plot_dir=plot_dir,
+                                                        mel_output_dir=mel_output_dir,
+                                                        wav_dir=wav_dir,
+                                                        sample_num=sample_idx + 1,
+                                                        loss=loss)
+
+                                elif model_type is base.MODEL_TYPE_FOWRARD_TACOTRON:
+                                    m1_hat = np_now(mel_hat)[sample_idx, :600, :]
+                                    m2_hat = np_now(mel_post)[sample_idx, :600, :]
+                                    m_target = np_now(mels)[sample_idx, :600, :]
+
+                                    input_seq = texts[sample_idx:1, text_lens[sample_idx]]
+                                    spk_emb = embeds[sample_idx]
+                                    pitch = np_now(phoneme_pitchs[sample_idx])
+                                    pitch_gta = np_now(pitch_hat.squeeze()[sample_idx])
+                                    energy = np_now(phoneme_energies[sample_idx])
+                                    energy_gta = np_now(energy_hat.squeeze()[sample_idx])
+
+                                    generate_plots(model,
+                                                   plot_dir,
+                                                   wav_dir,
+                                                   step,
+                                                   sample_idx + 1,
+                                                   input_seq,
+                                                   spk_emb,
+                                                   m1_hat,
+                                                   m2_hat,
+                                                   m_target,
+                                                   pitch,
+                                                   pitch_gta,
+                                                   energy,
+                                                   energy_gta)
 
                 # Break out of loop to update training schedule
                 if step >= max_step:
@@ -340,7 +369,7 @@ def tacotron_forward_pass(model, device, texts, mels, embeds, stop):
 
     loss = m1_loss + m2_loss + stop_loss
 
-    return loss, texts, mels, embeds
+    return loss, attention, m2_hat, texts, mels, embeds
 
 def forward_tacotron_forward_pass(model, device, texts, text_lens, mels, embeds, durations, mel_lens, phoneme_pitchs, phoneme_energies):
     # Move data to device
@@ -379,7 +408,7 @@ def forward_tacotron_forward_pass(model, device, texts, text_lens, mels, embeds,
            + hp_forward_tacotron.pitch_loss_factor * pitch_loss \
            + hp_forward_tacotron.energy_loss_factor * energy_loss
 
-    return loss, texts, mels, embeds, durations, mel_lens, phoneme_pitchs, phoneme_energies
+    return loss, mel_hat, mel_post, pitch_hat, energy_hat, texts, mels, embeds, durations, mel_lens, phoneme_pitchs, phoneme_energies
 
 def save(accelerator, model, path, optimizer=None):
     # Unwrap Model
@@ -407,8 +436,8 @@ def load(model, device, path, optimizer=None):
     if "optimizer_state" in checkpoint and optimizer is not None:
         optimizer.load_state_dict(checkpoint["optimizer_state"])
 
-def eval_model(attention, mel_prediction, target_spectrogram, input_seq, step,
-               plot_dir, mel_output_dir, wav_dir, sample_num, loss):
+def eval_tacotron_model(attention, mel_prediction, target_spectrogram, input_seq, step,
+                        plot_dir, mel_output_dir, wav_dir, sample_num, loss):
     # Save some results for evaluation
     attention_path = str(plot_dir.joinpath("attention_step_{}_sample_{}".format(step, sample_num)))
     save_attention(attention, attention_path)
@@ -434,3 +463,74 @@ def eval_model(attention, mel_prediction, target_spectrogram, input_seq, step,
                      target_spectrogram=target_spectrogram,
                      max_len=target_spectrogram.size // sp.num_mels)
     print("Input at step {}: {}".format(step, sequence_to_text(input_seq)))
+
+def generate_plots(model, plot_dir, wav_dir, step, sample_num, input_seq, spk_emb, m1_hat, m2_hat, m_target, pitch, pitch_gta, energy, energy_gta):
+    # Plot all figures
+    m1_hat_fig = plot_mel(m1_hat)
+    m2_hat_fig = plot_mel(m2_hat)
+    m_target_fig = plot_mel(m_target)
+    pitch_fig = plot_pitch(pitch)
+    pitch_gta_fig = plot_pitch(pitch_gta)
+    energy_fig = plot_pitch(energy)
+    energy_gta_fig = plot_pitch(energy_gta)
+
+    # Save plots
+    save_spectrogram(m1_hat_fig, plot_dir.joinpath("step-{}-mel-spectrogram_sample_{}_gta_linear".format(step, sample_num)))
+    save_spectrogram(m2_hat_fig, plot_dir.joinpath("step-{}-mel-spectrogram_sample_{}_gta_postnet".format(step, sample_num)))
+    save_spectrogram(m_target_fig, plot_dir.joinpath("step-{}-mel-spectrogram_sample_{}_target".format(step, sample_num)))
+    save_attention(pitch_fig, plot_dir.joinpath("step-{}-pitch_sample_{}_target".format(step, sample_num)))
+    save_attention(pitch_gta_fig, plot_dir.joinpath("step-{}-pitch_sample_{}_gta".format(step, sample_num)))
+    save_attention(energy_fig, plot_dir.joinpath("step-{}-energy_sample_{}_target".format(step, sample_num)))
+    save_attention(energy_gta_fig, plot_dir.joinpath("step-{}-energy_sample_{}_gta".format(step, sample_num)))
+
+    # Save target wav for comparison
+    target_wav = audio.inv_mel_spectrogram(m_target.T)
+    target_wav_fpath = wav_dir.joinpath("step-{}-wave-from-mel_sample_{}_target.wav".format(step, sample_num))
+    audio.save_wav(target_wav, str(target_wav_fpath), sr=sp.sample_rate)
+
+    # save griffin lim inverted wav for debug (mel -> wav)
+    wav = audio.inv_mel_spectrogram(m2_hat.T)
+    wav_fpath = wav_dir.joinpath("step-{}-wave-from-mel_sample_{}.wav".format(step, sample_num))
+    audio.save_wav(wav, str(wav_fpath), sr=sp.sample_rate)
+
+    # Generate for speaker embedding and sequence - TODO: Not sure how this differs from the previous prediction actually
+    mel, mel_post, dur_hat, pitch_hat, energy_hat = model.generate(input_seq, spk_emb)
+    m1_hat = np_now(mel.squeeze())
+    m2_hat = np_now(mel_post.squeeze())
+
+    # Plot figures for generated
+    m1_hat_fig = plot_mel(m1_hat)
+    m2_hat_fig = plot_mel(m2_hat)
+    pitch_gen_fig = plot_pitch(np_now(pitch_hat.squeeze()))
+    energy_gen_fig = plot_pitch(np_now(energy_hat.squeeze()))
+
+    # Save plots
+    save_spectrogram(m1_hat_fig, plot_dir.joinpath("step-{}-mel-spectrogram_sample_{}_gen_linear".format(step, sample_num)))
+    save_spectrogram(m2_hat_fig, plot_dir.joinpath("step-{}-mel-spectrogram_sample_{}_gen_postnet".format(step, sample_num)))
+    save_attention(pitch_gen_fig, plot_dir.joinpath("step-{}-pitch_sample_{}_gen".format(step, sample_num)))
+    save_attention(energy_gen_fig, plot_dir.joinpath("step-{}-energy_sample_{}_gen".format(step, sample_num)))
+
+    # save griffin lim inverted generated wav for debug (mel -> wav)
+    wav = audio.inv_mel_spectrogram(m2_hat.T)
+    wav_fpath = wav_dir.joinpath("step-{}-wave-from-mel_sample_{}_generated.wav".format(step, sample_num))
+    audio.save_wav(wav, str(wav_fpath), sr=sp.sample_rate)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
