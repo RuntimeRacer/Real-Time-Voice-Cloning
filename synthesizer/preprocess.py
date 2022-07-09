@@ -312,7 +312,7 @@ def create_embeddings(synthesizer_root: Path, encoder_model_fpath: Path, n_proce
     job = ThreadPool(n_processes).imap(func, utterance_ids)
     list(tqdm(job, "Embedding", len(utterance_ids), unit="utterances"))
 
-def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path, threads: int):
+def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path, n_processes: int, threads: int):
     # Initialize the dataset
     dataset = SynthesizerDataset(synthesizer_root, ["mel","embed"])
     total_samples = len(dataset)
@@ -329,7 +329,7 @@ def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path,
     phoneme_pitch_dir.mkdir(exist_ok=True)
     phoneme_energy_dir.mkdir(exist_ok=True)
 
-    # Initialize Accelerator
+    # Initialize Accelerator - Actually does nothing towards performance
     accelerator = Accelerator()
 
     if accelerator.is_local_main_process:
@@ -360,7 +360,7 @@ def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path,
     r = model.r
     data_loader = DataLoader(dataset,
                              collate_fn=lambda batch: collate_synthesizer(batch, r),
-                             batch_size=1,
+                             batch_size=n_processes,
                              num_workers=threads,
                              shuffle=True,
                              pin_memory=True)
@@ -368,74 +368,99 @@ def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path,
     # Accelerator code - optimize and prepare model
     model, data_loader = accelerator.prepare(model, data_loader)
 
-    # Init the duration extractor
-    duration_extractor = DurationExtractor(silence_threshold=preprocessing.silence_threshold,
-                                           silence_prob_shift=preprocessing.silence_prob_shift)
-
     # Extract Attention scores and pitch energies
     sum_att_score = 0
+    sum_jobs = 0
 
     # Iterator
-    for i, (idx, utterance_id_seq, text, mel, mel_len_batch, embed, _, _, _, _, _ ) in enumerate(data_loader, 1):
+    for i, (idx, utterance_id_seq, text_seq, mel_seq, mel_len_seq, embed_seq, _, _, _, _, _ ) in enumerate(data_loader, 1):
         # Move elems to device
-        text = text.to(device)
-        mel = mel.to(device)
-        embed = embed.to(device)
+        text_seq = text_seq.to(device)
+        mel_seq = mel_seq.to(device)
+        embed_seq = embed_seq.to(device)
 
         # Forward pass to generate attention data
         with torch.no_grad():
-            _, _, att_batch, _ = model(text, mel, embed)
+            _, _, att_batch, _ = model(text_seq, mel_seq, embed_seq)
 
-        # Continue processing on CPU
-        utterance_id = utterance_id_seq[0].cpu().detach().numpy()
-        utterance_id = sequence_to_text_ascii(utterance_id)
-        text = text[0].cpu()
-        mel_len = mel_len_batch[0].cpu()
-        mel = mel[0, :, :mel_len].cpu()
-        att = att_batch[0, :mel_len, :].cpu()
+        # Get alignment score
+        align_score_seq, _ = get_attention_score(att_batch, mel_len_seq, r=1)
 
-        # Get raw pitch
-        wav = audio.inv_mel_spectrogram(mel)
-        pitch, _ = pw.dio(wav.astype(np.float64), sp.sample_rate, frame_period=sp.hop_size / sp.sample_rate * 1000)
-        pitch = pitch.astype(np.float32)
+        # Continue processing on CPU in threads
+        alignment_tasks = []
+        for x in range(0, utterance_id_seq.size(dim=0)):
+            utterance_id = utterance_id_seq[x].cpu().detach().numpy()
+            utterance_id = sequence_to_text_ascii(utterance_id)
+            text = text_seq[x].cpu()
+            mel_len = mel_len_seq[x].cpu()
+            mel = mel_seq[x, :, :mel_len].cpu()
+            att = att_batch[x, :mel_len, :].cpu()
+            align_score = float(align_score_seq[x])
+            # Stack up tasks
+            alignment_tasks.append((synthesizer_root, utterance_id, text, mel, mel_len, att, align_score))
 
-        # we use the standard alignment score and the more accurate attention score from the duration extractor
-        align_score, _ = get_attention_score(att_batch, mel_len_batch, r=1)
-        align_score = float(align_score[0])
-        duration, att_score = duration_extractor(x=text, mel=mel, att=att)
-        duration = np_now(duration).astype(np.int)
-        sum_att_score += att_score
-
-        if np.sum(duration) != mel_len:
-            print(f'WARNINNG: Sum of durations did not match mel length for item {utterance_id}!')
-
-        # Get mel energy
-        energy = np.linalg.norm(np.exp(mel), axis=0, ord=2)
-        assert np.sum(duration) == mel_len
-
-        # TODO: Not sure what exactly this does...
-        durs_cum = np.cumsum(np.pad(duration, (1, 0)))
-        pitch_char = np.zeros((duration.shape[0],), dtype=np.float32)
-        energy_char = np.zeros((duration.shape[0],), dtype=np.float32)
-        for idx, a, b in zip(range(mel_len), durs_cum[:-1], durs_cum[1:]):
-            values = pitch[a:b][np.where(pitch[a:b] != 0.0)[0]]
-            values = values[np.where(values < preprocessing.pitch_max_freq)[0]]
-            pitch_char[idx] = np.mean(values) if len(values) > 0 else 0.0
-            energy_values = energy[a:b]
-            energy_char[idx] = np.mean(energy_values)if len(energy_values) > 0 else 0.0
-
-        # Save items
-        # FIXME: This is gonna be super slow and IO intensive. OK for evaluation but needs refactoring later.
-        np.save(str(durations_dir / f'duration-{utterance_id}.npy'), duration, allow_pickle=False)
-        np.save(str(attention_dir / f'attention-{utterance_id}.npy'), att_score, allow_pickle=False)
-        np.save(str(alignment_dir / f'alignment-{utterance_id}.npy'), align_score, allow_pickle=False)
-        np.save(str(phoneme_pitch_dir / f'phoneme-pitch-{utterance_id}.npy'), pitch_char, allow_pickle=False) # TODO: train_tacotron.py:73 (in FW-Taco repo): Check if this normalization is needed for anything
-        np.save(str(phoneme_energy_dir / f'phoneme-energy-{utterance_id}.npy'), energy_char, allow_pickle=False)
+        # Execute in threads
+        func = partial(do_alignment)
+        job = ThreadPool(n_processes).imap(func, alignment_tasks)
+        for att_score in job:
+            sum_att_score += att_score
+            sum_jobs += 1
 
         # Update progress
-        bar = progbar(i, total_samples)
-        msg = f'{bar} {i}/{total_samples} Files. Avg attention score: {sum_att_score / i} '
+        bar = progbar(sum_jobs, total_samples)
+        msg = f'{bar} {sum_jobs}/{total_samples} Files. Avg attention score: {sum_att_score / sum_jobs} '
         stream(msg)
+
+def do_alignment(args):
+    # extend args
+    synthesizer_root, utterance_id, text, mel, mel_len, att, align_score = args
+
+    durations_dir = synthesizer_root.joinpath(synthesizer.duration_dir)
+    attention_dir = synthesizer_root.joinpath(synthesizer.attention_dir)
+    alignment_dir = synthesizer_root.joinpath(synthesizer.alignment_dir)
+    phoneme_pitch_dir = synthesizer_root.joinpath(synthesizer.phoneme_pitch_dir)
+    phoneme_energy_dir = synthesizer_root.joinpath(synthesizer.phoneme_energy_dir)
+
+    # Init the duration extractor
+    duration_extractor = DurationExtractor(silence_threshold=preprocessing.silence_threshold,
+                                           silence_prob_shift=preprocessing.silence_prob_shift)
+    # Get raw pitch
+    wav = audio.inv_mel_spectrogram(mel)
+    pitch, _ = pw.dio(wav.astype(np.float64), sp.sample_rate, frame_period=sp.hop_size / sp.sample_rate * 1000)
+    pitch = pitch.astype(np.float32)
+
+    # we use the standard alignment score and the more accurate attention score from the duration extractor
+    duration, att_score = duration_extractor(x=text, mel=mel, att=att)
+    duration = np_now(duration).astype(np.int)
+
+    if np.sum(duration) != mel_len:
+        print(f'WARNINNG: Sum of durations did not match mel length for item {utterance_id}!')
+
+    # Get mel energy
+    energy = np.linalg.norm(np.exp(mel), axis=0, ord=2)
+    assert np.sum(duration) == mel_len
+
+    # TODO: Not sure what exactly this does...
+    durs_cum = np.cumsum(np.pad(duration, (1, 0)))
+    pitch_char = np.zeros((duration.shape[0],), dtype=np.float32)
+    energy_char = np.zeros((duration.shape[0],), dtype=np.float32)
+    for idx, a, b in zip(range(mel_len), durs_cum[:-1], durs_cum[1:]):
+        values = pitch[a:b][np.where(pitch[a:b] != 0.0)[0]]
+        values = values[np.where(values < preprocessing.pitch_max_freq)[0]]
+        pitch_char[idx] = np.mean(values) if len(values) > 0 else 0.0
+        energy_values = energy[a:b]
+        energy_char[idx] = np.mean(energy_values) if len(energy_values) > 0 else 0.0
+
+    # Save items
+    # FIXME: This is gonna be super slow and IO intensive. OK for evaluation but needs refactoring later.
+    np.save(str(durations_dir / f'duration-{utterance_id}.npy'), duration, allow_pickle=False)
+    np.save(str(attention_dir / f'attention-{utterance_id}.npy'), att_score, allow_pickle=False)
+    np.save(str(alignment_dir / f'alignment-{utterance_id}.npy'), align_score, allow_pickle=False)
+    np.save(str(phoneme_pitch_dir / f'phoneme-pitch-{utterance_id}.npy'), pitch_char,
+            allow_pickle=False)  # TODO: train_tacotron.py:73 (in FW-Taco repo): Check if this normalization is needed for anything
+    np.save(str(phoneme_energy_dir / f'phoneme-energy-{utterance_id}.npy'), energy_char, allow_pickle=False)
+
+    return att_score
 
 
 def get_attention_score(att, mel_lens, r=1):

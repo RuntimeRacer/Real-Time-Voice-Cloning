@@ -19,6 +19,9 @@ if __name__ == "__main__":
     parser.add_argument("-s", "--synthesizer_model_fpath", type=Path,
                         default="synthesizer/saved_models/pretrained.pt", help= \
         "Path your trained tacotron model.")
+    parser.add_argument("-n", "--n_processes", type=int, default=4, help= \
+        "Number of parallel processes. A synthesizer is created for each, so you may need to lower "
+        "this value on GPUs with low memory. Set it to 1 if CUDA is unhappy.")
     parser.add_argument("-t", "--threads", type=int, default=4, help= \
         "Number of threads assigned to each dataloader. Multiplies by the amount of accelerator threads.")
     args = parser.parse_args()
