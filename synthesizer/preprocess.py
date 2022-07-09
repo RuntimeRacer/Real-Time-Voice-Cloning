@@ -6,14 +6,18 @@ from encoder import inference as encoder
 from synthesizer.models import base
 from synthesizer.synthesizer_dataset import (SynthesizerDataset,
                                              collate_synthesizer)
+from synthesizer.utils.duration_extractor import DurationExtractor
+from synthesizer.utils.text import sequence_to_text_ascii
+
 from accelerate import Accelerator
 from pathlib import Path
-from utils import logmmse, DurationExtractor
+from utils import logmmse
 from utils.display import *
 from tqdm import tqdm
 from audioread.exceptions import NoBackendError
 from shutil import copyfile
-from hparams.config import sp, preprocessing
+from config.hparams import sp, preprocessing
+from config.paths import synthesizer
 
 from torch.utils.data import DataLoader
 
@@ -33,7 +37,7 @@ def save_metadata_progress(metadata: dict, metadata_fpath: Path):
     print("Saved %d training metadata entries to %s." % (len(metadata), metadata_fpath))
 
 
-def synthesizer_preprocess_dataset(datasets_root: Path, out_dir: Path, n_processes: int, skip_existing: bool, no_alignments: bool, dataset_name: str, subfolders: str, audio_extensions: list, transcript_extension: str):
+def synthesizer_preprocess_dataset(datasets_root: Path, out_dir: Path, n_processes: int, skip_existing: bool, dataset_name: str, subfolders: str, audio_extensions: list, transcript_extension: str):
     # Gather the input directories
     dataset_root = datasets_root.joinpath(dataset_name)
     input_dirs = [dataset_root.joinpath(subfolder.strip()) for subfolder in subfolders]
@@ -41,9 +45,8 @@ def synthesizer_preprocess_dataset(datasets_root: Path, out_dir: Path, n_process
     assert all(input_dir.exists() for input_dir in input_dirs)
 
     # Create the output directories for each output file type
-    out_dir.joinpath("mels").mkdir(exist_ok=True)
-    out_dir.joinpath("audio").mkdir(exist_ok=True)
-    out_dir.joinpath("pitch").mkdir(exist_ok=True)
+    out_dir.joinpath(synthesizer.mel_dir).mkdir(exist_ok=True)
+    out_dir.joinpath(synthesizer.wav_dir).mkdir(exist_ok=True)
 
     # Create a metadata file
     metadata_fpath = out_dir.joinpath("train.json")
@@ -68,7 +71,7 @@ def synthesizer_preprocess_dataset(datasets_root: Path, out_dir: Path, n_process
     atexit.register(save_metadata_progress, metadata, metadata_fpath)
 
     # Preprocess the dataset
-    func = partial(preprocess_speaker, out_dir=out_dir, skip_existing=skip_existing, no_alignments=no_alignments, audio_extensions=audio_extensions, transcript_extension=transcript_extension)
+    func = partial(preprocess_speaker, out_dir=out_dir, skip_existing=skip_existing, audio_extensions=audio_extensions, transcript_extension=transcript_extension)
     job = ThreadPool(n_processes).imap(func, speaker_dirs)
     for speaker_metadata in tqdm(job, dataset_name, len(speaker_dirs), unit="speakers"):
         speaker_dir = str(speaker_metadata["speaker_dir"])
@@ -97,113 +100,53 @@ def synthesizer_preprocess_dataset(datasets_root: Path, out_dir: Path, n_process
     print("Max audio timesteps length: %d" % max(int(m[4]) for m in metadata_lines))
 
 
-def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, no_alignments: bool, audio_extensions: list, transcript_extension: str):
+def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, audio_extensions: list, transcript_extension: str):
     speaker_metadata = {
         "speaker_dir": speaker_dir,
         "metadata": []
     }
 
-    if no_alignments:
-        # Gather the utterance audios and texts
-        # LibriTTS uses .wav but we will include extensions for compatibility with other datasets
-        for extension in audio_extensions:
-            wav_fpaths = speaker_dir.glob("**/*{0}".format(extension))
+    # Gather the utterance audios and texts
+    # LibriTTS uses .wav but we will include extensions for compatibility with other datasets
+    for extension in audio_extensions:
+        wav_fpaths = speaker_dir.glob("**/*{0}".format(extension))
 
-            for wav_fpath in wav_fpaths:
-                utterance_id = "{0}_{1}".format(speaker_dir.name, wav_fpath.with_suffix("").name)
+        for wav_fpath in wav_fpaths:
+            utterance_id = "{0}_{1}".format(speaker_dir.name, wav_fpath.with_suffix("").name)
 
-                # Get out paths
-                mel_outpath = out_dir.joinpath("mels", "mel-%s.npy" % utterance_id)
-                wav_outpath = out_dir.joinpath("audio", "audio-%s.npy" % utterance_id)
-                pitch_outpath = out_dir.joinpath("pitch", "pitch-%s.npy" % utterance_id)
-
-                # Load the audio waveform
-                wav = None
-                try:
-                    wav, _ = librosa.load(str(wav_fpath), sp.sample_rate)
-                except (ValueError, RuntimeError, NoBackendError) as err:
-                    # Unable to load.
-                    print("Unable to load audio file {0}: {1}".format(wav_fpath, err))
-                    continue
-
-                if preprocessing.rescale:
-                    wav = wav / np.abs(wav).max() * preprocessing.rescaling_max
-
-                # Get the corresponding text
-                # Check for .txt (for compatibility with other datasets)
-                text_fpath = wav_fpath.with_suffix(transcript_extension)
-                if not text_fpath.exists():
-                    print("No transcript data for utterance {0} found: Missing file {1}. Skipping...\n".format(wav_fpath, text_fpath))
-                    continue
-                
-                # Process text
-                text = ""
-                with text_fpath.open("r") as text_file:
-                    text = text.join([line for line in text_file])
-                    # Remove unwanted stuff from text
-                    # text = text.replace("\"", "")
-                    # text = text.replace("\\s", "")
-                    # text = text.replace("~", "")
-                    # text = text.strip()
-
-                if len(text) == 0:
-                    print("No transcript data for utterance {0} found: Missing file {1}. Skipping...\n".format(wav_fpath, text_fpath))
-                    continue
-
-                # Process the utterance
-                output = process_utterance(wav, text, out_dir, mel_outpath, wav_outpath, pitch_outpath, utterance_id)
-                if output is not None:
-                    speaker_metadata["metadata"].append(output)
-
-    else:
-        # Process alignment file (LibriSpeech support)
-        # Gather the utterance audios and texts
-        # Gather the utterance audios and texts
-        try:
-            alignments_fpath = next(speaker_dir.glob("*.alignment.txt"))
-            with alignments_fpath.open("r", encoding='utf-8') as alignments_file:
-                alignments = [line.rstrip().split(" ") for line in alignments_file]
-        except StopIteration as err:
-            # A few alignment files will be missing
-            print("Unable to process alignment file {0}: {1}".format(speaker_dir, err))
-            return
-
-        # Iterate over each entry in the alignments file
-        for alignment in alignments:
-            # expand the alignment
-            # wav_fname, words, end_times
-            wav_fname = alignment[0]
-            words = alignment[1]
-            end_times = alignment[2]
-            transcript = " ".join(alignment[3:])
-
-            # Find audio file for one of the allowed extension types
-            wav_fpath = ""
-            for extension in audio_extensions:
-                wav_fpath = speaker_dir.joinpath(wav_fname + extension)
-            
-            if len(wav_fpath) == 0:
-                print("Audio data for alignment {0} found: Missing file {1}. Skipping...\n" % alignment, wav_fname)
+            # Load the audio waveform
+            wav = None
+            try:
+                wav, _ = librosa.load(str(wav_fpath), sp.sample_rate)
+            except (ValueError, RuntimeError, NoBackendError) as err:
+                # Unable to load.
+                print("Unable to load audio file {0}: {1}".format(wav_fpath, err))
                 continue
 
-            words = words.replace("\"", "").split(",")
-            end_times = list(map(float, end_times.replace("\"", "").split(",")))
+            if preprocessing.rescale:
+                wav = wav / np.abs(wav).max() * preprocessing.rescaling_max
 
-            # Process each sub-utterance
-            wavs, texts = split_on_silences(wav_fpath, words, end_times, transcript)
-            for i, (wav, text) in enumerate(zip(wavs, texts)):
-                sub_basename = "%s_%02d" % (wav_fname, i)
+            # Get the corresponding text
+            # Check for .txt (for compatibility with other datasets)
+            text_fpath = wav_fpath.with_suffix(transcript_extension)
+            if not text_fpath.exists():
+                print("No transcript data for utterance {0} found: Missing file {1}. Skipping...\n".format(wav_fpath, text_fpath))
+                continue
 
-                # Skip existing utterances if needed
-                mel_outpath = out_dir.joinpath("mels", "mel-%s.npy" % sub_basename)
-                wav_outpath = out_dir.joinpath("audio", "audio-%s.npy" % sub_basename)
-                if skip_existing and mel_outpath.exists() and wav_outpath.exists():
-                    continue
+            # Process text
+            text = ""
+            with text_fpath.open("r") as text_file:
+                text = text.join([line for line in text_file])
 
-                # Process the utterance
-                output = process_utterance(wav, text, out_dir, mel_outpath, wav_outpath, sub_basename)
-                if output is not None:
-                    speaker_metadata["metadata"].append(output)
+            if len(text) == 0:
+                print("No transcript data for utterance {0} found: Missing file {1}. Skipping...\n".format(wav_fpath, text_fpath))
+                continue
+
+            # Process the utterance
+            # Output: (utterance_id, len(wav), mel_frames, text)
+            output = process_utterance(utterance_id, wav, text, out_dir)
+            if output is not None:
+                speaker_metadata["metadata"].append(output)
 
     return speaker_metadata
 
@@ -288,7 +231,7 @@ def split_on_silences(wav_fpath, words, end_times, transcript):
     return wavs, texts
 
 
-def process_utterance(wav: np.ndarray, text: str, out_dir: Path, mel_fpath: Path, wav_fpath: Path, pitch_fpath: Path, basename: str):
+def process_utterance(utterance_id: str, wav: np.ndarray, text: str, out_dir: Path):
     ## FOR REFERENCE:
     # For you not to lose your head if you ever wish to change things here or implement your own
     # synthesizer.
@@ -323,71 +266,63 @@ def process_utterance(wav: np.ndarray, text: str, out_dir: Path, mel_fpath: Path
         #print("Skipped utterance {0} because it's too long.".format(basename))
         return None
 
+    # Get out paths
+    mel_outpath = out_dir.joinpath(synthesizer.mel_dir, "mel-%s.npy" % utterance_id)
+    wav_outpath = out_dir.joinpath(synthesizer.wav_dir, "audio-%s.npy" % utterance_id)
 
-
-    # Get voice pitch from audio
-    pitch, _ = pw.dio(wav.astype(np.float64), sp.sample_rate,
-                      frame_period=sp.hop_size / sp.sample_rate * 1000).astype(np.float32)
-
-    # Write the spectrogram, embed and audio to disk
-    np.save(mel_fpath, mel_spectrogram.T, allow_pickle=False)
-    np.save(wav_fpath, wav, allow_pickle=False)
-    np.save(pitch_fpath, pitch, allow_pickle=False)
+    # Write the spectrogram and audio to disk
+    np.save(mel_outpath, mel_spectrogram.T, allow_pickle=False)
+    np.save(wav_outpath, wav, allow_pickle=False)
 
     # Return a tuple describing this training example
-    return wav_fpath.name, mel_fpath.name, pitch_fpath.name, "embed-%s.npy" % basename, len(wav), mel_frames, text
+    return utterance_id, len(wav), mel_frames, text
 
 
-def embed_utterance(fpaths, encoder_model_fpath):
+def embed_utterance(utterance_id, synthesizer_root, encoder_model_fpath):
     if not encoder.is_loaded():
         encoder.load_model(encoder_model_fpath)
 
     # Compute the speaker embedding of the utterance
-    wav_fpath, embed_fpath = fpaths
+    wav_fpath = synthesizer_root.joinpath(synthesizer.wav_dir, "audio-%s.npy" % utterance_id)
+    embed_fpath = synthesizer_root.joinpath(synthesizer.embed_dir, "embed-%s.npy" % utterance_id)
+
     wav = np.load(wav_fpath)
     wav = encoder.preprocess_wav(wav)
     embed = encoder.embed_utterance(wav)
     np.save(embed_fpath, embed, allow_pickle=False)
 
 def create_embeddings(synthesizer_root: Path, encoder_model_fpath: Path, n_processes: int):
-    wav_dir = synthesizer_root.joinpath("audio")
+    wav_dir = synthesizer_root.joinpath(synthesizer.wav_dir)
     metadata_fpath = synthesizer_root.joinpath("train.json")
     assert wav_dir.exists() and metadata_fpath.exists()
-    embed_dir = synthesizer_root.joinpath("embeds")
+    embed_dir = synthesizer_root.joinpath(synthesizer.embed_dir)
     embed_dir.mkdir(exist_ok=True)
 
-    # Gather the input wave filepath and the target output embed filepath
-    fpaths = []
+    # Gather the utterance IDs to derive file names from
+    utterance_ids = []
     with metadata_fpath.open("r", encoding="utf-8") as metadata_file:
         metadata_dict = json.load(metadata_file)
         for speaker, lines in metadata_dict.items():
             metadata = [line.split("|") for line in lines]
-            fpaths.extend([(wav_dir.joinpath(m[0]), embed_dir.joinpath(m[3])) for m in metadata])
+            utterance_ids.extend([(m[0]) for m in metadata])
 
     # TODO: improve on the multiprocessing, it's terrible. Disk I/O is the bottleneck here.
     # Embed the utterances in separate threads
-    func = partial(embed_utterance, encoder_model_fpath=encoder_model_fpath)
-    job = ThreadPool(n_processes).imap(func, fpaths)
-    list(tqdm(job, "Embedding", len(fpaths), unit="utterances"))
+    func = partial(embed_utterance, synthesizer_root=synthesizer_root, encoder_model_fpath=encoder_model_fpath)
+    job = ThreadPool(n_processes).imap(func, utterance_ids)
+    list(tqdm(job, "Embedding", len(utterance_ids), unit="utterances"))
 
-def create_align_features(synthesizer_root: Path, tacotron_model_fpath: Path, threads: int):
-    # Check paths from preprocessing
-    mel_dir = synthesizer_root.joinpath("mels")
-    embed_dir = synthesizer_root.joinpath("embeds")
-    pitch_dir = synthesizer_root.joinpath("pitch")
-    metadata_fpath = synthesizer_root.joinpath("train.json")
-    assert mel_dir.exists() and embed_dir.exists() and pitch_dir.exists() and metadata_fpath.exists()
-
+def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path, threads: int):
     # Initialize the dataset
-    dataset = SynthesizerDataset(metadata_fpath, mel_dir, pitch_dir, embed_dir)
+    dataset = SynthesizerDataset(synthesizer_root, ["mel","embed"])
     total_samples = len(dataset)
 
     # Create paths needed
-    durations_dir = synthesizer_root.joinpath("durations")
-    attention_dir = synthesizer_root.joinpath("attention")
-    alignment_dir = synthesizer_root.joinpath("alignment")
-    phoneme_pitch_dir = synthesizer_root.joinpath("phoneme_pitch")
-    phoneme_energy_dir = synthesizer_root.joinpath("phoneme_energy")
+    durations_dir = synthesizer_root.joinpath(synthesizer.duration_dir)
+    attention_dir = synthesizer_root.joinpath(synthesizer.attention_dir)
+    alignment_dir = synthesizer_root.joinpath(synthesizer.alignment_dir)
+    phoneme_pitch_dir = synthesizer_root.joinpath(synthesizer.phoneme_pitch_dir)
+    phoneme_energy_dir = synthesizer_root.joinpath(synthesizer.phoneme_energy_dir)
     durations_dir.mkdir(exist_ok=True)
     attention_dir.mkdir(exist_ok=True)
     alignment_dir.mkdir(exist_ok=True)
@@ -399,8 +334,8 @@ def create_align_features(synthesizer_root: Path, tacotron_model_fpath: Path, th
 
     if accelerator.is_local_main_process:
         print("Accelerator process count: {0}".format(accelerator.num_processes))
-        print("Checkpoint path: {}".format(tacotron_model_fpath))
-        print("Loading training data from: {}".format(metadata_fpath))
+        print("Checkpoint path: {}".format(synthesizer_model_fpath))
+        print("Loading training data from: {}".format(synthesizer_root))
         print("Using model: Tacotron")
 
     # Let accelerator handle device
@@ -410,7 +345,7 @@ def create_align_features(synthesizer_root: Path, tacotron_model_fpath: Path, th
     try:
         model = base.init_syn_model('tacotron', device)
         # Use device of model params as location for loaded state
-        checkpoint = torch.load(str(tacotron_model_fpath), map_location=device)
+        checkpoint = torch.load(str(synthesizer_model_fpath), map_location=device)
         # Load model state
         model.load_state_dict(checkpoint["model_state"])
     except NotImplementedError as e:
@@ -422,8 +357,9 @@ def create_align_features(synthesizer_root: Path, tacotron_model_fpath: Path, th
                          f'Reduction factor was: {model.r}'
 
     # Init dataloader
+    r = model.r
     data_loader = DataLoader(dataset,
-                             collate_fn=lambda batch: collate_synthesizer(batch, model.r),
+                             collate_fn=lambda batch: collate_synthesizer(batch, r),
                              batch_size=1,
                              num_workers=threads,
                              shuffle=True,
@@ -440,7 +376,7 @@ def create_align_features(synthesizer_root: Path, tacotron_model_fpath: Path, th
     sum_att_score = 0
 
     # Iterator
-    for i, (text, mel, pitch, embed, idx, mel_len) in enumerate(data_loader, 1):
+    for i, (idx, utterance_id_seq, text, mel, mel_len_batch, embed, _, _, _, _, _ ) in enumerate(data_loader, 1):
         # Move elems to device
         text = text.to(device)
         mel = mel.to(device)
@@ -451,21 +387,27 @@ def create_align_features(synthesizer_root: Path, tacotron_model_fpath: Path, th
             _, _, att_batch, _ = model(text, mel, embed)
 
         # Continue processing on CPU
+        utterance_id = utterance_id_seq[0].cpu().detach().numpy()
+        utterance_id = sequence_to_text_ascii(utterance_id)
         text = text[0].cpu()
-        mel_len = mel_len[0].cpu()
-        item_id = idx[0] # FIXME: This will likely not work as intended or useful
+        mel_len = mel_len_batch[0].cpu()
         mel = mel[0, :, :mel_len].cpu()
         att = att_batch[0, :mel_len, :].cpu()
 
+        # Get raw pitch
+        wav = audio.inv_mel_spectrogram(mel)
+        pitch, _ = pw.dio(wav.astype(np.float64), sp.sample_rate, frame_period=sp.hop_size / sp.sample_rate * 1000)
+        pitch = pitch.astype(np.float32)
+
         # we use the standard alignment score and the more accurate attention score from the duration extractor
-        align_score, _ = get_attention_score(att_batch, mel_len, r=1)
+        align_score, _ = get_attention_score(att_batch, mel_len_batch, r=1)
         align_score = float(align_score[0])
         duration, att_score = duration_extractor(x=text, mel=mel, att=att)
         duration = np_now(duration).astype(np.int)
         sum_att_score += att_score
 
         if np.sum(duration) != mel_len:
-            print(f'WARNINNG: Sum of durations did not match mel length for item {item_id}!')
+            print(f'WARNINNG: Sum of durations did not match mel length for item {utterance_id}!')
 
         # Get mel energy
         energy = np.linalg.norm(np.exp(mel), axis=0, ord=2)
@@ -482,13 +424,13 @@ def create_align_features(synthesizer_root: Path, tacotron_model_fpath: Path, th
             energy_values = energy[a:b]
             energy_char[idx] = np.mean(energy_values)if len(energy_values) > 0 else 0.0
 
-        # Save items FIXME: Pre-calculate filename; related to above comment
+        # Save items
         # FIXME: This is gonna be super slow and IO intensive. OK for evaluation but needs refactoring later.
-        np.save(str(durations_dir / f'{item_id}.npy'), duration, allow_pickle=False)
-        np.save(str(attention_dir / f'{item_id}.npy'), att_score, allow_pickle=False)
-        np.save(str(alignment_dir / f'{item_id}.npy'), align_score, allow_pickle=False)
-        np.save(str(phoneme_pitch_dir / f'{item_id}.npy'), pitch_char, allow_pickle=False) # TODO: train_tacotron.py:73 (in FW-Taco repo): Check if this normalization is needed for anything
-        np.save(str(phoneme_energy_dir / f'{item_id}.npy'), energy_char, allow_pickle=False)
+        np.save(str(durations_dir / f'duration-{utterance_id}.npy'), duration, allow_pickle=False)
+        np.save(str(attention_dir / f'attention-{utterance_id}.npy'), att_score, allow_pickle=False)
+        np.save(str(alignment_dir / f'alignment-{utterance_id}.npy'), align_score, allow_pickle=False)
+        np.save(str(phoneme_pitch_dir / f'phoneme-pitch-{utterance_id}.npy'), pitch_char, allow_pickle=False) # TODO: train_tacotron.py:73 (in FW-Taco repo): Check if this normalization is needed for anything
+        np.save(str(phoneme_energy_dir / f'phoneme-energy-{utterance_id}.npy'), energy_char, allow_pickle=False)
 
         # Update progress
         bar = progbar(i, total_samples)

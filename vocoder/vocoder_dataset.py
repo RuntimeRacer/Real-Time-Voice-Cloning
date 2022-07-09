@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from hparams.config import wavernn as hp_wavernn, sp
+from config.hparams import wavernn as hp_wavernn, sp
 from vocoder import audio
 
 

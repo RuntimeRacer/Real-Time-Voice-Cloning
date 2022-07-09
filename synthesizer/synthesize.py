@@ -9,7 +9,7 @@ from accelerate import Accelerator
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from hparams.config import tacotron as hp_tacotron, sp, preprocessing, sv2tts
+from config.hparams import tacotron as hp_tacotron, sp, preprocessing, sv2tts
 
 from synthesizer.models.tacotron import Tacotron
 from synthesizer.synthesizer_dataset import (SynthesizerDataset,

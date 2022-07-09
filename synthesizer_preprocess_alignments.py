@@ -16,7 +16,7 @@ if __name__ == "__main__":
     parser.add_argument("synthesizer_root", type=Path, help=\
         "Path to the synthesizer training data that contains the audios, the embeds and the train.json file. "
         "If you let everything as default, it should be <datasets_root>/SV2TTS/synthesizer/.")
-    parser.add_argument("-t", "--tacotron_model_fpath", type=Path,
+    parser.add_argument("-s", "--synthesizer_model_fpath", type=Path,
                         default="synthesizer/saved_models/pretrained.pt", help= \
         "Path your trained tacotron model.")
     parser.add_argument("-t", "--threads", type=int, default=4, help= \

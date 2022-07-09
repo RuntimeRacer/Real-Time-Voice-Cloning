@@ -1,6 +1,6 @@
 from vocoder.models.fatchord_version import WaveRNN
 from vocoder.audio import *
-from hparams.config import wavernn as hp_wavernn, sp
+from config.hparams import wavernn as hp_wavernn, sp
 
 def gen_testset(model: WaveRNN, test_set, samples, batched, target, overlap, save_path):
     step = model.get_step()

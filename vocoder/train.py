@@ -10,7 +10,7 @@ from accelerate import Accelerator
 from torch import optim
 from torch.utils.data import DataLoader
 
-from hparams.config import wavernn as hp_wavernn, sp
+from config.hparams import wavernn as hp_wavernn, sp
 from vocoder.batch import analyse_and_export_batch
 from vocoder.display import simple_table, stream
 from vocoder.distribution import discretized_mix_logistic_loss

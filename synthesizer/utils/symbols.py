@@ -17,4 +17,4 @@ _characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 # Export all symbols:
 symbols = [_pad, _eos] + list(_characters) + list(_punctuation) #+ _arpabet
 # Required for duration prediction
-silent_phonemes_indices = [i for i, p in enumerate(phonemes) if p in _pad + _punctuation]
+silent_phonemes_indices = [i for i, p in enumerate(symbols) if p in _pad + _punctuation]

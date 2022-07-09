@@ -22,11 +22,8 @@ if __name__ == "__main__":
     parser.add_argument("-s", "--skip_existing", action="store_true", default=True, help=\
         "Whether to overwrite existing files with the same name. Useful if the preprocessing was "
         "interrupted.")
-    parser.add_argument("--no_alignments", action="store_true", default=True, help=\
-        "Use this option when dataset does not include alignments\
-        (these are used to split long audio files into sub-utterances.)")
     parser.add_argument("-d", "--datasets", type=str,
-                        default="VCTK-Corpus,cv-corpus-7.0-2021-07-21,LibriTTS,TEDLIUM_release-3", help=\
+                        default="VCTK-Corpus", help=\
         "Comma-separated list of the name of the datasets you want to preprocess.")
     #parser.add_argument("--subfolders", type=str, default="train-clean-100, train-clean-360", help=\
     #    "Comma-separated list of subfolders to process inside your dataset directory")

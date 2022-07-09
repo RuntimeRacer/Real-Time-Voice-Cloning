@@ -1,7 +1,7 @@
 import math
 import numpy as np
 import librosa
-from hparams.config import sp
+from config.hparams import sp
 from scipy.signal import lfilter
 import soundfile as sf
 

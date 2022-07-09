@@ -19,7 +19,7 @@ from synthesizer.utils.text import sequence_to_text
 from synthesizer.visualizations import Visualizations
 from vocoder.display import *
 
-from hparams.config import tacotron as hp_tacotron, sp, preprocessing, sv2tts
+from config.hparams import tacotron as hp_tacotron, sp, preprocessing, sv2tts
 
 
 def np_now(x: torch.Tensor): return x.detach().cpu().numpy()

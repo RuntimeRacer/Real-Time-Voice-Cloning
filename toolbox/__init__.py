@@ -1,5 +1,5 @@
 from toolbox.ui import UI
-from hparams.config import sp
+from config.hparams import sp
 from encoder import inference as encoder
 from synthesizer.inference import Synthesizer
 from vocoder import inference as vocoder

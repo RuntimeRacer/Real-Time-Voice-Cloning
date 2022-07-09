@@ -48,7 +48,7 @@ class Visualizations:
     def log_params(self):
         if self.disabled:
             return
-        from hparams.config import tacotron as hp_tacotron
+        from config.hparams import tacotron as hp_tacotron
         param_string = "<b>Training parameters</b>:<br>"
         for param_name in (p for p in dir(hp_tacotron) if not p.startswith("__")):
             value = getattr(hp_tacotron, param_name)

@@ -1,4 +1,4 @@
-from hparams.config import tacotron as hp_tacotron, forward_tacotron as hp_forward_tacotron, sp, sv2tts
+from config.hparams import tacotron as hp_tacotron, forward_tacotron as hp_forward_tacotron, sp, sv2tts
 
 from synthesizer.models.tacotron import Tacotron
 from synthesizer.models.forward_tacotron import ForwardTacotron

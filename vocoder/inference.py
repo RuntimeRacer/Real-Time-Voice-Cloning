@@ -1,5 +1,5 @@
 from vocoder.models.fatchord_version import WaveRNN
-from hparams.config import wavernn as hp_wavernn, sp
+from config.hparams import wavernn as hp_wavernn, sp
 import torch
 
 

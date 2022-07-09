@@ -48,7 +48,7 @@ class Visualizations:
     def log_params(self):
         if self.disabled:
             return
-        from hparams.config import wavernn as hp_wavernn
+        from config.hparams import wavernn as hp_wavernn
         param_string = "<b>Training parameters</b>:<br>"
         for param_name in (p for p in dir(hp_wavernn) if not p.startswith("__")):
             value = getattr(hp_wavernn, param_name)

@@ -4,7 +4,7 @@ import numpy as np
 from scipy import signal
 from scipy.io import wavfile
 import soundfile as sf
-from hparams.config import sp, preprocessing
+from config.hparams import sp, preprocessing
 
 
 def load_wav(path, sr):

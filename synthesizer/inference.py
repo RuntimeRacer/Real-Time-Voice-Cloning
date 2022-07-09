@@ -1,6 +1,6 @@
 import torch
 from synthesizer import audio
-from hparams.config import tacotron as hp_tacotron, sp, preprocessing
+from config.hparams import tacotron as hp_tacotron, sp, preprocessing
 from synthesizer.models import base
 from synthesizer.utils.text import text_to_sequence
 from vocoder.display import simple_table

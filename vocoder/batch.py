@@ -1,5 +1,5 @@
 from vocoder.audio import *
-from hparams.config import wavernn as hp_wavernn
+from config.hparams import wavernn as hp_wavernn
 import json
 from pathlib import Path
 
