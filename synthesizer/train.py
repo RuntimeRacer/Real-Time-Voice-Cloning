@@ -82,7 +82,7 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
         print("Accelerator process count: {0}".format(accelerator.num_processes))
         print("Checkpoint path: {}".format(weights_fpath))
         print("Loading training data from: {}".format(syn_dir))
-        print("Using model: Tacotron")
+        print("Using model: {}".format(model_type))
     
     # Book keeping
     time_window = ValueWindow(100)
@@ -121,7 +121,7 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
     # Model has been initialized - Load the weights
     print("{0} - Loading weights at {1}".format(device, weights_fpath))
     load(model, device, weights_fpath, optimizer)
-    print("{0} - Tacotron weights loaded from step {1}".format(device, model.get_step()))
+    print("{0} - Model weights loaded from step {1}".format(device, model.get_step()))
     
     # Initialize the dataset
     dataset = SynthesizerDataset(syn_dir, base.get_model_train_elements(model_type))
@@ -142,8 +142,14 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
     epoch = 0
     max_step = 0
 
+    # Determine which TTS schedule to use
+    if model_type == base.MODEL_TYPE_TACOTRON:
+        tts_schedule = hp_tacotron.tts_schedule
+    elif model_type == base.MODEL_TYPE_FORWARD_TACOTRON:
+        tts_schedule = hp_forward_tacotron.tts_schedule
+
     # Iterate over training schedule
-    for i, session in enumerate(hp_tacotron.tts_schedule):
+    for i, session in enumerate(tts_schedule):
         # Update epoch information
         epoch += 1
         epoch_steps = max_step
@@ -155,10 +161,13 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
         current_step = model.get_step() + 1
 
         # Fetch params from session
-        r, loops, batch_size, sgdr_init_lr, sgdr_final_lr = session
-        
-        # Update Model params
-        model.r = r
+        if model_type == base.MODEL_TYPE_TACOTRON:
+            r, loops, batch_size, sgdr_init_lr, sgdr_final_lr = session
+            # Update Model params
+            model.r = r
+        elif model_type == base.MODEL_TYPE_FORWARD_TACOTRON:
+            loops, batch_size, sgdr_init_lr, sgdr_final_lr = session
+            r = 1
 
         # Init dataloader
         data_loader = DataLoader(dataset,
@@ -196,12 +205,19 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
 
         # Begin the training
         if accelerator.is_local_main_process:
-            simple_table([("Epoch", epoch),
+            if model_type == base.MODEL_TYPE_TACOTRON:
+                simple_table([("Epoch", epoch),
                           (f"Remaining Steps with r={r}", str(training_steps) + " Steps"),
                           ("Batch Size", batch_size),
                           ("Init LR", lr),
                           ("LR Stepping", sgdr_lr_stepping),
                           ("Outputs/Step (r)", r)])
+            elif model_type == base.MODEL_TYPE_FORWARD_TACOTRON:
+                simple_table([("Epoch", epoch),
+                              (f"Remaining Steps", str(training_steps) + " Steps"),
+                              ("Batch Size", batch_size),
+                              ("Init LR", lr),
+                              ("LR Stepping", sgdr_lr_stepping)])
 
         for p in optimizer.param_groups:
             p["lr"] = lr
@@ -225,14 +241,14 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
 
                 # Forward pass
                 loss = None
-                if model_type is base.MODEL_TYPE_TACOTRON:
+                if model_type == base.MODEL_TYPE_TACOTRON:
                     # Generate stop tokens for training
                     stop = torch.ones(mels.shape[0], mels.shape[2])
                     for j, k in enumerate(idx):
                         stop[j, :int(dataset.metadata[k][2]) - 1] = 0
                     # Training step
                     loss, attention, m2_hat, texts, mels, embeds = tacotron_forward_pass(model, device, texts, mels, embeds, stop)
-                elif model_type is base.MODEL_TYPE_FOWRARD_TACOTRON:
+                elif model_type == base.MODEL_TYPE_FORWARD_TACOTRON:
                     # Training step
                     loss, mel_hat, mel_post, pitch_hat, energy_hat, texts, mels, embeds, durations, mel_lens, phoneme_pitchs, phoneme_energies = forward_tacotron_forward_pass(model, device, texts, text_lens, mels, embeds, durations, mel_lens, phoneme_pitchs, phoneme_energies)
                 else:
@@ -242,9 +258,9 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
                 optimizer.zero_grad()
                 accelerator.backward(loss)
 
-                if model_type is base.MODEL_TYPE_TACOTRON and hp_tacotron.tts_clip_grad_norm is not None:
+                if model_type == base.MODEL_TYPE_TACOTRON and hp_tacotron.tts_clip_grad_norm is not None:
                     accelerator.clip_grad_norm_(model.parameters(), hp_tacotron.tts_clip_grad_norm)
-                elif model_type is base.MODEL_TYPE_FOWRARD_TACOTRON and hp_forward_tacotron.clip_grad_norm is not None:
+                elif model_type == base.MODEL_TYPE_FORWARD_TACOTRON and hp_forward_tacotron.clip_grad_norm is not None:
                     accelerator.clip_grad_norm_(model.parameters(), hp_forward_tacotron.clip_grad_norm)
 
                 optimizer.step()
@@ -293,7 +309,7 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
                         for sample_idx in range(hp_tacotron.tts_eval_num_samples):
                             # At most, generate samples equal to number in the batch
                             if sample_idx + 1 <= len(texts):
-                                if model_type is base.MODEL_TYPE_TACOTRON:
+                                if model_type == base.MODEL_TYPE_TACOTRON:
                                     # Remove padding from mels using frame length in metadata
                                     mel_length = int(dataset.metadata[idx[sample_idx]][2])
                                     mel_prediction = np_now(m2_hat[sample_idx]).T[:mel_length]
@@ -311,7 +327,7 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
                                                         sample_num=sample_idx + 1,
                                                         loss=loss)
 
-                                elif model_type is base.MODEL_TYPE_FOWRARD_TACOTRON:
+                                elif model_type == base.MODEL_TYPE_FORWARD_TACOTRON:
                                     m1_hat = np_now(mel_hat)[sample_idx, :600, :]
                                     m2_hat = np_now(mel_post)[sample_idx, :600, :]
                                     m_target = np_now(mels)[sample_idx, :600, :]
@@ -377,10 +393,10 @@ def forward_tacotron_forward_pass(model, device, texts, text_lens, mels, embeds,
     text_lens = text_lens.to(device)
     mels = mels.to(device)
     embeds = embeds.to(device)
-    durations = embeds.to(durations)
-    mel_lens = embeds.to(mel_lens)
-    phoneme_pitchs = embeds.to(phoneme_pitchs)
-    phoneme_energies = embeds.to(phoneme_energies)
+    durations = durations.to(device)
+    mel_lens = mel_lens.to(device)
+    phoneme_pitchs = phoneme_pitchs.to(device)
+    phoneme_energies = phoneme_energies.to(device)
 
     # Prepare Pitch & energy values
     pitch_zoneout_mask = torch.rand(texts.size()) > hp_forward_tacotron.pitch_zoneout

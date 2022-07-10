@@ -7,12 +7,12 @@ from synthesizer.utils.symbols import symbols
 
 # Synthesizer Models
 MODEL_TYPE_TACOTRON = 'tacotron'
-MODEL_TYPE_FOWRARD_TACOTRON = 'forward-tacotron'
+MODEL_TYPE_FORWARD_TACOTRON = 'forward-tacotron'
 
 
 def init_syn_model(model_type, device):
     model = None
-    if model_type is MODEL_TYPE_TACOTRON:
+    if model_type == MODEL_TYPE_TACOTRON:
         model = Tacotron(
             embed_dims=hp_tacotron.embed_dims,
             num_chars=len(symbols),
@@ -29,7 +29,7 @@ def init_syn_model(model_type, device):
             stop_threshold=hp_tacotron.stop_threshold,
             speaker_embedding_size=sv2tts.speaker_embedding_size
         ).to(device)
-    elif model_type is MODEL_TYPE_FOWRARD_TACOTRON:
+    elif model_type == MODEL_TYPE_FORWARD_TACOTRON:
         model = ForwardTacotron(
             embed_dims=hp_forward_tacotron.embed_dims,
             series_embed_dims=hp_forward_tacotron.series_embed_dims,
@@ -64,9 +64,9 @@ def init_syn_model(model_type, device):
 
 def get_model_train_elements(model_type):
     train_elements = []
-    if model_type is MODEL_TYPE_TACOTRON:
+    if model_type == MODEL_TYPE_TACOTRON:
         train_elements = ["mel", "embed"]
-    elif model_type is MODEL_TYPE_FOWRARD_TACOTRON:
+    elif model_type == MODEL_TYPE_FORWARD_TACOTRON:
         train_elements = ["mel", "embed", "duration", "attention", "alignment", "phoneme_pitch", "phoneme_energy"]
     else:
         raise NotImplementedError("Invalid model of type '%s' provided. Aborting..." % model_type)

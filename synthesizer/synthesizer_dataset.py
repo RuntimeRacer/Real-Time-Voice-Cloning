@@ -90,7 +90,7 @@ class SynthesizerDataset(Dataset):
                text, \
                mel.astype(np.float32), \
                embed.astype(np.float32), \
-               duration.astype(np.float32), \
+               duration.astype(np.int32), \
                attention.astype(np.float32), \
                alignment.astype(np.float32), \
                phoneme_pitch.astype(np.float32), \
@@ -128,6 +128,7 @@ def collate_synthesizer(batch, r):
     # Text
     x_lens = [len(x[2]) for x in batch]
     max_x_len = max(x_lens)
+    x_lens = np.stack(x_lens)
 
     chars = [pad1d(x[2], max_x_len) for x in batch]
     chars = np.stack(chars)
@@ -151,19 +152,29 @@ def collate_synthesizer(batch, r):
     # Speaker embedding (SV2TTS)
     embeds = np.array([x[4] for x in batch])
     # Durations
-    durations = np.array([x[5] for x in batch])
+    duration_lens = [len(x[5]) for x in batch]
+    max_duration_len = max(duration_lens)
+    durations = [pad1d(x[5], max_duration_len) for x in batch]
+    durations = np.stack(durations)
     # Attentions
     attentions = np.array([x[6] for x in batch])
     # Alignments
     alignments = np.array([x[7] for x in batch])
     # Phoneme Pitch
-    phoneme_pitch = np.array([x[8] for x in batch])
+    pitch_lens = [len(x[8]) for x in batch]
+    max_pitch_len = max(pitch_lens)
+    phoneme_pitch = [pad1d(x[8], max_pitch_len) for x in batch]
+    phoneme_pitch = np.stack(phoneme_pitch)
     # Phoneme Energy
-    phoneme_energy = np.array([x[9] for x in batch])
+    energy_lens = [len(x[9]) for x in batch]
+    max_energy_len = max(energy_lens)
+    phoneme_energy = [pad1d(x[9], max_energy_len) for x in batch]
+    phoneme_energy = np.stack(phoneme_energy)
 
     # Convert all to tensor
     utterance_ids = torch.tensor(utterance_ids).long()
     chars = torch.tensor(chars).long()
+    x_lens = torch.tensor(x_lens).long()
     mel = torch.tensor(mel)    
     spec_lens = torch.tensor(spec_lens)
     embeds = torch.tensor(embeds)

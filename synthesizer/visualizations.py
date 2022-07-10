@@ -59,7 +59,7 @@ class Visualizations:
         if self.disabled:
             return
         dataset_string = ""
-        dataset_string += "<b>Samples</b>: %s\n" % len(dataset.samples_fpaths)
+        dataset_string += "<b>Samples</b>: %s\n" % len(dataset.samples_fnames)
         dataset_string += "\n" + dataset.get_logs()
         dataset_string = dataset_string.replace("\n", "<br>")
         self.vis.text(dataset_string, opts={"title": "Dataset"})
