@@ -387,7 +387,6 @@ def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path,
         align_score_seq, _ = get_attention_score(att_batch, mel_len_seq, r=1)
 
         # Continue processing on CPU in threads
-        alignment_tasks = []
         for x in range(0, utterance_id_seq.size(dim=0)):
             utterance_id = utterance_id_seq[x].cpu().detach().numpy()
             utterance_id = sequence_to_text_ascii(utterance_id)
@@ -396,14 +395,8 @@ def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path,
             mel = mel_seq[x, :, :mel_len].cpu()
             att = att_batch[x, :mel_len, :].cpu()
             align_score = float(align_score_seq[x])
-            # Stack up tasks
-            alignment_tasks.append((synthesizer_root, utterance_id, text, mel, mel_len, att, align_score))
 
-        # Execute in threads
-        func = partial(do_alignment)
-        job = ThreadPool(n_processes).imap(func, alignment_tasks)
-        for att_score in job:
-            sum_att_score += att_score
+            sum_att_score += do_alignment(synthesizer_root, utterance_id, text, mel, mel_len, att, align_score)
             sum_jobs += 1
 
         # Update progress
@@ -411,9 +404,7 @@ def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path,
         msg = f'{bar} {sum_jobs}/{total_samples} Files. Avg attention score: {sum_att_score / sum_jobs} '
         stream(msg)
 
-def do_alignment(args):
-    # extend args
-    synthesizer_root, utterance_id, text, mel, mel_len, att, align_score = args
+def do_alignment(synthesizer_root, utterance_id, text, mel, mel_len, att, align_score):
 
     durations_dir = synthesizer_root.joinpath(synthesizer.duration_dir)
     attention_dir = synthesizer_root.joinpath(synthesizer.attention_dir)
