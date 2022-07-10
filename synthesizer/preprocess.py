@@ -312,22 +312,10 @@ def create_embeddings(synthesizer_root: Path, encoder_model_fpath: Path, n_proce
     job = ThreadPool(n_processes).imap(func, utterance_ids)
     list(tqdm(job, "Embedding", len(utterance_ids), unit="utterances"))
 
-def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path, n_processes: int, threads: int):
-    # Initialize the dataset
-    dataset = SynthesizerDataset(synthesizer_root, base.get_model_train_elements('tacotron'))
+def create_alignments(dataset, synthesizer_root: Path, synthesizer_model_fpath: Path, batch_size: int, threads: int, durations_dir, attention_dir, alignment_dir, phoneme_pitch_dir, phoneme_energy_dir):
     total_samples = len(dataset)
 
-    # Create paths needed
-    durations_dir = synthesizer_root.joinpath(synthesizer.duration_dir)
-    attention_dir = synthesizer_root.joinpath(synthesizer.attention_dir)
-    alignment_dir = synthesizer_root.joinpath(synthesizer.alignment_dir)
-    phoneme_pitch_dir = synthesizer_root.joinpath(synthesizer.phoneme_pitch_dir)
-    phoneme_energy_dir = synthesizer_root.joinpath(synthesizer.phoneme_energy_dir)
-    durations_dir.mkdir(exist_ok=True)
-    attention_dir.mkdir(exist_ok=True)
-    alignment_dir.mkdir(exist_ok=True)
-    phoneme_pitch_dir.mkdir(exist_ok=True)
-    phoneme_energy_dir.mkdir(exist_ok=True)
+    sys.stdout.write(f"DEBUGDEBUG")
 
     # Initialize Accelerator - Actually does nothing towards performance
     accelerator = Accelerator()
@@ -360,7 +348,7 @@ def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path,
     r = model.r
     data_loader = DataLoader(dataset,
                              collate_fn=lambda batch: collate_synthesizer(batch, r),
-                             batch_size=n_processes,
+                             batch_size=batch_size,
                              num_workers=threads,
                              shuffle=True,
                              pin_memory=True)
@@ -373,7 +361,8 @@ def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path,
     sum_jobs = 0
 
     # Iterator
-    for i, (idx, utterance_id_seq, text_seq, _, mel_seq, mel_len_seq, embed_seq, _, _, _, _, _ ) in enumerate(data_loader, 1):
+    for i, (idx, utterance_id_seq, text_seq, _, mel_seq, mel_len_seq, embed_seq, _, _, _, _, _) in enumerate(
+            data_loader, 1):
         # Move elems to device
         text_seq = text_seq.to(device)
         mel_seq = mel_seq.to(device)
@@ -387,7 +376,6 @@ def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path,
         align_score_seq, _ = get_attention_score(att_batch, mel_len_seq, r=1)
 
         # Continue processing on CPU in threads
-        alignment_tasks = []
         for x in range(0, utterance_id_seq.size(dim=0)):
             utterance_id = utterance_id_seq[x].cpu().detach().numpy()
             utterance_id = sequence_to_text_ascii(utterance_id)
@@ -396,14 +384,8 @@ def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path,
             mel = mel_seq[x, :, :mel_len].cpu()
             att = att_batch[x, :mel_len, :].cpu()
             align_score = float(align_score_seq[x])
-            # Stack up tasks
-            alignment_tasks.append((synthesizer_root, utterance_id, text, mel, mel_len, att, align_score))
 
-        # Execute in threads
-        func = partial(do_alignment)
-        job = ThreadPool(n_processes).imap(func, alignment_tasks)
-        for att_score in job:
-            sum_att_score += att_score
+            sum_att_score += do_alignment(utterance_id, text, mel, mel_len, att, align_score, durations_dir, attention_dir, alignment_dir, phoneme_pitch_dir, phoneme_energy_dir)
             sum_jobs += 1
 
         # Update progress
@@ -411,15 +393,58 @@ def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path,
         msg = f'{bar} {sum_jobs}/{total_samples} Files. Avg attention score: {sum_att_score / sum_jobs} '
         stream(msg)
 
-def do_alignment(args):
-    # extend args
-    synthesizer_root, utterance_id, text, mel, mel_len, att, align_score = args
+def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path, n_processes: int, batch_size: int, threads: int):
+    # Initialize the dataset
+    dataset = SynthesizerDataset(synthesizer_root, base.get_model_train_elements('tacotron'))
+    total_samples = len(dataset)
 
+    # Split Dataset by amount of processes
+    overflow = total_samples % n_processes
+    split_size = (total_samples - overflow) / n_processes
+
+    subsets = []
+    for split_id in range(n_processes):
+        start = split_size * split_id
+        end = split_size * (split_id+1)
+        if split_id == (n_processes - 1):
+            end += overflow
+        idx = torch.arange(start=start, end=end)
+        subset = torch.utils.data.Subset(dataset, idx)
+        subsets.append(subset)
+
+    # Create paths needed
     durations_dir = synthesizer_root.joinpath(synthesizer.duration_dir)
     attention_dir = synthesizer_root.joinpath(synthesizer.attention_dir)
     alignment_dir = synthesizer_root.joinpath(synthesizer.alignment_dir)
     phoneme_pitch_dir = synthesizer_root.joinpath(synthesizer.phoneme_pitch_dir)
     phoneme_energy_dir = synthesizer_root.joinpath(synthesizer.phoneme_energy_dir)
+    durations_dir.mkdir(exist_ok=True)
+    attention_dir.mkdir(exist_ok=True)
+    alignment_dir.mkdir(exist_ok=True)
+    phoneme_pitch_dir.mkdir(exist_ok=True)
+    phoneme_energy_dir.mkdir(exist_ok=True)
+
+    # with ThreadPool(n_processes) as pool:
+    #     for subset in subsets:
+    #         pool.apply_async(create_alignments, args=(subset, synthesizer_root, synthesizer_model_fpath, batch_size, threads, durations_dir, attention_dir, alignment_dir, phoneme_pitch_dir, phoneme_energy_dir))
+    #     pool.close()
+    #     pool.join()
+
+    # Calculate the alignments
+    func = partial(create_alignments,
+                   synthesizer_root=synthesizer_root,
+                   synthesizer_model_fpath=synthesizer_model_fpath,
+                   batch_size=batch_size,
+                   threads=threads,
+                   durations_dir=durations_dir,
+                   attention_dir=attention_dir,
+                   alignment_dir=alignment_dir,
+                   phoneme_pitch_dir=phoneme_pitch_dir,
+                   phoneme_energy_dir=phoneme_energy_dir)
+    job = ThreadPool(n_processes).imap(func, subsets)
+    list(tqdm(job, "Data Subset", len(subsets), unit="subsets"))
+
+def do_alignment(durations_dir, attention_dir, alignment_dir, phoneme_pitch_dir, phoneme_energy_dir, utterance_id, text, mel, mel_len, att, align_score):
 
     # Init the duration extractor
     duration_extractor = DurationExtractor(silence_threshold=preprocessing.silence_threshold,
