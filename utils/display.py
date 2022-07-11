@@ -139,3 +139,6 @@ def plot_spec(M):
     plt.show()
     mpl.interactive(False)
 
+def save_figure(fig, path) :
+    fig.savefig(f'{path}.png', bbox_inches='tight')
+    plt.close(fig)
