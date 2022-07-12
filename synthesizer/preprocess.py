@@ -352,7 +352,7 @@ def create_alignments(utterance, synthesizer_root: Path, synthesizer_model_fpath
     text = pad1d(text, len(text))
 
     # we use the standard alignment score and the more accurate attention score from the duration extractor
-    duration, att_score = duration_extractor(x=torch.tensor(text).long(), mel=torch.tensor(mel.T), att=att)
+    duration, att_score = duration_extractor(x=torch.tensor(text).long(), mel=torch.tensor(mel.T), att=att[0])
     duration = np_now(duration).astype(np.int)
 
     if np.sum(duration) != mel_len:
