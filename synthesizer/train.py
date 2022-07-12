@@ -329,9 +329,9 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
 
                                 elif model_type == base.MODEL_TYPE_FORWARD_TACOTRON:
                                     mel_length = int(dataset.metadata[idx[sample_idx]][2])
-                                    m1_hat = np_now(mel_hat[sample_idx])[:mel_length]
-                                    m2_hat = np_now(mel_post[sample_idx])[:mel_length]
-                                    m_target = np_now(mels[sample_idx])[:mel_length]
+                                    m1_hat = np_now(mel_hat[sample_idx]).T[:mel_length]
+                                    m2_hat = np_now(mel_post[sample_idx]).T[:mel_length]
+                                    m_target = np_now(mels[sample_idx]).T[:mel_length]
 
                                     input_seq = texts[sample_idx:(sample_idx + 1), :text_lens[sample_idx]]
                                     spk_emb = embeds[sample_idx:(sample_idx + 1)]
@@ -347,9 +347,9 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
                                                    sample_idx + 1,
                                                    input_seq,
                                                    spk_emb,
-                                                   m1_hat,
-                                                   m2_hat,
-                                                   m_target,
+                                                   m1_hat.T,
+                                                   m2_hat.T,
+                                                   m_target.T,
                                                    pitch,
                                                    pitch_gta,
                                                    energy,
