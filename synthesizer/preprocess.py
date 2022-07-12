@@ -1,3 +1,4 @@
+import numpy
 from multiprocess.pool import ThreadPool
 from synthesizer import audio
 from functools import partial
@@ -324,17 +325,16 @@ def create_alignments(utterance, synthesizer_root: Path, synthesizer_model_fpath
     # Get text, audio wav, mel and embedding
     utterance_id, text = utterance
     wav_fpath = synthesizer_root.joinpath(synthesizer.wav_dir, "audio-%s.npy" % utterance_id)
-    mel_fpath = synthesizer_root.joinpath(synthesizer.mel_dir, "mel-%s.npy" % utterance_id)
     embed_fpath = synthesizer_root.joinpath(synthesizer.embed_dir, "embed-%s.npy" % utterance_id)
     wav = np.load(wav_fpath)
-    mel = np.load(mel_fpath)
     embed = np.load(embed_fpath)
 
     # Get Attention using Synthesizer
-    _, att = synthesizer_model.synthesize_spectrogram(text, embed)
+    mel, att = synthesizer_model.synthesize_spectrogram(text, embed)
 
     # Get alignment score
-    mel_len = torch.tensor([mel.T.shape[-1]])
+    mel = numpy.asarray(mel)[0]
+    mel_len = torch.tensor([mel.shape[-1]])
     align_score_seq, _ = get_attention_score(att, mel_len)
     align_score = float(align_score_seq[0])
 
@@ -352,7 +352,8 @@ def create_alignments(utterance, synthesizer_root: Path, synthesizer_model_fpath
     text = pad1d(text, len(text))
 
     # we use the standard alignment score and the more accurate attention score from the duration extractor
-    duration, att_score = duration_extractor(x=torch.tensor(text).long(), mel=torch.tensor(mel.T), att=att[0])
+    att = att[0, :mel_len, :]
+    duration, att_score = duration_extractor(x=torch.tensor(text).long(), mel=torch.tensor(mel), att=att)
     duration = np_now(duration).astype(np.int)
 
     if np.sum(duration) != mel_len:
