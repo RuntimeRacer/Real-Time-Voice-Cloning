@@ -315,7 +315,7 @@ def create_embeddings(synthesizer_root: Path, encoder_model_fpath: Path, n_proce
 def create_alignments(dataset, synthesizer_root: Path, synthesizer_model_fpath: Path, batch_size: int, threads: int, durations_dir, attention_dir, alignment_dir, phoneme_pitch_dir, phoneme_energy_dir):
     total_samples = len(dataset)
 
-    sys.stdout.write(f"DEBUGDEBUG")
+
 
     # Initialize Accelerator - Actually does nothing towards performance
     accelerator = Accelerator()
