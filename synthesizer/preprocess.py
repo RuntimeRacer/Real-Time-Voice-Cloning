@@ -1,4 +1,3 @@
-import numpy
 from multiprocess.pool import ThreadPool
 from synthesizer import audio
 from functools import partial
@@ -333,7 +332,7 @@ def create_alignments(utterance, synthesizer_root: Path, synthesizer_model_fpath
     mel, att = synthesizer_model.synthesize_spectrogram(text, embed)
 
     # Get alignment score
-    mel = numpy.asarray(mel)[0]
+    mel = np.asarray(mel)[0]
     mel_len = torch.tensor([mel.shape[-1]])
     align_score_seq, _ = get_attention_score(att, mel_len)
     align_score = float(align_score_seq[0])
