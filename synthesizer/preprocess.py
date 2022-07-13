@@ -330,12 +330,22 @@ def create_alignments(utterance, synthesizer_root: Path, synthesizer_model_fpath
     mel = np.load(mel_fpath).T.astype(np.float32)
     embed = np.load(embed_fpath)
 
+    # WaveRNN mel spectrograms are normalized to [0, 1] so zero padding adds silence
+    # By default, SV2TTS uses symmetric mels, where -1*max_abs_value is silence.
+    if preprocessing.symmetric_mels:
+        mel_pad_value = -1 * sp.max_abs_value
+    else:
+        mel_pad_value = 0
+
+    mel_len = mel.shape[-1]
+    max_spec_len = mel_len + 1
+    mel = pad2d(mel, max_spec_len, pad_value=mel_pad_value)
+    mel = torch.tensor(mel)
+
     # Get Attention using Synthesizer
     _, att = synthesizer_model.synthesize_spectrogram(text, embed)
 
     # Get alignment score
-    mel = torch.tensor(mel)
-    mel_len = mel.shape[-1]
     align_score_seq, _ = get_attention_score(att, torch.tensor([mel_len]))
     align_score = float(align_score_seq[0])
 
@@ -458,3 +468,6 @@ def np_now(x: torch.Tensor): return x.detach().cpu().numpy()
 
 def pad1d(x, max_len, pad_value=0):
     return np.pad(x, (0, max_len - len(x)), mode="constant", constant_values=pad_value)
+
+def pad2d(x, max_len, pad_value=0):
+    return np.pad(x, ((0, 0), (0, max_len - x.shape[-1])), mode="constant", constant_values=pad_value)
