@@ -9,29 +9,6 @@ from typing import Union, List
 import numpy as np
 import librosa
 
-# Not 100% sure if required for proper threading, but seems META to quickly fix slow alignment generation
-_model = None # type: Synthesizer
-_device = None # type: torch.device
-
-def load_model(weights_fpath: Path, model_type='tacotron'):
-    global _model, _device
-    _model = Synthesizer(model_type=model_type, model_fpath=weights_fpath)
-    _model.load()
-
-def is_loaded():
-    return _model is not None and _model.is_loaded()
-
-def synthesize_spectrogram(text, embedding, return_alignments=True):
-    texts = [text]
-    embeds = [embedding] * len(texts)
-    return _model.synthesize_spectrograms(texts, embeds, return_alignments)
-
-def get():
-    return _model._model
-
-def device():
-    return _model.device
-
 
 class Synthesizer:
     

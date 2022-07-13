@@ -1,9 +1,9 @@
-from multiprocess.pool import ThreadPool
+from multiprocess.pool import ThreadPool, Pool
 from synthesizer import audio
 from functools import partial
 from itertools import chain
 from encoder import inference as encoder
-from synthesizer import inference as synthesizer_model
+from synthesizer import batched as synthesizer_model
 from synthesizer.models import base
 from synthesizer.synthesizer_dataset import (SynthesizerDataset,
                                              collate_synthesizer)
@@ -22,7 +22,6 @@ from config.hparams import sp, preprocessing
 from config.paths import synthesizer
 
 from torch.utils.data import DataLoader
-
 import torch
 import numpy as np
 import pyworld as pw
@@ -314,12 +313,9 @@ def create_embeddings(synthesizer_root: Path, encoder_model_fpath: Path, n_proce
     job = ThreadPool(n_processes).imap(func, utterance_ids)
     list(tqdm(job, "Embedding", len(utterance_ids), unit="utterances"))
 
-
-_synthesizer = None
-
 def create_alignments(utterance, synthesizer_root: Path, synthesizer_model_fpath: Path):
     if not synthesizer_model.is_loaded():
-        synthesizer_model.load_model(synthesizer_model_fpath)
+        synthesizer_model.load_tacotron_model(synthesizer_model_fpath)
 
     # Get text, audio wav, mel and embedding
     utterance_id, text = utterance
@@ -348,20 +344,15 @@ def create_alignments(utterance, synthesizer_root: Path, synthesizer_model_fpath
     mel = pad2d(mel, max_spec_len, pad_value=mel_pad_value)
 
     # convert to tensors and add to device
-    device = synthesizer_model.device()
-    text = torch.tensor(np.stack([text])).long().to(device)
-    mel = torch.tensor(np.stack([mel])).to(device)
-    mel_len = torch.tensor(np.stack([mel_len])).to(device)
-    embed = torch.tensor(np.stack([embed])).to(device)
+    text = torch.tensor(np.stack([text])).long()
+    mel = torch.tensor(np.stack([mel]))
+    embed = torch.tensor(np.stack([embed]))
 
-    # Get Attention using Synthesizer
-    model = synthesizer_model.get()
-
-    # Forward pass to generate attention data
-    with torch.no_grad():
-        _, _, att_batch, _ = model(text, mel, embed)
+    # Use tacotron to generate attention
+    att_batch = synthesizer_model.get_attention_batch(text, mel, embed)
 
     # Get alignment score
+    mel_len = torch.tensor(np.stack([mel_len])).cpu()
     align_score_seq, _ = get_attention_score(att_batch, mel_len)
     align_score = float(align_score_seq[0])
 
@@ -443,7 +434,7 @@ def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path,
     # for utterance in utterances:
     #     create_alignments(utterance, synthesizer_root=synthesizer_root, synthesizer_model_fpath=synthesizer_model_fpath)
     func = partial(create_alignments, synthesizer_root=synthesizer_root, synthesizer_model_fpath=synthesizer_model_fpath)
-    job = ThreadPool(n_processes).imap(func, utterances)
+    job = Pool(n_processes).imap(func, utterances)
     list(tqdm(job, "Alignments", len(utterances), unit="utterances"))
 
 def get_attention_score(att, mel_lens, r=1):
