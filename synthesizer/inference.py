@@ -19,7 +19,7 @@ def load_model(weights_fpath: Path, model_type='tacotron'):
     _model.load()
 
 def is_loaded():
-    return _model is not None
+    return _model is not None and _model.is_loaded()
 
 def synthesize_spectrogram(text, embedding, return_alignments=True):
     texts = [text]

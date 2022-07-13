@@ -356,8 +356,10 @@ def create_alignments(utterance, synthesizer_root: Path, synthesizer_model_fpath
 
     # Get Attention using Synthesizer
     model = synthesizer_model.get()
-    model.eval()
-    _, _, att_batch, _ = model(text, mel, embed)
+
+    # Forward pass to generate attention data
+    with torch.no_grad():
+        _, _, att_batch, _ = model(text, mel, embed)
 
     # Get alignment score
     align_score_seq, _ = get_attention_score(att_batch, mel_len)
@@ -438,11 +440,11 @@ def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path,
             utterances.extend([(m[0],m[3].strip()) for m in metadata if int(m[2])])
 
     # Create alignments for the utterances in separate threads
-    for utterance in utterances:
-        create_alignments(utterance, synthesizer_root=synthesizer_root, synthesizer_model_fpath=synthesizer_model_fpath)
-    # func = partial(create_alignments, synthesizer_root=synthesizer_root, synthesizer_model_fpath=synthesizer_model_fpath)
-    # job = ThreadPool(n_processes).imap(func, utterances)
-    # list(tqdm(job, "Alignments", len(utterances), unit="utterances"))
+    # for utterance in utterances:
+    #     create_alignments(utterance, synthesizer_root=synthesizer_root, synthesizer_model_fpath=synthesizer_model_fpath)
+    func = partial(create_alignments, synthesizer_root=synthesizer_root, synthesizer_model_fpath=synthesizer_model_fpath)
+    job = ThreadPool(n_processes).imap(func, utterances)
+    list(tqdm(job, "Alignments", len(utterances), unit="utterances"))
 
 def get_attention_score(att, mel_lens, r=1):
     """
