@@ -349,10 +349,10 @@ def create_alignments(utterance, synthesizer_root: Path, synthesizer_model_fpath
 
     # convert to tensors and add to device
     device = synthesizer_model.device()
-    text = torch.tensor([text]).long().to(device)
-    mel = torch.tensor([mel]).to(device)
-    mel_len = torch.tensor([mel_len]).to(device)
-    embed = torch.tensor([embed]).to(device)
+    text = torch.tensor(np.stack([text])).long().to(device)
+    mel = torch.tensor(np.stack([mel])).to(device)
+    mel_len = torch.tensor(np.stack([mel_len])).to(device)
+    embed = torch.tensor(np.stack([embed])).to(device)
 
     # Get Attention using Synthesizer
     model = synthesizer_model.get()
