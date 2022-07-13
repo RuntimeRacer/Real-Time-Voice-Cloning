@@ -435,7 +435,7 @@ def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path,
         metadata_dict = json.load(metadata_file)
         for speaker, lines in metadata_dict.items():
             metadata = [line.split("|") for line in lines]
-            utterances.extend([(m[0],m[3]) for m in metadata])
+            utterances.extend([(m[0],m[3].strip()) for m in metadata if int(m[2])])
 
     # Create alignments for the utterances in separate threads
     for utterance in utterances:
