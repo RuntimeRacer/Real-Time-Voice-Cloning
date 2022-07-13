@@ -351,6 +351,7 @@ def create_alignments(utterance, synthesizer_root: Path, synthesizer_model_fpath
     device = synthesizer_model.device()
     text = torch.tensor([text]).long().to(device)
     mel = torch.tensor([mel]).to(device)
+    mel_len = torch.tensor([mel_len]).to(device)
     embed = torch.tensor([embed]).to(device)
 
     # Get Attention using Synthesizer
@@ -359,7 +360,7 @@ def create_alignments(utterance, synthesizer_root: Path, synthesizer_model_fpath
     _, _, att_batch, _ = model(text, mel, embed)
 
     # Get alignment score
-    align_score_seq, _ = get_attention_score(att_batch, torch.tensor([mel_len]))
+    align_score_seq, _ = get_attention_score(att_batch, mel_len)
     align_score = float(align_score_seq[0])
 
     # Init the duration extractor
@@ -371,6 +372,7 @@ def create_alignments(utterance, synthesizer_root: Path, synthesizer_model_fpath
 
     # we use the standard alignment score and the more accurate attention score from the duration extractor
     text = text[0].cpu()
+    mel_len = mel_len[0].cpu()
     mel = mel[0, :, :mel_len].cpu()
     att = att_batch[0, :mel_len, :].cpu()
     duration, att_score = duration_extractor(x=text, mel=mel, att=att)
