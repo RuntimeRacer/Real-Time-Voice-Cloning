@@ -330,6 +330,12 @@ def create_alignments(utterance, synthesizer_root: Path, synthesizer_model_fpath
     mel = np.load(mel_fpath).T.astype(np.float32)
     embed = np.load(embed_fpath)
 
+    # Get the text and clean it
+    text = text_to_sequence(text, preprocessing.cleaner_names)
+    # Convert the list returned by text_to_sequence to a numpy array
+    text = np.asarray(text).astype(np.int32)
+    text = pad1d(text, len(text))
+
     # WaveRNN mel spectrograms are normalized to [0, 1] so zero padding adds silence
     # By default, SV2TTS uses symmetric mels, where -1*max_abs_value is silence.
     if preprocessing.symmetric_mels:
@@ -340,13 +346,20 @@ def create_alignments(utterance, synthesizer_root: Path, synthesizer_model_fpath
     mel_len = mel.shape[-1]
     max_spec_len = mel_len + 1
     mel = pad2d(mel, max_spec_len, pad_value=mel_pad_value)
-    mel = torch.tensor(mel)
+
+    # convert to tensors and add to device
+    device = synthesizer_model.device()
+    text = torch.tensor([text]).long().to(device)
+    mel = torch.tensor([mel]).to(device)
+    embed = torch.tensor([embed]).to(device)
 
     # Get Attention using Synthesizer
-    _, att = synthesizer_model.synthesize_spectrogram(text, embed)
+    model = synthesizer_model.get()
+    model.eval()
+    _, _, att_batch, _ = model(text, mel, embed)
 
     # Get alignment score
-    align_score_seq, _ = get_attention_score(att, torch.tensor([mel_len]))
+    align_score_seq, _ = get_attention_score(att_batch, torch.tensor([mel_len]))
     align_score = float(align_score_seq[0])
 
     # Init the duration extractor
@@ -356,16 +369,10 @@ def create_alignments(utterance, synthesizer_root: Path, synthesizer_model_fpath
     pitch, _ = pw.dio(wav.astype(np.float64), sp.sample_rate, frame_period=sp.hop_size / sp.sample_rate * 1000)
     pitch = pitch.astype(np.float32)
 
-    # Get the text and clean it
-    text = text_to_sequence(text, preprocessing.cleaner_names)
-    # Convert the list returned by text_to_sequence to a numpy array
-    text = np.asarray(text).astype(np.int32)
-    text = pad1d(text, len(text))
-
     # we use the standard alignment score and the more accurate attention score from the duration extractor
-    text = torch.tensor(text).long().cpu()
-    mel = mel[:, :mel_len].cpu()
-    att = att[0, :mel_len, :].cpu()
+    text = text[0].cpu()
+    mel = mel[0, :, :mel_len].cpu()
+    att = att_batch[0, :mel_len, :].cpu()
     duration, att_score = duration_extractor(x=text, mel=mel, att=att)
     duration = np_now(duration).astype(np.int)
 

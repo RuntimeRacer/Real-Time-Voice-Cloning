@@ -26,6 +26,12 @@ def synthesize_spectrogram(text, embedding, return_alignments=True):
     embeds = [embedding] * len(texts)
     return _model.synthesize_spectrograms(texts, embeds, return_alignments)
 
+def get():
+    return _model._model
+
+def device():
+    return _model.device
+
 
 class Synthesizer:
     
