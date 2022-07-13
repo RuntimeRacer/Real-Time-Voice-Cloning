@@ -1,12 +1,14 @@
-from multiprocess.pool import ThreadPool
+from multiprocess.pool import ThreadPool, Pool
 from synthesizer import audio
 from functools import partial
 from itertools import chain
 from encoder import inference as encoder
+from synthesizer import batched as synthesizer_model
 from synthesizer.models import base
 from synthesizer.synthesizer_dataset import (SynthesizerDataset,
                                              collate_synthesizer)
 from synthesizer.utils.duration_extractor import DurationExtractor
+from synthesizer.utils.text import text_to_sequence
 from synthesizer.utils.text import sequence_to_text_ascii
 
 from accelerate import Accelerator
@@ -20,7 +22,6 @@ from config.hparams import sp, preprocessing
 from config.paths import synthesizer
 
 from torch.utils.data import DataLoader
-
 import torch
 import numpy as np
 import pyworld as pw
@@ -312,115 +313,61 @@ def create_embeddings(synthesizer_root: Path, encoder_model_fpath: Path, n_proce
     job = ThreadPool(n_processes).imap(func, utterance_ids)
     list(tqdm(job, "Embedding", len(utterance_ids), unit="utterances"))
 
-def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path, n_processes: int, threads: int):
-    # Initialize the dataset
-    dataset = SynthesizerDataset(synthesizer_root, base.get_model_train_elements('tacotron'))
-    total_samples = len(dataset)
+def create_alignments(utterance, synthesizer_root: Path, synthesizer_model_fpath: Path):
+    if not synthesizer_model.is_loaded():
+        synthesizer_model.load_tacotron_model(synthesizer_model_fpath)
 
-    # Create paths needed
-    durations_dir = synthesizer_root.joinpath(synthesizer.duration_dir)
-    attention_dir = synthesizer_root.joinpath(synthesizer.attention_dir)
-    alignment_dir = synthesizer_root.joinpath(synthesizer.alignment_dir)
-    phoneme_pitch_dir = synthesizer_root.joinpath(synthesizer.phoneme_pitch_dir)
-    phoneme_energy_dir = synthesizer_root.joinpath(synthesizer.phoneme_energy_dir)
-    durations_dir.mkdir(exist_ok=True)
-    attention_dir.mkdir(exist_ok=True)
-    alignment_dir.mkdir(exist_ok=True)
-    phoneme_pitch_dir.mkdir(exist_ok=True)
-    phoneme_energy_dir.mkdir(exist_ok=True)
+    # Get text, audio wav, mel and embedding
+    utterance_id, text = utterance
+    wav_fpath = synthesizer_root.joinpath(synthesizer.wav_dir, "audio-%s.npy" % utterance_id)
+    mel_fpath = synthesizer_root.joinpath(synthesizer.mel_dir, "mel-%s.npy" % utterance_id)
+    embed_fpath = synthesizer_root.joinpath(synthesizer.embed_dir, "embed-%s.npy" % utterance_id)
+    wav = np.load(wav_fpath)
+    mel = np.load(mel_fpath).T.astype(np.float32)
+    embed = np.load(embed_fpath)
 
-    # Initialize Accelerator - Actually does nothing towards performance
-    accelerator = Accelerator()
+    # Get the text and clean it
+    text = text_to_sequence(text, preprocessing.cleaner_names)
+    # Convert the list returned by text_to_sequence to a numpy array
+    text = np.asarray(text).astype(np.int32)
+    text = pad1d(text, len(text))
 
-    if accelerator.is_local_main_process:
-        print("Accelerator process count: {0}".format(accelerator.num_processes))
-        print("Checkpoint path: {}".format(synthesizer_model_fpath))
-        print("Loading training data from: {}".format(synthesizer_root))
-        print("Using model: Tacotron")
+    # WaveRNN mel spectrograms are normalized to [0, 1] so zero padding adds silence
+    # By default, SV2TTS uses symmetric mels, where -1*max_abs_value is silence.
+    if preprocessing.symmetric_mels:
+        mel_pad_value = -1 * sp.max_abs_value
+    else:
+        mel_pad_value = 0
 
-    # Let accelerator handle device
-    device = accelerator.device
+    mel_len = mel.shape[-1]
+    max_spec_len = mel_len + 1
+    mel = pad2d(mel, max_spec_len, pad_value=mel_pad_value)
 
-    # Init the model
-    try:
-        model = base.init_syn_model('tacotron', device)
-        # Use device of model params as location for loaded state
-        checkpoint = torch.load(str(synthesizer_model_fpath), map_location=device)
-        # Load model state
-        model.load_state_dict(checkpoint["model_state"])
-    except NotImplementedError as e:
-        print(str(e))
-        return
+    # convert to tensors and add to device
+    text = torch.tensor(np.stack([text])).long()
+    mel = torch.tensor(np.stack([mel]))
+    embed = torch.tensor(np.stack([embed]))
 
-    # Ensure correct reduction factor
-    assert model.r == 1, f'Reduction factor of tacotron must be 1 for creating alignment features! ' \
-                         f'Reduction factor was: {model.r}'
+    # Use tacotron to generate attention
+    att_batch = synthesizer_model.get_attention_batch(text, mel, embed)
 
-    # Init dataloader
-    r = model.r
-    data_loader = DataLoader(dataset,
-                             collate_fn=lambda batch: collate_synthesizer(batch, r),
-                             batch_size=n_processes,
-                             num_workers=threads,
-                             shuffle=True,
-                             pin_memory=True)
-
-    # Accelerator code - optimize and prepare model
-    model, data_loader = accelerator.prepare(model, data_loader)
-
-    # Extract Attention scores and pitch energies
-    sum_att_score = 0
-    sum_jobs = 0
-
-    # Iterator
-    for i, (idx, utterance_id_seq, text_seq, _, mel_seq, mel_len_seq, embed_seq, _, _, _, _, _ ) in enumerate(data_loader, 1):
-        # Move elems to device
-        text_seq = text_seq.to(device)
-        mel_seq = mel_seq.to(device)
-        embed_seq = embed_seq.to(device)
-
-        # Forward pass to generate attention data
-        with torch.no_grad():
-            _, _, att_batch, _ = model(text_seq, mel_seq, embed_seq)
-
-        # Get alignment score
-        align_score_seq, _ = get_attention_score(att_batch, mel_len_seq, r=1)
-
-        # Continue processing on CPU in threads
-        for x in range(0, utterance_id_seq.size(dim=0)):
-            utterance_id = utterance_id_seq[x].cpu().detach().numpy()
-            utterance_id = sequence_to_text_ascii(utterance_id)
-            text = text_seq[x].cpu()
-            mel_len = mel_len_seq[x].cpu()
-            mel = mel_seq[x, :, :mel_len].cpu()
-            att = att_batch[x, :mel_len, :].cpu()
-            align_score = float(align_score_seq[x])
-
-            sum_att_score += do_alignment(synthesizer_root, utterance_id, text, mel, mel_len, att, align_score)
-            sum_jobs += 1
-
-        # Update progress
-        bar = progbar(sum_jobs, total_samples)
-        msg = f'{bar} {sum_jobs}/{total_samples} Files. Avg attention score: {sum_att_score / sum_jobs} '
-        stream(msg)
-
-def do_alignment(synthesizer_root, utterance_id, text, mel, mel_len, att, align_score):
-
-    durations_dir = synthesizer_root.joinpath(synthesizer.duration_dir)
-    attention_dir = synthesizer_root.joinpath(synthesizer.attention_dir)
-    alignment_dir = synthesizer_root.joinpath(synthesizer.alignment_dir)
-    phoneme_pitch_dir = synthesizer_root.joinpath(synthesizer.phoneme_pitch_dir)
-    phoneme_energy_dir = synthesizer_root.joinpath(synthesizer.phoneme_energy_dir)
+    # Get alignment score
+    mel_len = torch.tensor(np.stack([mel_len])).cpu()
+    align_score_seq, _ = get_attention_score(att_batch, mel_len)
+    align_score = float(align_score_seq[0])
 
     # Init the duration extractor
     duration_extractor = DurationExtractor(silence_threshold=preprocessing.silence_threshold,
                                            silence_prob_shift=preprocessing.silence_prob_shift)
     # Get raw pitch
-    wav = audio.inv_mel_spectrogram(mel)
     pitch, _ = pw.dio(wav.astype(np.float64), sp.sample_rate, frame_period=sp.hop_size / sp.sample_rate * 1000)
     pitch = pitch.astype(np.float32)
 
     # we use the standard alignment score and the more accurate attention score from the duration extractor
+    text = text[0].cpu()
+    mel_len = mel_len[0].cpu()
+    mel = mel[0, :, :mel_len].cpu()
+    att = att_batch[0, :mel_len, :].cpu()
     duration, att_score = duration_extractor(x=text, mel=mel, att=att)
     duration = np_now(duration).astype(np.int)
 
@@ -444,6 +391,11 @@ def do_alignment(synthesizer_root, utterance_id, text, mel, mel_len, att, align_
 
     # Save items
     # FIXME: This is gonna be super slow and IO intensive. OK for evaluation but needs refactoring later.
+    durations_dir = synthesizer_root.joinpath(synthesizer.duration_dir)
+    attention_dir = synthesizer_root.joinpath(synthesizer.attention_dir)
+    alignment_dir = synthesizer_root.joinpath(synthesizer.alignment_dir)
+    phoneme_pitch_dir = synthesizer_root.joinpath(synthesizer.phoneme_pitch_dir)
+    phoneme_energy_dir = synthesizer_root.joinpath(synthesizer.phoneme_energy_dir)
     np.save(str(durations_dir / f'duration-{utterance_id}.npy'), duration, allow_pickle=False)
     np.save(str(attention_dir / f'attention-{utterance_id}.npy'), att_score, allow_pickle=False)
     np.save(str(alignment_dir / f'alignment-{utterance_id}.npy'), align_score, allow_pickle=False)
@@ -451,8 +403,39 @@ def do_alignment(synthesizer_root, utterance_id, text, mel, mel_len, att, align_
             allow_pickle=False)  # TODO: train_tacotron.py:73 (in FW-Taco repo): Check if this normalization is needed for anything
     np.save(str(phoneme_energy_dir / f'phoneme-energy-{utterance_id}.npy'), energy_char, allow_pickle=False)
 
-    return att_score
+def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path, n_processes: int):
+    # Initialize the dataset
+    mel_dir = synthesizer_root.joinpath(synthesizer.mel_dir)
+    embed_dir = synthesizer_root.joinpath(synthesizer.embed_dir)
+    metadata_fpath = synthesizer_root.joinpath("train.json")
+    assert mel_dir.exists() and embed_dir.exists() and metadata_fpath.exists()
 
+    # Create paths needed
+    durations_dir = synthesizer_root.joinpath(synthesizer.duration_dir)
+    attention_dir = synthesizer_root.joinpath(synthesizer.attention_dir)
+    alignment_dir = synthesizer_root.joinpath(synthesizer.alignment_dir)
+    phoneme_pitch_dir = synthesizer_root.joinpath(synthesizer.phoneme_pitch_dir)
+    phoneme_energy_dir = synthesizer_root.joinpath(synthesizer.phoneme_energy_dir)
+    durations_dir.mkdir(exist_ok=True)
+    attention_dir.mkdir(exist_ok=True)
+    alignment_dir.mkdir(exist_ok=True)
+    phoneme_pitch_dir.mkdir(exist_ok=True)
+    phoneme_energy_dir.mkdir(exist_ok=True)
+
+    # Gather the utterance IDs to derive file names from
+    utterances = []
+    with metadata_fpath.open("r", encoding="utf-8") as metadata_file:
+        metadata_dict = json.load(metadata_file)
+        for speaker, lines in metadata_dict.items():
+            metadata = [line.split("|") for line in lines]
+            utterances.extend([(m[0],m[3].strip()) for m in metadata if int(m[2])])
+
+    # Create alignments for the utterances in separate threads
+    # for utterance in utterances:
+    #     create_alignments(utterance, synthesizer_root=synthesizer_root, synthesizer_model_fpath=synthesizer_model_fpath)
+    func = partial(create_alignments, synthesizer_root=synthesizer_root, synthesizer_model_fpath=synthesizer_model_fpath)
+    job = Pool(n_processes).imap(func, utterances)
+    list(tqdm(job, "Alignments", len(utterances), unit="utterances"))
 
 def get_attention_score(att, mel_lens, r=1):
     """
@@ -484,3 +467,9 @@ def get_attention_score(att, mel_lens, r=1):
         return loc_score, sharp_score
 
 def np_now(x: torch.Tensor): return x.detach().cpu().numpy()
+
+def pad1d(x, max_len, pad_value=0):
+    return np.pad(x, (0, max_len - len(x)), mode="constant", constant_values=pad_value)
+
+def pad2d(x, max_len, pad_value=0):
+    return np.pad(x, ((0, 0), (0, max_len - x.shape[-1])), mode="constant", constant_values=pad_value)
