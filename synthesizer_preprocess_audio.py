@@ -23,7 +23,7 @@ if __name__ == "__main__":
         "Whether to overwrite existing files with the same name. Useful if the preprocessing was "
         "interrupted.")
     parser.add_argument("-d", "--datasets", type=str,
-                        default="VCTK-Corpus", help=\
+                        default="VCTK-Corpus,cv-corpus-7.0-2021-07-21,LibriTTS,TEDLIUM_release-3", help=\
         "Comma-separated list of the name of the datasets you want to preprocess.")
     #parser.add_argument("--subfolders", type=str, default="train-clean-100, train-clean-360", help=\
     #    "Comma-separated list of subfolders to process inside your dataset directory")
