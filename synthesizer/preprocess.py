@@ -91,14 +91,14 @@ def synthesizer_preprocess_dataset(datasets_root: Path, out_dir: Path, n_process
         metadata = json.load(metadata_file)
         for speaker, utterances in metadata.items():
             metadata_lines.extend([line.split("|") for line in utterances])
-    mel_frames = sum([int(m[5]) for m in metadata_lines])
-    timesteps = sum([int(m[4]) for m in metadata_lines])
+    mel_frames = sum([int(m[2]) for m in metadata_lines])
+    timesteps = sum([int(m[1]) for m in metadata_lines])
     sample_rate = sp.sample_rate
     hours = (timesteps / sample_rate) / 3600
     print("The dataset consists of %d utterances, %d mel frames, %d audio timesteps (%.2f hours)." % (len(metadata_lines), mel_frames, timesteps, hours))
-    print("Max input length (text chars): %d" % max(len(m[6]) for m in metadata_lines))
-    print("Max mel frames length: %d" % max(int(m[5]) for m in metadata_lines))
-    print("Max audio timesteps length: %d" % max(int(m[4]) for m in metadata_lines))
+    print("Max input length (text chars): %d" % max(len(m[3]) for m in metadata_lines))
+    print("Max mel frames length: %d" % max(int(m[2]) for m in metadata_lines))
+    print("Max audio timesteps length: %d" % max(int(m[1]) for m in metadata_lines))
 
 
 def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, audio_extensions: list, transcript_extension: str):
