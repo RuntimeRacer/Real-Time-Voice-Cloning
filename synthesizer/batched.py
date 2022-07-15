@@ -1,12 +1,13 @@
 import torch
 from pathlib import Path
+from tqdm import tqdm
 from synthesizer.models import base
 from synthesizer.models.tacotron import Tacotron
 
 _model = None # type: Tacotron
 _device = None # type: torch.device
 
-def load_tacotron_model(weights_fpath: Path, device=None):
+def load_tacotron_model(weights_fpath: Path, device=None, use_tqdm=False):
     global _model, _device
 
     if device is None:
@@ -18,7 +19,11 @@ def load_tacotron_model(weights_fpath: Path, device=None):
     checkpoint = torch.load(weights_fpath, _device)
     _model.load_state_dict(checkpoint["model_state"])
     _model.eval()
-    print("Loaded synthesizer \"%s\" trained to step %d" % (weights_fpath.name, _model.get_step()))
+
+    if use_tqdm:
+        tqdm.write("Loaded synthesizer \"%s\" trained to step %d" % (weights_fpath.name, _model.get_step()))
+    else:
+        print("Loaded synthesizer \"%s\" trained to step %d" % (weights_fpath.name, _model.get_step()))
 
 def is_loaded():
     return _model is not None

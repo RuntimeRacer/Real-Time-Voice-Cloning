@@ -74,7 +74,7 @@ def synthesizer_preprocess_dataset(datasets_root: Path, out_dir: Path, n_process
     # Preprocess the dataset
     func = partial(preprocess_speaker, out_dir=out_dir, skip_existing=skip_existing, audio_extensions=audio_extensions, transcript_extension=transcript_extension)
     job = ThreadPool(n_processes).imap(func, speaker_dirs)
-    for speaker_metadata in tqdm(job, dataset_name, len(speaker_dirs), unit="speakers"):
+    for speaker_metadata in tqdm(job, dataset_name, len(speaker_dirs), unit="speakers", miniters=1):
         speaker_dir = str(speaker_metadata["speaker_dir"])
         metadata[speaker_dir] = []
         for metadatum in speaker_metadata["metadata"]:
@@ -121,7 +121,7 @@ def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, audio_ex
                 wav, _ = librosa.load(str(wav_fpath), sp.sample_rate)
             except (ValueError, RuntimeError, NoBackendError) as err:
                 # Unable to load.
-                print("Unable to load audio file {0}: {1}".format(wav_fpath, err))
+                tqdm.write("Unable to load audio file {0}: {1}".format(wav_fpath, err))
                 continue
 
             if preprocessing.rescale:
@@ -131,7 +131,7 @@ def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, audio_ex
             # Check for .txt (for compatibility with other datasets)
             text_fpath = wav_fpath.with_suffix(transcript_extension)
             if not text_fpath.exists():
-                print("No transcript data for utterance {0} found: Missing file {1}. Skipping...\n".format(wav_fpath, text_fpath))
+                tqdm.write("No transcript data for utterance {0} found: Missing file {1}. Skipping...\n".format(wav_fpath, text_fpath))
                 continue
 
             # Process text
@@ -140,7 +140,7 @@ def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, audio_ex
                 text = text.join([line for line in text_file])
 
             if len(text) == 0:
-                print("No transcript data for utterance {0} found: Missing file {1}. Skipping...\n".format(wav_fpath, text_fpath))
+                tqdm.write("No transcript data for utterance {0} found: Missing file {1}. Skipping...\n".format(wav_fpath, text_fpath))
                 continue
 
             # Process the utterance
@@ -311,11 +311,11 @@ def create_embeddings(synthesizer_root: Path, encoder_model_fpath: Path, n_proce
     # Embed the utterances in separate threads
     func = partial(embed_utterance, synthesizer_root=synthesizer_root, encoder_model_fpath=encoder_model_fpath)
     job = ThreadPool(n_processes).imap(func, utterance_ids)
-    list(tqdm(job, "Embedding", len(utterance_ids), unit="utterances"))
+    list(tqdm(job, "Embedding", len(utterance_ids), unit="utterances", miniters=1))
 
 def create_alignments(utterance, synthesizer_root: Path, synthesizer_model_fpath: Path):
     if not synthesizer_model.is_loaded():
-        synthesizer_model.load_tacotron_model(synthesizer_model_fpath)
+        synthesizer_model.load_tacotron_model(synthesizer_model_fpath, use_tqdm=True)
 
     # Get text, audio wav, mel and embedding
     utterance_id, text = utterance
@@ -372,7 +372,7 @@ def create_alignments(utterance, synthesizer_root: Path, synthesizer_model_fpath
     duration = np_now(duration).astype(np.int)
 
     if np.sum(duration) != mel_len:
-        print(f'WARNINNG: Sum of durations did not match mel length for item {utterance_id}!')
+        tqdm.write(f'WARNING: Sum of durations did not match mel length for item {utterance_id}!')
 
     # Get mel energy
     energy = np.linalg.norm(np.exp(mel), axis=0, ord=2)
@@ -435,7 +435,7 @@ def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path,
     #     create_alignments(utterance, synthesizer_root=synthesizer_root, synthesizer_model_fpath=synthesizer_model_fpath)
     func = partial(create_alignments, synthesizer_root=synthesizer_root, synthesizer_model_fpath=synthesizer_model_fpath)
     job = Pool(n_processes).imap(func, utterances)
-    list(tqdm(job, "Alignments", len(utterances), unit="utterances"))
+    list(tqdm(job, "Alignments", len(utterances), unit="utterances", miniters=1))
 
 def get_attention_score(att, mel_lens, r=1):
     """
