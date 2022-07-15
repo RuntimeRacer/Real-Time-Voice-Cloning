@@ -74,7 +74,7 @@ def synthesizer_preprocess_dataset(datasets_root: Path, out_dir: Path, n_process
     # Preprocess the dataset
     func = partial(preprocess_speaker, out_dir=out_dir, skip_existing=skip_existing, audio_extensions=audio_extensions, transcript_extension=transcript_extension)
     job = ThreadPool(n_processes).imap(func, speaker_dirs)
-    for speaker_metadata in tqdm(job, dataset_name, len(speaker_dirs), unit="speakers", miniters=1, smoothing=1):
+    for speaker_metadata in tqdm(job, dataset_name, len(speaker_dirs), unit="speakers", miniters=1):
         speaker_dir = str(speaker_metadata["speaker_dir"])
         metadata[speaker_dir] = []
         for metadatum in speaker_metadata["metadata"]:
@@ -311,7 +311,7 @@ def create_embeddings(synthesizer_root: Path, encoder_model_fpath: Path, n_proce
     # Embed the utterances in separate threads
     func = partial(embed_utterance, synthesizer_root=synthesizer_root, encoder_model_fpath=encoder_model_fpath)
     job = ThreadPool(n_processes).imap(func, utterance_ids)
-    list(tqdm(job, "Embedding", len(utterance_ids), unit="utterances", miniters=1, smoothing=1))
+    list(tqdm(job, "Embedding", len(utterance_ids), unit="utterances", miniters=1))
 
 def create_alignments(utterance, synthesizer_root: Path, synthesizer_model_fpath: Path):
     if not synthesizer_model.is_loaded():
@@ -435,7 +435,7 @@ def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path,
     #     create_alignments(utterance, synthesizer_root=synthesizer_root, synthesizer_model_fpath=synthesizer_model_fpath)
     func = partial(create_alignments, synthesizer_root=synthesizer_root, synthesizer_model_fpath=synthesizer_model_fpath)
     job = Pool(n_processes).imap(func, utterances)
-    list(tqdm(job, "Alignments", len(utterances), unit="utterances", miniters=1, smoothing=1))
+    list(tqdm(job, "Alignments", len(utterances), unit="utterances", miniters=1))
 
 def get_attention_score(att, mel_lens, r=1):
     """
