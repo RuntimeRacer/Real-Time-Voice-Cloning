@@ -118,7 +118,7 @@ def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, audio_ex
             # Load the audio waveform
             wav = None
             try:
-                wav, _ = librosa.load(str(wav_fpath), sp.sample_rate)
+                wav, _ = librosa.load(path=str(wav_fpath), sr=sp.sample_rate)
             except (ValueError, RuntimeError, NoBackendError) as err:
                 # Unable to load.
                 tqdm.write("Unable to load audio file {0}: {1}".format(wav_fpath, err))

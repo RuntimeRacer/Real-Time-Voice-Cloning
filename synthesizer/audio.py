@@ -168,7 +168,7 @@ def _mel_to_linear(mel_spectrogram):
 
 def _build_mel_basis():
     assert sp.fmax <= sp.sample_rate // 2
-    return librosa.filters.mel(sp.sample_rate, sp.n_fft, n_mels=sp.num_mels,
+    return librosa.filters.mel(sr=sp.sample_rate, n_fft=sp.n_fft, n_mels=sp.num_mels,
                                fmin=sp.fmin, fmax=sp.fmax)
 
 def _amp_to_db(x):
