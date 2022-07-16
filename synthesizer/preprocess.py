@@ -445,7 +445,7 @@ def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path,
     # Create alignments for the utterances in separate threads
     # for utterance in utterances:
     #     create_alignments(utterance, synthesizer_root=synthesizer_root, synthesizer_model_fpath=synthesizer_model_fpath)
-    func = partial(create_alignments, synthesizer_root=synthesizer_root, synthesizer_model_fpath=synthesizer_model_fpath)
+    func = partial(create_alignments, accelerator=accelerator, synthesizer_root=synthesizer_root, synthesizer_model_fpath=synthesizer_model_fpath)
     job = Pool(n_processes).imap(func, utterances)
     list(tqdm(job, "Alignments", len(utterances), unit="utterances", miniters=1))
 
