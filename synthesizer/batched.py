@@ -12,8 +12,8 @@ def load_tacotron_model(weights_fpath: Path, device=None, use_tqdm=False):
 
     if device is None:
         _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    elif isinstance(device, str):
-        _device = torch.device(device)
+    else:
+        _device = device
 
     _model = base.init_syn_model('tacotron', _device)
     checkpoint = torch.load(weights_fpath, _device)

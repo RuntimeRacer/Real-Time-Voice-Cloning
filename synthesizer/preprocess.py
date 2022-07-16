@@ -313,9 +313,9 @@ def create_embeddings(synthesizer_root: Path, encoder_model_fpath: Path, n_proce
     job = ThreadPool(n_processes).imap(func, utterance_ids)
     list(tqdm(job, "Embedding", len(utterance_ids), unit="utterances", miniters=1))
 
-def create_alignments(utterance, synthesizer_root: Path, synthesizer_model_fpath: Path):
+def create_alignments(utterance, accelerator: Accelerator, synthesizer_root: Path, synthesizer_model_fpath: Path):
     if not synthesizer_model.is_loaded():
-        synthesizer_model.load_tacotron_model(synthesizer_model_fpath, use_tqdm=True)
+        synthesizer_model.load_tacotron_model(synthesizer_model_fpath, device=accelerator.device, use_tqdm=True)
 
     # Get text, audio wav, mel and embedding
     utterance_id, text = utterance
@@ -429,6 +429,18 @@ def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path,
         for speaker, lines in metadata_dict.items():
             metadata = [line.split("|") for line in lines]
             utterances.extend([(m[0],m[3].strip()) for m in metadata if int(m[2])])
+
+    # Init Accelerator
+    accelerator = Accelerator()
+
+    # Split dataset for the current process
+    len_utterances = len(utterances)
+    split_idx = int(len_utterances / accelerator.state.num_processes)
+    acc_proc_id = accelerator.state.process_index
+    if acc_proc_id == (accelerator.num_processes - 1):
+        utterances = utterances[split_idx*acc_proc_id:]
+    else:
+        utterances = utterances[split_idx*acc_proc_id:split_idx*(acc_proc_id+1)]
 
     # Create alignments for the utterances in separate threads
     # for utterance in utterances:
