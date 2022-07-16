@@ -432,7 +432,6 @@ def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path,
 
     # Init Accelerator
     accelerator = Accelerator()
-    torch.multiprocessing.set_start_method('spawn')
 
     # Split dataset for the current process
     len_utterances = len(utterances)
