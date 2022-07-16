@@ -62,6 +62,7 @@ def init_syn_model(model_type, device):
 
     return model
 
+
 def get_model_train_elements(model_type):
     train_elements = []
     if model_type == MODEL_TYPE_TACOTRON:
@@ -71,3 +72,12 @@ def get_model_train_elements(model_type):
     else:
         raise NotImplementedError("Invalid model of type '%s' provided. Aborting..." % model_type)
     return train_elements
+
+
+def get_model_type(model):
+    if isinstance(model, Tacotron):
+        return MODEL_TYPE_TACOTRON
+    elif isinstance(model, ForwardTacotron):
+        return MODEL_TYPE_FORWARD_TACOTRON
+    else:
+        raise NotImplementedError("Provided object is not a valid synthesizer model.")

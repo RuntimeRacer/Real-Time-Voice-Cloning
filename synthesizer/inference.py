@@ -14,18 +14,13 @@ class Synthesizer:
     
     def __init__(
             self,
-            model_type: str,
             model_fpath: Path,
             verbose=True):
         """
         The model isn't instantiated and loaded in memory until needed or until load() is called.
-
-        :param model_type: type of the synthesizer model, must be one of: 'tacotron', 'forward-tacotron', 'fastpitch'
         :param model_fpath: path to the trained model file
-        :param hparams: HParams object containing all hyperparameters relevant for this synthesizer model
         :param verbose: if False, prints less information when using the model
         """
-        self.model_type = model_type
         self.model_fpath = model_fpath
         self.verbose = verbose
  
@@ -37,8 +32,9 @@ class Synthesizer:
         if self.verbose:
             print("Synthesizer using device:", self.device)
         
-        # Synthesizer model will be instantiated later on first use.
+        # Synthesizer model and type will be instantiated later on first use.
         self._model = None
+        self._model_type = None
 
     def is_loaded(self):
         """
@@ -49,18 +45,28 @@ class Synthesizer:
     def load(self):
         """
         Instantiates and loads the model given the weights file that was passed in the constructor.
+        Model type is determined from weights file, however if type is not included it will assume default Tacotron.
         """
+
+        # Load weights
+        checkpoint = torch.load(str(self.model_fpath), map_location=self.device)
+        self._model_type = base.MODEL_TYPE_TACOTRON
+        if "model_type" in checkpoint:
+            self._model_type = checkpoint["model_type"]
+
+        # Build model based on detected model type
         try:
-            self._model = base.init_syn_model(self.model_type, self.device)
+            self._model = base.init_syn_model(self._model_type, self.device)
         except NotImplementedError as e:
             print(str(e))
             return
 
-        self._model.load(self.model_fpath)
+        # Load checkpoint data into model
+        self._model.load(self.model_fpath, optimizer=None, checkpoint=checkpoint)
         self._model.eval()
 
         if self.verbose:
-            print("Loaded synthesizer of model '%s' at path '%s'." % (self.model_type, self.model_fpath.name))
+            print("Loaded synthesizer of model '%s' at path '%s'." % (self._model_type, self.model_fpath.name))
             print("Model has been trained to step %d." % (self._model.state_dict()["step"]))
 
     def synthesize_spectrograms(self, texts: List[str],
@@ -68,6 +74,8 @@ class Synthesizer:
                                 return_alignments=False):
         """
         Synthesizes mel spectrograms from texts and speaker embeddings.
+
+        FIXME: This still needs a switch and generation code between the different model types
 
         :param texts: a list of N text prompts to be synthesized
         :param embeddings: a numpy array or list of speaker embeddings of shape (N, 256) 

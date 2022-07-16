@@ -465,12 +465,14 @@ class Tacotron(nn.Module):
         with open(path, "a") as f:
             print(msg, file=f)
 
-    def load(self, path, optimizer=None):
+    def load(self, path, optimizer=None, checkpoint=None):
         # Use device of model params as location for loaded state
-        device = next(self.parameters()).device
-        checkpoint = torch.load(str(path), map_location=device)
-        self.load_state_dict(checkpoint["model_state"])
+        if checkpoint is None:
+            device = next(self.parameters()).device
+            checkpoint = torch.load(str(path), map_location=device)
 
+        # Load weights
+        self.load_state_dict(checkpoint["model_state"])
         if "optimizer_state" in checkpoint and optimizer is not None:
             optimizer.load_state_dict(checkpoint["optimizer_state"])
 

@@ -72,7 +72,7 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
     wav_dir.mkdir(exist_ok=True)
     mel_output_dir.mkdir(exist_ok=True)
     meta_folder.mkdir(exist_ok=True)
-    
+
     weights_fpath = model_dir.joinpath(run_id).with_suffix(".pt")
 
     # Initialize Accelerator
@@ -83,7 +83,7 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
         print("Checkpoint path: {}".format(weights_fpath))
         print("Loading training data from: {}".format(syn_dir))
         print("Using model: {}".format(model_type))
-    
+
     # Book keeping
     time_window = ValueWindow(100)
     loss_window = ValueWindow(100)
@@ -122,7 +122,7 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
     print("{0} - Loading weights at {1}".format(device, weights_fpath))
     load(model, device, weights_fpath, optimizer)
     print("{0} - Model weights loaded from step {1}".format(device, model.get_step()))
-    
+
     # Initialize the dataset
     dataset = SynthesizerDataset(syn_dir, base.get_model_train_elements(model_type))
 
@@ -181,8 +181,9 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
         model, optimizer, data_loader = accelerator.prepare(model, optimizer, data_loader)
 
         # Iterate over whole dataset for X loops according to schedule
+        # Split training steps by amount of overall batch
         total_samples = len(dataset)
-        overall_batch_size = batch_size * accelerator.state.num_processes # Split training steps by amount of overall batch
+        overall_batch_size = batch_size * accelerator.state.num_processes
         max_step = np.ceil((total_samples * loops) / overall_batch_size).astype(np.int32) + epoch_steps
         training_steps = np.ceil(max_step - current_step).astype(np.int32)
 
@@ -193,7 +194,7 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
         # Do we need to change to the next session?
         if current_step >= max_step:
             # Are there no further sessions than the current one?
-            if i == len(hp_tacotron.tts_schedule) - 1:
+            if i == len(tts_schedule) - 1:
                 # We have completed training. Save the model and exit
                 with accelerator.local_main_process_first():
                     if accelerator.is_local_main_process:
@@ -224,7 +225,6 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
 
         # Training loop
         while current_step < max_step:
-            #for step, (texts, mels, embeds, idx, mel_lens) in enumerate(data_loader, current_step):
             for step, (idx, utterance_ids, texts, text_lens, mels, mel_lens, embeds, durations, attentions, alignments, phoneme_pitchs, phoneme_energies ) in enumerate(data_loader, current_step):
                 current_step = step
                 start_time = time.time()
@@ -247,10 +247,12 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
                     for j, k in enumerate(idx):
                         stop[j, :int(dataset.metadata[k][2]) - 1] = 0
                     # Training step
-                    loss, attention, m2_hat, texts, mels, embeds = tacotron_forward_pass(model, device, texts, mels, embeds, stop)
+                    forward = tacotron_forward_pass(model, device, texts, mels, embeds, stop)
+                    loss, attention, m2_hat, texts, mels, embeds = forward
                 elif model_type == base.MODEL_TYPE_FORWARD_TACOTRON:
                     # Training step
-                    loss, mel_hat, mel_post, pitch_hat, energy_hat, texts, mels, embeds, durations, mel_lens, phoneme_pitchs, phoneme_energies = forward_tacotron_forward_pass(model, device, texts, text_lens, mels, embeds, durations, mel_lens, phoneme_pitchs, phoneme_energies)
+                    forward = forward_tacotron_forward_pass(model, device, texts, text_lens, mels, embeds, durations, mel_lens, phoneme_pitchs, phoneme_energies)
+                    loss, mel_hat, mel_post, pitch_hat, energy_hat, texts, mels, embeds, durations, mel_lens, phoneme_pitchs, phoneme_energies = forward
                 else:
                     raise NotImplementedError("Training not implemented for model of type '%s'. Aborting..." % model_type)
 
@@ -303,57 +305,28 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
                 # Evaluate model to generate samples
                 # Accelerator: Only in main process
                 if accelerator.is_local_main_process:
-                    epoch_eval = hp_tacotron.tts_eval_interval == -1 and step == max_step  # If epoch is done
-                    step_eval = hp_tacotron.tts_eval_interval > 0 and step % hp_tacotron.tts_eval_interval == 0  # Every N steps
+
+                    epoch_eval = 0
+                    step_eval = 0
+                    num_samples = 0
+
+                    if model_type == base.MODEL_TYPE_TACOTRON:
+                        epoch_eval = hp_tacotron.tts_eval_interval == -1 and step == max_step  # If epoch is done
+                        step_eval = hp_tacotron.tts_eval_interval > 0 and step % hp_tacotron.tts_eval_interval == 0  # Every N steps
+                        num_samples = hp_tacotron.tts_eval_num_samples
+                    elif model_type == base.MODEL_TYPE_FORWARD_TACOTRON:
+                        epoch_eval = hp_forward_tacotron.eval_interval == -1 and step == max_step  # If epoch is done
+                        step_eval = hp_forward_tacotron.eval_interval > 0 and step % hp_forward_tacotron.eval_interval == 0  # Every N steps
+                        num_samples = hp_forward_tacotron.eval_num_samples
+
                     if epoch_eval or step_eval:
-                        for sample_idx in range(hp_tacotron.tts_eval_num_samples):
+                        for sample_idx in range(num_samples):
                             # At most, generate samples equal to number in the batch
                             if sample_idx + 1 <= len(texts):
                                 if model_type == base.MODEL_TYPE_TACOTRON:
-                                    # Remove padding from mels using frame length in metadata
-                                    mel_length = int(dataset.metadata[idx[sample_idx]][2])
-                                    mel_prediction = np_now(m2_hat[sample_idx]).T[:mel_length]
-                                    target_spectrogram = np_now(mels[sample_idx]).T[:mel_length]
-                                    attention_len = mel_length // r
-
-                                    eval_tacotron_model(attention=np_now(attention[sample_idx][:, :attention_len]),
-                                                        mel_prediction=mel_prediction,
-                                                        target_spectrogram=target_spectrogram,
-                                                        input_seq=np_now(texts[sample_idx]),
-                                                        step=step,
-                                                        plot_dir=plot_dir,
-                                                        mel_output_dir=mel_output_dir,
-                                                        wav_dir=wav_dir,
-                                                        sample_num=sample_idx + 1,
-                                                        loss=loss)
-
+                                    eval_tacotron(dataset, idx, sample_idx, m2_hat, mels, r, attention, step, texts, plot_dir, mel_output_dir, wav_dir, loss)
                                 elif model_type == base.MODEL_TYPE_FORWARD_TACOTRON:
-                                    mel_length = int(dataset.metadata[idx[sample_idx]][2])
-                                    m1_hat = np_now(mel_hat[sample_idx]).T[:mel_length]
-                                    m2_hat = np_now(mel_post[sample_idx]).T[:mel_length]
-                                    m_target = np_now(mels[sample_idx]).T[:mel_length]
-
-                                    input_seq = texts[sample_idx:(sample_idx + 1), :text_lens[sample_idx]]
-                                    spk_emb = embeds[sample_idx:(sample_idx + 1)]
-                                    pitch = np_now(phoneme_pitchs[sample_idx])
-                                    pitch_gta = np_now(pitch_hat.squeeze()[sample_idx])
-                                    energy = np_now(phoneme_energies[sample_idx])
-                                    energy_gta = np_now(energy_hat.squeeze()[sample_idx])
-
-                                    generate_plots(model,
-                                                   plot_dir,
-                                                   wav_dir,
-                                                   step,
-                                                   sample_idx + 1,
-                                                   input_seq,
-                                                   spk_emb,
-                                                   m1_hat.T,
-                                                   m2_hat.T,
-                                                   m_target.T,
-                                                   pitch,
-                                                   pitch_gta,
-                                                   energy,
-                                                   energy_gta)
+                                    eval_forward_tacotron(model, plot_dir, wav_dir, step, dataset, idx, sample_idx, mel_hat, mel_post, mels, texts, text_lens, embeds, phoneme_pitchs, pitch_hat, phoneme_energies, energy_hat)
 
                 # Break out of loop to update training schedule
                 if step >= max_step:
@@ -368,6 +341,55 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
                 print("Making a backup (step %d)" % current_step)
                 backup_fpath = Path("{}/{}_{}.pt".format(str(weights_fpath.parent), run_id, current_step))
                 save(accelerator, model, backup_fpath, optimizer)
+
+
+def eval_tacotron(dataset, idx, sample_idx, m2_hat, mels, r, attention, step, texts, plot_dir, mel_output_dir, wav_dir, loss):
+    # Remove padding from mels using frame length in metadata
+    mel_length = int(dataset.metadata[idx[sample_idx]][2])
+    mel_prediction = np_now(m2_hat[sample_idx]).T[:mel_length]
+    target_spectrogram = np_now(mels[sample_idx]).T[:mel_length]
+    attention_len = mel_length // r
+
+    eval_tacotron_model(attention=np_now(attention[sample_idx][:, :attention_len]),
+                        mel_prediction=mel_prediction,
+                        target_spectrogram=target_spectrogram,
+                        input_seq=np_now(texts[sample_idx]),
+                        step=step,
+                        plot_dir=plot_dir,
+                        mel_output_dir=mel_output_dir,
+                        wav_dir=wav_dir,
+                        sample_num=sample_idx + 1,
+                        loss=loss)
+
+
+def eval_forward_tacotron(model, plot_dir, wav_dir, step, dataset, idx, sample_idx, mel_hat, mel_post, mels, texts, text_lens, embeds, phoneme_pitchs, pitch_hat, phoneme_energies, energy_hat):
+    mel_length = int(dataset.metadata[idx[sample_idx]][2])
+    m1_hat = np_now(mel_hat[sample_idx]).T[:mel_length]
+    m2_hat = np_now(mel_post[sample_idx]).T[:mel_length]
+    m_target = np_now(mels[sample_idx]).T[:mel_length]
+
+    input_seq = texts[sample_idx:(sample_idx + 1), :text_lens[sample_idx]]
+    spk_emb = embeds[sample_idx:(sample_idx + 1)]
+    pitch = np_now(phoneme_pitchs[sample_idx])
+    pitch_gta = np_now(pitch_hat.squeeze()[sample_idx])
+    energy = np_now(phoneme_energies[sample_idx])
+    energy_gta = np_now(energy_hat.squeeze()[sample_idx])
+
+    generate_plots(model,
+                   plot_dir,
+                   wav_dir,
+                   step,
+                   sample_idx + 1,
+                   input_seq,
+                   spk_emb,
+                   m1_hat.T,
+                   m2_hat.T,
+                   m_target.T,
+                   pitch,
+                   pitch_gta,
+                   energy,
+                   energy_gta)
+
 
 def tacotron_forward_pass(model, device, texts, mels, embeds, stop):
     # Move data to device
@@ -387,6 +409,7 @@ def tacotron_forward_pass(model, device, texts, mels, embeds, stop):
     loss = m1_loss + m2_loss + stop_loss
 
     return loss, attention, m2_hat, texts, mels, embeds
+
 
 def forward_tacotron_forward_pass(model, device, texts, text_lens, mels, embeds, durations, mel_lens, phoneme_pitchs, phoneme_energies):
     # Move data to device
@@ -427,24 +450,38 @@ def forward_tacotron_forward_pass(model, device, texts, text_lens, mels, embeds,
 
     return loss, mel_hat, mel_post, pitch_hat, energy_hat, texts, mels, embeds, durations, mel_lens, phoneme_pitchs, phoneme_energies
 
+
 def save(accelerator, model, path, optimizer=None):
     # Unwrap Model
     model = accelerator.unwrap_model(model)
+
+    # Get model type
+    model_type = base.get_model_type(model)
 
     # Save
     if optimizer is not None:
         torch.save({
             "model_state": model.state_dict(),
             "optimizer_state": optimizer.state_dict(),
+            "model_type": model_type,
         }, str(path))
     else:
         torch.save({
             "model_state": model.state_dict(),
+            "model_type": model_type,
         }, str(path))
+
 
 def load(model, device, path, optimizer=None):
     # Use device of model params as location for loaded state
     checkpoint = torch.load(str(path), map_location=device)
+
+    # Load and print model type if detected.
+    # Here this is mainly for debug reasons; when training you'll need to provide
+    # the correct model type anyway, esp. when training initially.
+    if "model_type" in checkpoint:
+        model_type = checkpoint["model_type"]
+        print("Detected model type: %s" % model_type)
 
     # Load model state
     model.load_state_dict(checkpoint["model_state"])
@@ -452,6 +489,7 @@ def load(model, device, path, optimizer=None):
     # Load optimizer state
     if "optimizer_state" in checkpoint and optimizer is not None:
         optimizer.load_state_dict(checkpoint["optimizer_state"])
+
 
 def eval_tacotron_model(attention, mel_prediction, target_spectrogram, input_seq, step,
                         plot_dir, mel_output_dir, wav_dir, sample_num, loss):
@@ -480,6 +518,7 @@ def eval_tacotron_model(attention, mel_prediction, target_spectrogram, input_seq
                      target_spectrogram=target_spectrogram,
                      max_len=target_spectrogram.size // sp.num_mels)
     print("Input at step {}: {}".format(step, sequence_to_text(input_seq)))
+
 
 def generate_plots(model, plot_dir, wav_dir, step, sample_num, input_seq, spk_emb, m1_hat, m2_hat, m_target, pitch, pitch_gta, energy, energy_gta):
     # Plot all figures
@@ -531,23 +570,3 @@ def generate_plots(model, plot_dir, wav_dir, step, sample_num, input_seq, spk_em
     wav = audio.inv_mel_spectrogram(m2_hat)
     wav_fpath = wav_dir.joinpath("step-{}-wave-from-mel_sample_{}_generated.wav".format(step, sample_num))
     audio.save_wav(wav, str(wav_fpath), sr=sp.sample_rate)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
