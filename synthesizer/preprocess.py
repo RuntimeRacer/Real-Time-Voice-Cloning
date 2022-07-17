@@ -431,6 +431,7 @@ def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path,
             utterances.extend([(m[0],m[3].strip()) for m in metadata if int(m[2])])
 
     # Init Accelerator
+    torch.multiprocessing.set_start_method('spawn', force=True)
     accelerator = Accelerator()
 
     # Split dataset for the current process
@@ -446,7 +447,7 @@ def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path,
     # for utterance in utterances:
     #     create_alignments(utterance, synthesizer_root=synthesizer_root, synthesizer_model_fpath=synthesizer_model_fpath)
     func = partial(create_alignments, accelerator=accelerator, synthesizer_root=synthesizer_root, synthesizer_model_fpath=synthesizer_model_fpath)
-    job = Pool(n_processes).imap(func, utterances)
+    job = torch.multiprocessing.Pool(n_processes).imap(func, utterances)
     list(tqdm(job, "Alignments", len(utterances), unit="utterances", miniters=1))
 
 def get_attention_score(att, mel_lens, r=1):
