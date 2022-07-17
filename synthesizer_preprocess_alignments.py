@@ -1,4 +1,3 @@
-from multiprocessing import set_start_method
 from synthesizer.preprocess import create_align_features
 from utils.argutils import print_args
 from pathlib import Path
@@ -9,7 +8,6 @@ import argparse
 # This requires a default tacotron trained down to reduction factor 1
 
 if __name__ == "__main__":
-    set_start_method("spawn") # required for proper CUDA initialization across sub processes
     parser = argparse.ArgumentParser(
         description=\
             "Calculate alignment scores and for the synthesizer based on output of the .",
