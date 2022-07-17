@@ -326,7 +326,7 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
                                 if model_type == base.MODEL_TYPE_TACOTRON:
                                     eval_tacotron(dataset, idx, sample_idx, m2_hat, mels, r, attention, step, texts, plot_dir, mel_output_dir, wav_dir, loss)
                                 elif model_type == base.MODEL_TYPE_FORWARD_TACOTRON:
-                                    eval_forward_tacotron(model, plot_dir, wav_dir, step, dataset, idx, sample_idx, mel_hat, mel_post, mels, texts, text_lens, embeds, phoneme_pitchs, pitch_hat, phoneme_energies, energy_hat)
+                                    eval_forward_tacotron(accelerator, model, plot_dir, wav_dir, step, dataset, idx, sample_idx, mel_hat, mel_post, mels, texts, text_lens, embeds, phoneme_pitchs, pitch_hat, phoneme_energies, energy_hat)
 
                 # Break out of loop to update training schedule
                 if step >= max_step:
@@ -362,7 +362,10 @@ def eval_tacotron(dataset, idx, sample_idx, m2_hat, mels, r, attention, step, te
                         loss=loss)
 
 
-def eval_forward_tacotron(model, plot_dir, wav_dir, step, dataset, idx, sample_idx, mel_hat, mel_post, mels, texts, text_lens, embeds, phoneme_pitchs, pitch_hat, phoneme_energies, energy_hat):
+def eval_forward_tacotron(accelerator, model, plot_dir, wav_dir, step, dataset, idx, sample_idx, mel_hat, mel_post, mels, texts, text_lens, embeds, phoneme_pitchs, pitch_hat, phoneme_energies, energy_hat):
+    # Unwrap Model
+    model = accelerator.unwrap_model(model)
+
     mel_length = int(dataset.metadata[idx[sample_idx]][2])
     m1_hat = np_now(mel_hat[sample_idx]).T[:mel_length]
     m2_hat = np_now(mel_post[sample_idx]).T[:mel_length]
