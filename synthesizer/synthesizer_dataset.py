@@ -39,8 +39,6 @@ class SynthesizerDataset(Dataset):
 
         # Get utterance ID
         utterance_id = self.samples_fnames[index]
-        utterance_id_seq = text_to_sequence_ascii(utterance_id)
-        utterance_id_seq = np.asarray(utterance_id_seq).astype(np.int32)
         # Get the text and clean it
         text = text_to_sequence(self.samples_texts[index], preprocessing.cleaner_names)
         # Convert the list returned by text_to_sequence to a numpy array
@@ -86,7 +84,6 @@ class SynthesizerDataset(Dataset):
             phoneme_energy = np.load(phoneme_energy_path)
 
         return index, \
-               utterance_id_seq, \
                text, \
                mel.astype(np.float32), \
                embed.astype(np.float32), \
@@ -120,21 +117,17 @@ def collate_synthesizer(batch, r):
 
     # Index (for vocoder preprocessing)
     indices = [x[0] for x in batch]
-
-    # Utterance ID (plain file names)
-    utterance_ids = [x[1] for x in batch]
-    utterance_ids = np.stack(utterance_ids)
     
     # Text
-    x_lens = [len(x[2]) for x in batch]
+    x_lens = [len(x[1]) for x in batch]
     max_x_len = max(x_lens)
     x_lens = np.stack(x_lens)
 
-    chars = [pad1d(x[2], max_x_len) for x in batch]
+    chars = [pad1d(x[1], max_x_len) for x in batch]
     chars = np.stack(chars)
 
     # Mel spectrogram
-    spec_lens = [x[3].shape[-1] for x in batch]
+    spec_lens = [x[2].shape[-1] for x in batch]
     max_spec_len = max(spec_lens) + 1 
     if max_spec_len % r != 0:
         max_spec_len += r - max_spec_len % r 
@@ -146,33 +139,32 @@ def collate_synthesizer(batch, r):
     else:
         mel_pad_value = 0
 
-    mel = [pad2d(x[3], max_spec_len, pad_value=mel_pad_value) for x in batch]
+    mel = [pad2d(x[2], max_spec_len, pad_value=mel_pad_value) for x in batch]
     mel = np.stack(mel)
 
     # Speaker embedding (SV2TTS)
-    embeds = np.array([x[4] for x in batch])
+    embeds = np.array([x[3] for x in batch])
     # Durations
-    duration_lens = [len(x[5]) for x in batch]
+    duration_lens = [len(x[4]) for x in batch]
     max_duration_len = max(duration_lens)
-    durations = [pad1d(x[5], max_duration_len) for x in batch]
+    durations = [pad1d(x[4], max_duration_len) for x in batch]
     durations = np.stack(durations)
     # Attentions
-    attentions = np.array([x[6] for x in batch])
+    attentions = np.array([x[5] for x in batch])
     # Alignments
-    alignments = np.array([x[7] for x in batch])
+    alignments = np.array([x[6] for x in batch])
     # Phoneme Pitch
-    pitch_lens = [len(x[8]) for x in batch]
+    pitch_lens = [len(x[7]) for x in batch]
     max_pitch_len = max(pitch_lens)
-    phoneme_pitch = [pad1d(x[8], max_pitch_len) for x in batch]
+    phoneme_pitch = [pad1d(x[7], max_pitch_len) for x in batch]
     phoneme_pitch = np.stack(phoneme_pitch)
     # Phoneme Energy
-    energy_lens = [len(x[9]) for x in batch]
+    energy_lens = [len(x[8]) for x in batch]
     max_energy_len = max(energy_lens)
-    phoneme_energy = [pad1d(x[9], max_energy_len) for x in batch]
+    phoneme_energy = [pad1d(x[8], max_energy_len) for x in batch]
     phoneme_energy = np.stack(phoneme_energy)
 
     # Convert all to tensor
-    utterance_ids = torch.tensor(utterance_ids).long()
     chars = torch.tensor(chars).long()
     x_lens = torch.tensor(x_lens).long()
     mel = torch.tensor(mel)    
@@ -184,7 +176,7 @@ def collate_synthesizer(batch, r):
     phoneme_pitch = torch.tensor(phoneme_pitch)
     phoneme_energy = torch.tensor(phoneme_energy)
 
-    return indices, utterance_ids, chars, x_lens, mel, spec_lens, embeds, durations, attentions, alignments, phoneme_pitch, phoneme_energy
+    return indices, chars, x_lens, mel, spec_lens, embeds, durations, attentions, alignments, phoneme_pitch, phoneme_energy
 
 def pad1d(x, max_len, pad_value=0):
     return np.pad(x, (0, max_len - len(x)), mode="constant", constant_values=pad_value)

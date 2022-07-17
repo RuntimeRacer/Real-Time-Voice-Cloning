@@ -225,7 +225,7 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
 
         # Training loop
         while current_step < max_step:
-            for step, (idx, utterance_ids, texts, text_lens, mels, mel_lens, embeds, durations, attentions, alignments, phoneme_pitchs, phoneme_energies ) in enumerate(data_loader, current_step):
+            for step, (idx, texts, text_lens, mels, mel_lens, embeds, durations, attentions, alignments, phoneme_pitchs, phoneme_energies ) in enumerate(data_loader, current_step):
                 current_step = step
                 start_time = time.time()
                 model.train() # TODO: Verify this works as intended
