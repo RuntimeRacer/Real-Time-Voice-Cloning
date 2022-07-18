@@ -556,6 +556,9 @@ def generate_plots(model, plot_dir, wav_dir, step, sample_num, input_seq, spk_em
     mod_variations = [0.5, 1., 1.5]
     for modifier_pitch in mod_variations:
         for modifier_energy in mod_variations:
+            # Energy modifier is weighted x2 because it has lower hearable influence
+            modifier_energy *= modifier_energy
+
             # build modifier functions based on input
             pitch_func = lambda x: x * modifier_pitch
             energy_func = lambda x: x * modifier_energy
