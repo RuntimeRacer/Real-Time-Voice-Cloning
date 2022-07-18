@@ -534,42 +534,50 @@ def generate_plots(model, plot_dir, wav_dir, step, sample_num, input_seq, spk_em
     energy_gta_fig = plot_pitch(energy_gta)
 
     # Save plots
-    save_figure(m1_hat_fig, plot_dir.joinpath("step-{}-mel-spectrogram_sample_{}_gta_linear".format(step, sample_num)))
-    save_figure(m2_hat_fig, plot_dir.joinpath("step-{}-mel-spectrogram_sample_{}_gta_postnet".format(step, sample_num)))
-    save_figure(m_target_fig, plot_dir.joinpath("step-{}-mel-spectrogram_sample_{}_target".format(step, sample_num)))
-    save_figure(pitch_fig, plot_dir.joinpath("step-{}-pitch_sample_{}_target".format(step, sample_num)))
-    save_figure(pitch_gta_fig, plot_dir.joinpath("step-{}-pitch_sample_{}_gta".format(step, sample_num)))
-    save_figure(energy_fig, plot_dir.joinpath("step-{}-energy_sample_{}_target".format(step, sample_num)))
-    save_figure(energy_gta_fig, plot_dir.joinpath("step-{}-energy_sample_{}_gta".format(step, sample_num)))
+    save_figure(m1_hat_fig, plot_dir.joinpath("step-{}-sample_{}_mel-spectrogram_gta_linear".format(step, sample_num)))
+    save_figure(m2_hat_fig, plot_dir.joinpath("step-{}-sample_{}_mel-spectrogram_gta_postnet".format(step, sample_num)))
+    save_figure(m_target_fig, plot_dir.joinpath("step-{}-sample_{}_mel-spectrogram_target".format(step, sample_num)))
+    save_figure(pitch_fig, plot_dir.joinpath("step-{}-sample_{}_pitch_target".format(step, sample_num)))
+    save_figure(pitch_gta_fig, plot_dir.joinpath("step-{}-sample_{}_pitch_gta".format(step, sample_num)))
+    save_figure(energy_fig, plot_dir.joinpath("step-{}-sample_{}_energy_target".format(step, sample_num)))
+    save_figure(energy_gta_fig, plot_dir.joinpath("step-{}-sample_{}_energy_gta".format(step, sample_num)))
 
     # Save target wav for comparison
     target_wav = audio.inv_mel_spectrogram(m_target)
-    target_wav_fpath = wav_dir.joinpath("step-{}-wave-from-mel_sample_{}_target.wav".format(step, sample_num))
+    target_wav_fpath = wav_dir.joinpath("step-{}-sample_{}_wave-from-mel_target.wav".format(step, sample_num))
     audio.save_wav(target_wav, str(target_wav_fpath), sr=sp.sample_rate)
 
     # save griffin lim inverted wav for debug (mel -> wav)
     wav = audio.inv_mel_spectrogram(m2_hat)
-    wav_fpath = wav_dir.joinpath("step-{}-wave-from-mel_sample_{}.wav".format(step, sample_num))
+    wav_fpath = wav_dir.joinpath("step-{}-sample_{}_wave-from-mel.wav".format(step, sample_num))
     audio.save_wav(wav, str(wav_fpath), sr=sp.sample_rate)
 
-    # Generate for speaker embedding and sequence - TODO: Not sure how this differs from the previous prediction actually
-    mel, mel_post, dur_hat, pitch_hat, energy_hat = model.generate(input_seq, spk_emb)
-    m1_hat = np_now(mel.squeeze())
-    m2_hat = np_now(mel_post.squeeze())
+    # Generate for speaker embedding, sequence as well as different energy and pitch variations
+    mod_variations = [-1, 0, 1]
+    for modifier_pitch in mod_variations:
+        for modifier_energy in mod_variations:
+            # build modifier functions based on input
+            pitch_func = lambda x: x * modifier_pitch
+            energy_func = lambda x: x * modifier_energy
 
-    # Plot figures for generated
-    m1_hat_fig = plot_mel(m1_hat)
-    m2_hat_fig = plot_mel(m2_hat)
-    pitch_gen_fig = plot_pitch(np_now(pitch_hat.squeeze()))
-    energy_gen_fig = plot_pitch(np_now(energy_hat.squeeze()))
 
-    # Save plots
-    save_figure(m1_hat_fig, plot_dir.joinpath("step-{}-mel-spectrogram_sample_{}_gen_linear".format(step, sample_num)))
-    save_figure(m2_hat_fig, plot_dir.joinpath("step-{}-mel-spectrogram_sample_{}_gen_postnet".format(step, sample_num)))
-    save_figure(pitch_gen_fig, plot_dir.joinpath("step-{}-pitch_sample_{}_gen".format(step, sample_num)))
-    save_figure(energy_gen_fig, plot_dir.joinpath("step-{}-energy_sample_{}_gen".format(step, sample_num)))
+            mel, mel_post, dur_hat, pitch_hat, energy_hat = model.generate(x=input_seq, spk_emb=spk_emb, pitch_func=pitch_func, energy_func=energy_func)
+            m1_hat = np_now(mel.squeeze())
+            m2_hat = np_now(mel_post.squeeze())
 
-    # save griffin lim inverted generated wav for debug (mel -> wav)
-    wav = audio.inv_mel_spectrogram(m2_hat)
-    wav_fpath = wav_dir.joinpath("step-{}-wave-from-mel_sample_{}_generated.wav".format(step, sample_num))
-    audio.save_wav(wav, str(wav_fpath), sr=sp.sample_rate)
+            # Plot figures for generated
+            m1_hat_fig = plot_mel(m1_hat)
+            m2_hat_fig = plot_mel(m2_hat)
+            pitch_gen_fig = plot_pitch(np_now(pitch_hat.squeeze()))
+            energy_gen_fig = plot_pitch(np_now(energy_hat.squeeze()))
+
+            # Save plots
+            save_figure(m1_hat_fig, plot_dir.joinpath("step-{}-sample_{}_mel-spectrogram_gen_linear-pitch_{}-energy_{}".format(step, sample_num, modifier_pitch, modifier_energy)))
+            save_figure(m2_hat_fig, plot_dir.joinpath("step-{}-sample_{}_mel-spectrogram_gen_postnet-pitch_{}-energy_{}".format(step, sample_num, modifier_pitch, modifier_energy)))
+            save_figure(pitch_gen_fig, plot_dir.joinpath("step-{}-sample_{}_pitch_gen-pitch_{}-energy_{}".format(step, sample_num, modifier_pitch, modifier_energy)))
+            save_figure(energy_gen_fig, plot_dir.joinpath("step-{}-sample_{}_energy_gen-pitch_{}-energy_{}".format(step, sample_num, modifier_pitch, modifier_energy)))
+
+            # save griffin lim inverted generated wav for debug (mel -> wav)
+            wav = audio.inv_mel_spectrogram(m2_hat)
+            wav_fpath = wav_dir.joinpath("step-{}-sample_{}_wave-from-mel_generated-pitch_{}-energy_{}.wav".format(step, sample_num, modifier_pitch, modifier_energy))
+            audio.save_wav(wav, str(wav_fpath), sr=sp.sample_rate)
