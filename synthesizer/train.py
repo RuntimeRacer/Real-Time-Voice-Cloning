@@ -553,7 +553,7 @@ def generate_plots(model, plot_dir, wav_dir, step, sample_num, input_seq, spk_em
     audio.save_wav(wav, str(wav_fpath), sr=sp.sample_rate)
 
     # Generate for speaker embedding, sequence as well as different energy and pitch variations
-    mod_variations = [-1, 0, 1]
+    mod_variations = [0.5, 1., 1.5]
     for modifier_pitch in mod_variations:
         for modifier_energy in mod_variations:
             # build modifier functions based on input
@@ -572,12 +572,12 @@ def generate_plots(model, plot_dir, wav_dir, step, sample_num, input_seq, spk_em
             energy_gen_fig = plot_pitch(np_now(energy_hat.squeeze()))
 
             # Save plots
-            save_figure(m1_hat_fig, plot_dir.joinpath("step-{}-sample_{}_mel-spectrogram_gen_linear-pitch_{}-energy_{}".format(step, sample_num, modifier_pitch, modifier_energy)))
-            save_figure(m2_hat_fig, plot_dir.joinpath("step-{}-sample_{}_mel-spectrogram_gen_postnet-pitch_{}-energy_{}".format(step, sample_num, modifier_pitch, modifier_energy)))
-            save_figure(pitch_gen_fig, plot_dir.joinpath("step-{}-sample_{}_pitch_gen-pitch_{}-energy_{}".format(step, sample_num, modifier_pitch, modifier_energy)))
-            save_figure(energy_gen_fig, plot_dir.joinpath("step-{}-sample_{}_energy_gen-pitch_{}-energy_{}".format(step, sample_num, modifier_pitch, modifier_energy)))
+            save_figure(m1_hat_fig, plot_dir.joinpath("step-{}-sample_{}_mel-spectrogram_gen_linear-pitch_{:.1f}-energy_{:.1f}".format(step, sample_num, modifier_pitch, modifier_energy)))
+            save_figure(m2_hat_fig, plot_dir.joinpath("step-{}-sample_{}_mel-spectrogram_gen_postnet-pitch_{:.1f}-energy_{:.1f}".format(step, sample_num, modifier_pitch, modifier_energy)))
+            save_figure(pitch_gen_fig, plot_dir.joinpath("step-{}-sample_{}_pitch_gen-pitch_{:.1f}-energy_{:.1f}".format(step, sample_num, modifier_pitch, modifier_energy)))
+            save_figure(energy_gen_fig, plot_dir.joinpath("step-{}-sample_{}_energy_gen-pitch_{:.1f}-energy_{:.1f}".format(step, sample_num, modifier_pitch, modifier_energy)))
 
             # save griffin lim inverted generated wav for debug (mel -> wav)
             wav = audio.inv_mel_spectrogram(m2_hat)
-            wav_fpath = wav_dir.joinpath("step-{}-sample_{}_wave-from-mel_generated-pitch_{}-energy_{}.wav".format(step, sample_num, modifier_pitch, modifier_energy))
+            wav_fpath = wav_dir.joinpath("step-{}-sample_{}_wave-from-mel_generated-pitch_{:.1f}-energy_{:.1f}.wav".format(step, sample_num, modifier_pitch, modifier_energy))
             audio.save_wav(wav, str(wav_fpath), sr=sp.sample_rate)
