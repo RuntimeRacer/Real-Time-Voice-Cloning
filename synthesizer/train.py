@@ -561,7 +561,7 @@ def generate_plots(model, plot_dir, wav_dir, step, sample_num, input_seq, spk_em
             energy_func = lambda x: x * modifier_energy
 
 
-            mel, mel_post, dur_hat, pitch_hat, energy_hat = model.generate(x=input_seq, spk_emb=spk_emb, pitch_func=pitch_func, energy_func=energy_func)
+            mel, mel_post, dur_hat, pitch_hat, energy_hat = model.generate(x=input_seq, spk_emb=spk_emb, pitch_function=pitch_func, energy_function=energy_func)
             m1_hat = np_now(mel.squeeze())
             m2_hat = np_now(mel_post.squeeze())
 
