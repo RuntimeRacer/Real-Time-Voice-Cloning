@@ -5,6 +5,7 @@ from PyQt5.QtCore import Qt, QStringListModel
 from PyQt5.QtWidgets import *
 from encoder.inference import plot_embedding_as_heatmap
 from toolbox.utterance import Utterance
+from utils.modelutils import model_files_missing
 from pathlib import Path
 from typing import List, Set
 import sounddevice as sd
@@ -339,20 +340,27 @@ class UI(QDialog):
         # Encoder
         encoder_fpaths = list(encoder_models_dir.glob("*.pt"))
         if len(encoder_fpaths) == 0:
-            raise Exception("No encoder models found in %s" % encoder_models_dir)
-        encoder_fpaths.sort()
-        self.repopulate_box(self.encoder_box, [(f.stem, f) for f in encoder_fpaths])
+            #raise Exception("No encoder models found in %s" % encoder_models_dir)
+            model_files_missing("Encoder")
+        else:
+            encoder_fpaths.sort()
+            self.repopulate_box(self.encoder_box, [(f.stem, f) for f in encoder_fpaths])
         
         # Synthesizer
         synthesizer_fpaths = list(synthesizer_models_dir.glob("**/*.pt"))
         if len(synthesizer_fpaths) == 0:
-            raise Exception("No synthesizer models found in %s" % synthesizer_models_dir)
-        synthesizer_fpaths.sort()
-        self.repopulate_box(self.synthesizer_box, [(f.stem, f) for f in synthesizer_fpaths])
+            #raise Exception("No synthesizer models found in %s" % synthesizer_models_dir)
+            model_files_missing("Synthesizer")
+        else:
+            synthesizer_fpaths.sort()
+            self.repopulate_box(self.synthesizer_box, [(f.stem, f) for f in synthesizer_fpaths])
 
         # Vocoder
         vocoder_fpaths = list(vocoder_models_dir.glob("**/*.pt"))
-        vocoder_fpaths.sort()
+        if len(vocoder_fpaths) == 0:
+            model_files_missing("Vocoder")
+        else:
+            vocoder_fpaths.sort()
         vocoder_items = [(f.stem, f) for f in vocoder_fpaths] + [("Griffin-Lim", None)]
         self.repopulate_box(self.vocoder_box, vocoder_items)
         
@@ -456,7 +464,7 @@ class UI(QDialog):
         
         # Generation
         gen_layout = QVBoxLayout()
-        root_layout.addLayout(gen_layout, 0, 2, 1, 2)
+        root_layout.addLayout(gen_layout, 0, 2, 2, 2)
         
         # Projections
         self.projections_layout = QVBoxLayout()
@@ -594,18 +602,35 @@ class UI(QDialog):
         self.random_seed_checkbox.setToolTip("When checked, makes the synthesizer and vocoder deterministic.")
         layout_seed.addWidget(self.random_seed_checkbox, 0, 0)
         self.seed_textbox = QLineEdit()
-        self.seed_textbox.setMaximumWidth(80)
+        self.seed_textbox.setMaximumWidth(100)
         layout_seed.addWidget(self.seed_textbox, 0, 1)
         self.autotune_button = QPushButton("Seed Autotune")
         self.autotune_button.setToolTip("Performs Seed Autotuning for currently selected synthesizer and vocoder."
-            "Will try to find a random seed which generates outputs which have the lowest loss towards the embed."
-            "Recommended to use Griffin-Lim for this.")
+            " Will try to find a random seed which generates outputs which have the lowest loss towards the embed."
+            " Recommended to use Griffin-Lim for performance reasons.")
         layout_seed.addWidget(self.autotune_button, 0, 2)
         self.trim_silences_checkbox = QCheckBox("Enhance vocoder output")
         self.trim_silences_checkbox.setToolTip("When checked, trims excess silence in vocoder output."
             " This feature requires `webrtcvad` to be installed.")
         layout_seed.addWidget(self.trim_silences_checkbox, 0, 3, 1, 3)
         gen_layout.addLayout(layout_seed)
+
+        # Forward Tacotron tuning functions
+        layout_tune_forward = QGridLayout()
+        layout_tune_forward.addWidget(QLabel("<b>Forward Tacotron tuning:</b>"), 0, 0, 1, 4)
+        layout_tune_forward.addWidget(QLabel("Duration Function:"), 1, 0, 1, 1)
+        self.duration_function_textbox = QLineEdit()
+        self.duration_function_textbox.setText("lambda x: x * 1")
+        layout_tune_forward.addWidget(self.duration_function_textbox, 1, 1, 1, 3)
+        layout_tune_forward.addWidget(QLabel("Pitch Function:"), 2, 0, 1, 1)
+        self.pitch_function_textbox = QLineEdit()
+        self.pitch_function_textbox.setText("lambda x: x * 1")
+        layout_tune_forward.addWidget(self.pitch_function_textbox, 2, 1, 1, 3)
+        layout_tune_forward.addWidget(QLabel("Energy Function:"), 3, 0, 1, 1)
+        self.energy_function_textbox = QLineEdit()
+        self.energy_function_textbox.setText("lambda x: x * 1")
+        layout_tune_forward.addWidget(self.energy_function_textbox, 3, 1, 1, 3)
+        gen_layout.addLayout(layout_tune_forward)
 
         self.loading_bar = QProgressBar()
         gen_layout.addWidget(self.loading_bar)
