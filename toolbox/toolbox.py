@@ -1,6 +1,7 @@
 from toolbox.ui import UI
 from config.hparams import sp
 from encoder import inference as encoder
+from synthesizer.models import base
 from synthesizer.inference import Synthesizer
 from vocoder import inference as vocoder
 from pathlib import Path
@@ -238,13 +239,25 @@ class Toolbox:
         if seed is not None:
             torch.manual_seed(seed)
 
-        # Synthesize the spectrogram
+        # Init Synthesizer
         if self.synthesizer is None or seed is not None:
             self.init_synthesizer()
+        self.synthesizer.load()
 
+        # Synthesize the spectrogram
         texts = self.ui.text_prompt.toPlainText().split("\n")
         embed = self.ui.selected_utterance.embed
         embeds = [embed] * len(texts)
+
+        # Params for advanced model
+        speed_modifier = 1.0
+        pitch_function = lambda x: x
+        energy_function = lambda x: x
+        if self.synthesizer.get_model_type() == base.MODEL_TYPE_FORWARD_TACOTRON:
+            speed_modifier = float(self.ui.duration_function_textbox.text())
+            pitch_function = eval(self.ui.pitch_function_textbox.text())
+            energy_function = eval(self.ui.energy_function_textbox.text())
+
         specs = self.synthesizer.synthesize_spectrograms(texts, embeds)
         breaks = [spec.shape[1] for spec in specs]
         spec = np.concatenate(specs, axis=1)
@@ -366,8 +379,7 @@ class Toolbox:
         self.ui.log("Loading the synthesizer %s... " % model_fpath)
         self.ui.set_loading(1)
         start = timer()
-        self.synthesizer = Synthesizer(model_type='tacotron',
-                                       model_fpath=model_fpath)  # FIXME: Selector for model type / autodetect in synthesizer
+        self.synthesizer = Synthesizer(model_fpath=model_fpath)
         self.ui.log("Done (%dms)." % int(1000 * (timer() - start)), "append")
         self.ui.set_loading(0)
 

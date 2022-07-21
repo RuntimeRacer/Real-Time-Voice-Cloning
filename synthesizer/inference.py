@@ -41,6 +41,12 @@ class Synthesizer:
         Whether the model is loaded in memory.
         """
         return self._model is not None
+
+    def get_model_type(self):
+        """
+        Get the model type
+        """
+        return self._model_type
     
     def load(self):
         """
@@ -71,17 +77,21 @@ class Synthesizer:
 
     def synthesize_spectrograms(self, texts: List[str],
                                 embeddings: Union[np.ndarray, List[np.ndarray]],
-                                return_alignments=False):
+                                return_alignments=False,
+                                speed_modifier=1.0,
+                                pitch_function=None,
+                                energy_function=None):
         """
         Synthesizes mel spectrograms from texts and speaker embeddings.
-
-        FIXME: This still needs a switch and generation code between the different model types
 
         :param texts: a list of N text prompts to be synthesized
         :param embeddings: a numpy array or list of speaker embeddings of shape (N, 256) 
         :param return_alignments: if True, a matrix representing the alignments between the 
         characters
         and each decoder output step will be returned for each spectrogram
+        :param speed_modifier: For advanced models; modifies speed of speech.
+        :param pitch_function: For advanced models; modifies pitch of speech.
+        :param energy_function: For advanced models; modifies energy of speech.
         :return: a list of N melspectrograms as numpy arrays of shape (80, Mi), where Mi is the 
         sequence length of spectrogram i, and possibly the alignments.
         """
@@ -92,8 +102,14 @@ class Synthesizer:
             # Print some info about the model when it is loaded            
             tts_k = self._model.get_step() // 1000
 
-            simple_table([("Tacotron", str(tts_k) + "k"),
-                        ("r", self._model.r)])
+            if self.get_model_type() == base.MODEL_TYPE_TACOTRON:
+                simple_table([("Tacotron",
+                               str(tts_k) + "k"),
+                              ("r", self._model.r)])
+            elif self.get_model_type() == base.MODEL_TYPE_FORWARD_TACOTRON:
+                simple_table([("Forward Tacotron",
+                               str(tts_k) + "k"),
+                              ("r", self._model.r)])
 
         # Preprocess text inputs
         inputs = [text_to_sequence(text.strip(), preprocessing.cleaner_names) for text in texts]
@@ -125,13 +141,19 @@ class Synthesizer:
             speaker_embeddings = torch.tensor(speaker_embeds).float().to(self.device)
 
             # Inference
-            _, mels, alignments = self._model.generate(chars, speaker_embeddings)
-            mels = mels.detach().cpu().numpy()
-            for m in mels:
-                # Trim silence from end of each spectrogram
-                while np.max(m[:, -1]) < hp_tacotron.stop_threshold:
-                    m = m[:, :-1]
-                specs.append(m)
+            if self._model_type == base.MODEL_TYPE_TACOTRON:
+                _, mels, alignments = self._model.generate(chars, speaker_embeddings)
+                mels = mels.detach().cpu().numpy()
+                for m in mels:
+                    # Trim silence from end of each spectrogram
+                    while np.max(m[:, -1]) < hp_tacotron.stop_threshold:
+                        m = m[:, :-1]
+                    specs.append(m)
+            elif self._model_type == base.MODEL_TYPE_FORWARD_TACOTRON:
+                _, mels, _, _, _ = self._model.generate(chars, speaker_embeddings, speed_modifier, pitch_function, energy_function)
+                mels = mels.detach().cpu().numpy()
+                for m in mels:
+                    specs.append(m)
 
         if self.verbose:
             print("\n\nDone.\n")

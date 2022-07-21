@@ -618,9 +618,9 @@ class UI(QDialog):
         # Forward Tacotron tuning functions
         layout_tune_forward = QGridLayout()
         layout_tune_forward.addWidget(QLabel("<b>Forward Tacotron tuning:</b>"), 0, 0, 1, 4)
-        layout_tune_forward.addWidget(QLabel("Duration Function:"), 1, 0, 1, 1)
+        layout_tune_forward.addWidget(QLabel("Speed Modifier:"), 1, 0, 1, 1)
         self.duration_function_textbox = QLineEdit()
-        self.duration_function_textbox.setText("lambda x: x * 1")
+        self.duration_function_textbox.setText("1.0")
         layout_tune_forward.addWidget(self.duration_function_textbox, 1, 1, 1, 3)
         layout_tune_forward.addWidget(QLabel("Pitch Function:"), 2, 0, 1, 1)
         self.pitch_function_textbox = QLineEdit()
