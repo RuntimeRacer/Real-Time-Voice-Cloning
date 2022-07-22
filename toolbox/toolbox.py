@@ -258,7 +258,7 @@ class Toolbox:
             pitch_function = eval(self.ui.pitch_function_textbox.text())
             energy_function = eval(self.ui.energy_function_textbox.text())
 
-        specs = self.synthesizer.synthesize_spectrograms(texts, embeds)
+        specs = self.synthesizer.synthesize_spectrograms(texts=texts, embeddings=embeds, speed_modifier=speed_modifier, pitch_function=pitch_function, energy_function=energy_function)
         breaks = [spec.shape[1] for spec in specs]
         spec = np.concatenate(specs, axis=1)
 

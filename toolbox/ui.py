@@ -464,7 +464,7 @@ class UI(QDialog):
         
         # Generation
         gen_layout = QVBoxLayout()
-        root_layout.addLayout(gen_layout, 0, 2, 2, 2)
+        root_layout.addLayout(gen_layout, 0, 2, 1, 2)
         
         # Projections
         self.projections_layout = QVBoxLayout()
