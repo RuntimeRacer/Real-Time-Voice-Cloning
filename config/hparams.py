@@ -188,13 +188,13 @@ forward_tacotron = HParams(
     # (https://markkhoffmann.medium.com/exploring-stochastic-gradient-descent-with-restarts-sgdr-fa206c38a74e)
     # init_lr    = learning rate at the begin of the epoch
     # end_lr     = learning rate at the end of the epoch
-    tts_schedule=[(1, 16, 1e-3, 1e-6),
-                  (2, 24, 1e-3, 1e-6),
-                  (4, 32, 5e-4, 5e-7),
-                  (8, 40, 2e-4, 5e-7),
-                  (16, 48, 1e-4, 1e-7),
-                  (16, 48, 5e-5, 5e-8),
-                  (16, 48, 1e-5, 1e-8)],
+    tts_schedule=[(1, 16, 1e-3, 5e-4),
+                  (2, 24, 5e-4, 5e-4),
+                  (4, 32, 5e-4, 5e-4),
+                  (8, 40, 5e-4, 5e-4),
+                  (16, 48, 5e-4, 5e-4),
+                  (32, 48, 5e-4, 5e-4),
+                  (64, 48, 5e-4, 5e-4)],
 
     duration_loss_factor=0.1,
     pitch_loss_factor=0.1,
