@@ -292,7 +292,7 @@ def embed_utterance(utterance_id, synthesizer_root, encoder_model_fpath):
     embed = encoder.embed_utterance(wav)
     np.save(embed_fpath, embed, allow_pickle=False)
 
-def create_embeddings(synthesizer_root: Path, encoder_model_fpath: Path, n_processes: int):
+def create_embeddings(synthesizer_root: Path, encoder_model_fpath: Path, skip_existing: bool, n_processes: int):
     wav_dir = synthesizer_root.joinpath(synthesizer.wav_dir)
     metadata_fpath = synthesizer_root.joinpath("train.json")
     assert wav_dir.exists() and metadata_fpath.exists()
@@ -306,6 +306,11 @@ def create_embeddings(synthesizer_root: Path, encoder_model_fpath: Path, n_proce
         for speaker, lines in metadata_dict.items():
             metadata = [line.split("|") for line in lines]
             utterance_ids.extend([(m[0]) for m in metadata])
+
+    # Check for existing files
+    if skip_existing:
+        embedding_files = synthesizer.embed_dir.glob("embed-*.npy")
+        utterance_ids[:] = (utterance_id for utterance_id in utterance_ids if not str("embed-%s.npy" % utterance_id) in embedding_files)
 
     # TODO: improve on the multiprocessing, it's terrible. Disk I/O is the bottleneck here.
     # Embed the utterances in separate threads
@@ -403,7 +408,7 @@ def create_alignments(utterance, accelerator: Accelerator, synthesizer_root: Pat
             allow_pickle=False)  # TODO: train_tacotron.py:73 (in FW-Taco repo): Check if this normalization is needed for anything
     np.save(str(phoneme_energy_dir / f'phoneme-energy-{utterance_id}.npy'), energy_char, allow_pickle=False)
 
-def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path, n_processes: int):
+def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path, skip_existing: bool, n_processes: int):
     # Initialize the dataset
     mel_dir = synthesizer_root.joinpath(synthesizer.mel_dir)
     embed_dir = synthesizer_root.joinpath(synthesizer.embed_dir)
