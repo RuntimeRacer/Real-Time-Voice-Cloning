@@ -309,7 +309,7 @@ def create_embeddings(synthesizer_root: Path, encoder_model_fpath: Path, skip_ex
 
     # Check for existing files
     if skip_existing:
-        embedding_files = synthesizer.embed_dir.glob("embed-*.npy")
+        embedding_files = embed_dir.glob("embed-*.npy")
         utterance_ids[:] = (utterance_id for utterance_id in utterance_ids if not str("embed-%s.npy" % utterance_id) in embedding_files)
 
     # TODO: improve on the multiprocessing, it's terrible. Disk I/O is the bottleneck here.
