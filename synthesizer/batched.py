@@ -7,6 +7,7 @@ from synthesizer.models.tacotron import Tacotron
 _model = None # type: Tacotron
 _device = None # type: torch.device
 
+
 def load_tacotron_model(weights_fpath: Path, device=None, use_tqdm=False):
     global _model, _device
 
