@@ -441,12 +441,14 @@ def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path,
 
     # Check for existing files
     if skip_existing:
+        # Get all the existing files
         energy_files = list(phoneme_energy_dir.glob("phoneme-energy-*.npy"))
         energy_files[:] = (os.path.basename(file) for file in energy_files)
+        # Convert to set for mem-indexed lookup while checking if file for the utterance exists
         energy_files = set(energy_files)
-        print(len(energy_files))
+        # Store as dict using utterance IDs as key to ensure fixed order
         utterance_dict = {utterance_id: (utterance_id, text) for utterance_id, text in utterances if not str("phoneme-energy-%s.npy" % utterance_id) in energy_files}
-        print(len(utterance_dict))
+        # Update utterance list to only contain filtered values.
         utterances = list(utterance_dict.values())
 
     # Init Accelerator
