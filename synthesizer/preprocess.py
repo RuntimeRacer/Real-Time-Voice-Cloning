@@ -1,3 +1,5 @@
+import os.path
+
 from multiprocess.pool import ThreadPool, Pool
 from synthesizer import audio
 from functools import partial
@@ -310,8 +312,9 @@ def create_embeddings(synthesizer_root: Path, encoder_model_fpath: Path, skip_ex
     # Check for existing files
     if skip_existing:
         embedding_files = list(embed_dir.glob("embed-*.npy"))
+        embedding_files[:] = (os.path.basename(file) for file in embedding_files)
         print(embedding_files[0])
-        utterance_ids[:] = (utterance_id for utterance_id in utterance_ids if not str(embed_dir.joinpath("embed-%s.npy" % utterance_id)) in embedding_files)
+        utterance_ids[:] = (utterance_id for utterance_id in utterance_ids if not str("embed-%s.npy" % utterance_id) in embedding_files)
 
     # TODO: improve on the multiprocessing, it's terrible. Disk I/O is the bottleneck here.
     # Embed the utterances in separate threads
