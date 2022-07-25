@@ -313,6 +313,7 @@ def create_embeddings(synthesizer_root: Path, encoder_model_fpath: Path, skip_ex
     if skip_existing:
         embedding_files = list(embed_dir.glob("embed-*.npy"))
         embedding_files[:] = (os.path.basename(file) for file in embedding_files)
+        embedding_files = set(embedding_files)
         print(embedding_files[0])
         utterance_ids[:] = (utterance_id for utterance_id in utterance_ids if not str("embed-%s.npy" % utterance_id) in embedding_files)
 
