@@ -444,7 +444,9 @@ def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path,
         energy_files = list(embed_dir.glob("phoneme-energy-*.npy"))
         energy_files[:] = (os.path.basename(file) for file in energy_files)
         energy_files = set(energy_files)
+        print(len(energy_files))
         utterance_dict = {utterance_id: (utterance_id, text) for utterance_id, text in utterances if not str("phoneme-energy-%s.npy" % utterance_id) in energy_files}
+        print(len(utterance_dict))
         utterances = list(utterance_dict.values())
 
     # Init Accelerator
