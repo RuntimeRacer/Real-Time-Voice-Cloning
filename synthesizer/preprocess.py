@@ -441,7 +441,7 @@ def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path,
 
     # Check for existing files
     if skip_existing:
-        energy_files = list(embed_dir.glob("phoneme-energy-*.npy"))
+        energy_files = list(phoneme_energy_dir.glob("phoneme-energy-*.npy"))
         energy_files[:] = (os.path.basename(file) for file in energy_files)
         energy_files = set(energy_files)
         print(len(energy_files))
