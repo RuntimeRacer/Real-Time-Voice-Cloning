@@ -281,9 +281,9 @@ def process_utterance(utterance_id: str, wav: np.ndarray, text: str, out_dir: Pa
     return utterance_id, len(wav), mel_frames, text
 
 
-def embed_utterance(utterance_id, accelerator: Accelerator, synthesizer_root, encoder_model_fpath):
+def embed_utterance(utterance_id, synthesizer_root, encoder_model_fpath):
     if not encoder.is_loaded():
-        encoder.load_model(encoder_model_fpath, device=accelerator.device, use_tqdm=True)
+        encoder.load_model(encoder_model_fpath)
 
     # Compute the speaker embedding of the utterance
     wav_fpath = synthesizer_root.joinpath(synthesizer.wav_dir, "audio-%s.npy" % utterance_id)
@@ -316,22 +316,10 @@ def create_embeddings(synthesizer_root: Path, encoder_model_fpath: Path, skip_ex
         embedding_files = set(embedding_files)
         utterance_ids[:] = (utterance_id for utterance_id in utterance_ids if not str("embed-%s.npy" % utterance_id) in embedding_files)
 
-    # Init Accelerator
-    torch.multiprocessing.set_start_method('spawn', force=True)
-    accelerator = Accelerator()
-
-    # Split dataset for the current process
-    len_utterances = len(utterance_ids)
-    split_idx = int(len_utterances / accelerator.state.num_processes)
-    acc_proc_id = accelerator.state.process_index
-    if acc_proc_id == (accelerator.num_processes - 1):
-        utterance_ids = utterance_ids[split_idx * acc_proc_id:]
-    else:
-        utterance_ids = utterance_ids[split_idx * acc_proc_id:split_idx * (acc_proc_id + 1)]
-
+    # TODO: improve on the multiprocessing, it's terrible. Disk I/O is the bottleneck here.
     # Embed the utterances in separate threads
-    func = partial(embed_utterance, accelerator=accelerator, synthesizer_root=synthesizer_root, encoder_model_fpath=encoder_model_fpath)
-    job = torch.multiprocessing.Pool(n_processes).imap(func, utterance_ids)
+    func = partial(embed_utterance, synthesizer_root=synthesizer_root, encoder_model_fpath=encoder_model_fpath)
+    job = ThreadPool(n_processes).imap(func, utterance_ids)
     list(tqdm(job, "Embedding", len(utterance_ids), unit="utterances", miniters=1))
 
 def create_alignments(utterance, accelerator: Accelerator, synthesizer_root: Path, synthesizer_model_fpath: Path):
