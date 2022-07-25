@@ -439,6 +439,14 @@ def create_align_features(synthesizer_root: Path, synthesizer_model_fpath: Path,
             metadata = [line.split("|") for line in lines]
             utterances.extend([(m[0],m[3].strip()) for m in metadata if int(m[2])])
 
+    # Check for existing files
+    if skip_existing:
+        energy_files = list(embed_dir.glob("phoneme-energy-*.npy"))
+        energy_files[:] = (os.path.basename(file) for file in energy_files)
+        energy_files = set(energy_files)
+        utterance_dict = {utterance_id: (utterance_id, text) for utterance_id, text in utterances if not str("phoneme-energy-%s.npy" % utterance_id) in energy_files}
+        utterances = list(utterance_dict.values())
+
     # Init Accelerator
     torch.multiprocessing.set_start_method('spawn', force=True)
     accelerator = Accelerator()
