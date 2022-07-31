@@ -44,13 +44,12 @@ if __name__ == "__main__":
         os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
     
     # Verify webrtcvad is available
-    if not args.no_trim:
-        try:
-            import webrtcvad
-        except:
-            raise ModuleNotFoundError("Package 'webrtcvad' not found. This package enables "
-                "noise removal and is recommended. Please install and try again. If installation fails, "
-                "use --no_trim to disable this error message.")
+    try:
+        import webrtcvad
+    except:
+        raise ModuleNotFoundError("Package 'webrtcvad' not found. This package enables "
+            "noise removal and is recommended. Please install and try again. If installation fails, "
+            "use --no_trim to disable this error message.")
 
     # TODO: There are faster ways to do this, by using multiple tacotrons per GPU instead of
     # TODO: using Accelerator. Just leaving it like that for now to test if performance is
