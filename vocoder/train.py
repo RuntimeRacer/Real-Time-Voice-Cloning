@@ -82,7 +82,7 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
     # Initialize the dataset
     metadata_fpath = syn_dir.joinpath("train.json") if ground_truth else voc_dir.joinpath("synthesized.json")
     mel_dir = syn_dir.joinpath("mels") if ground_truth else voc_dir.joinpath("mels_gta")
-    wav_dir = syn_dir.joinpath("audio")
+    wav_dir = syn_dir.joinpath("wav")
     dataset = VocoderDataset(metadata_fpath, mel_dir, wav_dir)
     test_loader = DataLoader(dataset,
                              batch_size=1,
