@@ -60,6 +60,10 @@ def run_synthesis(in_dir, out_dir, model_dir, skip_existing, threads=2):
         print(str(e))
         return
 
+    # Load checkpoint data into model
+    model.load(model_fpath, optimizer=None, checkpoint=checkpoint)
+    model.eval()
+
     print("Loaded synthesizer of model '%s' at path '%s'." % (model_type, model_fpath.name))
     print("Model has been trained to step %d." % (model.state_dict()["step"]))
 
@@ -69,15 +73,8 @@ def run_synthesis(in_dir, out_dir, model_dir, skip_existing, threads=2):
     else:
         r = 1
 
-    # Set model to eval mode (disable gradient and zoneout)
-    model.eval()
-
     # Initialize the dataset
     in_dir = Path(in_dir)
-    metadata_fpath = in_dir.joinpath("train.json")
-    mel_dir = in_dir.joinpath("mels")
-    embed_dir = in_dir.joinpath("embeds")
-
     dataset = SynthesizerDataset(in_dir, base.get_model_train_elements(model_type))
     data_loader = DataLoader(dataset,
                              collate_fn=lambda batch: collate_synthesizer(batch, r),
