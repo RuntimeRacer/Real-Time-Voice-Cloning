@@ -131,7 +131,7 @@ def run_synthesis(in_dir, out_dir, model_dir, skip_existing, threads=2):
             mel_out = mels_out[j].detach().cpu().numpy().T
 
             # Use the length of the ground truth mel to remove padding from the generated mels
-            mel_out = mel_out[:int(dataset.metadata[k][4])]
+            mel_out = mel_out[:int(dataset.metadata[k][2])]
 
             # Write the spectrogram to disk
             np.save(mel_filename, mel_out, allow_pickle=False)
