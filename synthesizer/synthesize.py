@@ -5,23 +5,23 @@ import time
 from pathlib import Path
 
 import numpy as np
+import torch
 from accelerate import Accelerator
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from config.hparams import tacotron as hp_tacotron, sp, preprocessing, sv2tts
-
-from synthesizer.models.tacotron import Tacotron
+from config.hparams import forward_tacotron as hp_forward_tacotron
+from config.hparams import preprocessing
+from config.hparams import tacotron as hp_tacotron
+from synthesizer.models import base
 from synthesizer.synthesizer_dataset import (SynthesizerDataset,
                                              collate_synthesizer)
-from synthesizer.utils.symbols import symbols
 
 
 def run_synthesis(in_dir, out_dir, model_dir, skip_existing, threads=2):
     # This generates ground truth-aligned mels for vocoder training
     synth_dir = Path(out_dir).joinpath("mels_gta")
     synth_dir.mkdir(exist_ok=True, parents=True)
-    print(str(hp_tacotron))
 
     # Initialize Accelerator
     accelerator = Accelerator()
@@ -30,31 +30,44 @@ def run_synthesis(in_dir, out_dir, model_dir, skip_existing, threads=2):
     device = accelerator.device
     print("Synthesizer using device:", device)
 
-    # Instantiate Tacotron model
-    model = Tacotron(embed_dims=hp_tacotron.embed_dims,
-                     num_chars=len(symbols),
-                     encoder_dims=hp_tacotron.encoder_dims,
-                     decoder_dims=hp_tacotron.decoder_dims,
-                     n_mels=sp.num_mels,
-                     fft_bins=sp.num_mels,
-                     postnet_dims=hp_tacotron.postnet_dims,
-                     encoder_K=hp_tacotron.encoder_K,
-                     lstm_dims=hp_tacotron.lstm_dims,
-                     postnet_K=hp_tacotron.postnet_K,
-                     num_highways=hp_tacotron.num_highways,
-                     dropout=0., # Use zero dropout for gta mels
-                     stop_threshold=hp_tacotron.stop_threshold,
-                     speaker_embedding_size=sv2tts.speaker_embedding_size)
-
-    # Load the weights
+    # Load weights
     model_dir = Path(model_dir)
     model_fpath = model_dir.joinpath(model_dir.stem).with_suffix(".pt")
-    print("\nLoading weights at %s" % model_fpath)
-    model.load(model_fpath)
-    print("Tacotron weights loaded from step %d" % model.step)
+
+    checkpoint = torch.load(str(model_fpath), map_location=device)
+    model_type = base.MODEL_TYPE_TACOTRON
+    if "model_type" in checkpoint:
+        model_type = checkpoint["model_type"]
+
+    # Build model based on detected model type
+    try:
+        # Set dropout to zero for GTA mels
+        if model_type == base.MODEL_TYPE_TACOTRON:
+            params = hp_tacotron
+            params.dropout = 0.
+            model = base.init_syn_model(model_type, device, override_hp_tacotron=params)
+        elif model_type == base.MODEL_TYPE_FORWARD_TACOTRON:
+            params = hp_forward_tacotron
+            params.duration_dropout = 0.
+            params.pitch_dropout = 0.
+            params.energy_dropout = 0.
+            params.prenet_dropout = 0.
+            params.postnet_dropout = 0.
+            model = base.init_syn_model(model_type, device, override_hp_forward_tacotron=params)
+        else:
+            model = base.init_syn_model(model_type, device)
+    except NotImplementedError as e:
+        print(str(e))
+        return
+
+    print("Loaded synthesizer of model '%s' at path '%s'." % (model_type, model_fpath.name))
+    print("Model has been trained to step %d." % (model.state_dict()["step"]))
 
     # Synthesize using same reduction factor as the model is currently trained
-    r = np.int32(model.r)
+    if model_type == base.MODEL_TYPE_TACOTRON:
+        r = np.int32(model.r)
+    else:
+        r = 1
 
     # Set model to eval mode (disable gradient and zoneout)
     model.eval()
@@ -65,7 +78,7 @@ def run_synthesis(in_dir, out_dir, model_dir, skip_existing, threads=2):
     mel_dir = in_dir.joinpath("mels")
     embed_dir = in_dir.joinpath("embeds")
 
-    dataset = SynthesizerDataset(metadata_fpath, mel_dir, embed_dir)
+    dataset = SynthesizerDataset(in_dir, base.get_model_train_elements(model_type))
     data_loader = DataLoader(dataset,
                              collate_fn=lambda batch: collate_synthesizer(batch, r),
                              batch_size=preprocessing.synthesis_batch_size,
@@ -89,14 +102,31 @@ def run_synthesis(in_dir, out_dir, model_dir, skip_existing, threads=2):
     atexit.register(save_synthesized_progress, synthesized, synthesized_out_fpath, out_dir, accelerator, True)
 
     # Generate GTA mels
-    for i, (texts, mels, embeds, idx) in tqdm(enumerate(data_loader), total=len(data_loader)):
+    for i, (idx, texts, text_lens, mels, mel_lens, embeds, durations, attentions, alignments, phoneme_pitchs, phoneme_energies) in tqdm(enumerate(data_loader), total=len(data_loader)):
 
         # Fixme this will regenerate also existing MELs, so currently we're just avoiding disk I/O after all
-        _, mels_out, _, _ = model(texts, mels, embeds)
+        if model_type == base.MODEL_TYPE_TACOTRON:
+            # Move data to device
+            texts = texts.to(device)
+            mels = mels.to(device)
+            embeds = embeds.to(device)
+            # Forward Pass / GTA generation
+            _, mels_out, _, _ = model(texts, mels, embeds)
+        elif model_type == base.MODEL_TYPE_FORWARD_TACOTRON:
+            # Move data to device
+            texts = texts.to(device)
+            mels = mels.to(device)
+            embeds = embeds.to(device)
+            durations = durations.to(device)
+            mel_lens = mel_lens.to(device)
+            phoneme_pitchs = phoneme_pitchs.to(device)
+            phoneme_energies = phoneme_energies.to(device)
+            # Forward Pass / GTA generation
+            _, mels_out, _, _, _ = model(texts, mels, durations, embeds, mel_lens, phoneme_pitchs, phoneme_energies)
 
         for j, k in enumerate(idx):
             # Note: outputs mel-spectrogram files and target ones have same names, just different folders
-            mel_filename = Path(synth_dir).joinpath(dataset.metadata[k][1])
+            mel_filename = Path(synth_dir).joinpath(dataset.metadata[k][0])
 
             if skip_existing and str(mel_filename) in synthesized:
                 continue

@@ -7,9 +7,11 @@ from accelerate import Accelerator
 from torch import optim
 from torch.utils.data import DataLoader
 
+from config.hparams import forward_tacotron as hp_forward_tacotron
+from config.hparams import sp
+from config.hparams import tacotron as hp_tacotron
 from synthesizer import audio
 from synthesizer.models import base
-from synthesizer.models.tacotron import Tacotron
 from synthesizer.synthesizer_dataset import (SynthesizerDataset,
                                              collate_synthesizer)
 from synthesizer.utils import ValueWindow
@@ -17,11 +19,8 @@ from synthesizer.utils.plot import plot_spectrogram
 from synthesizer.utils.symbols import symbols
 from synthesizer.utils.text import sequence_to_text
 from synthesizer.visualizations import Visualizations
-from vocoder.display import *
 from utils.display import *
-
-from config.hparams import tacotron as hp_tacotron, forward_tacotron as hp_forward_tacotron, sp, preprocessing, sv2tts
-
+from vocoder.display import *
 
 
 class MaskedL1(torch.nn.Module):
@@ -225,7 +224,7 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
 
         # Training loop
         while current_step < max_step:
-            for step, (idx, texts, text_lens, mels, mel_lens, embeds, durations, attentions, alignments, phoneme_pitchs, phoneme_energies ) in enumerate(data_loader, current_step):
+            for step, (idx, texts, text_lens, mels, mel_lens, embeds, durations, attentions, alignments, phoneme_pitchs, phoneme_energies) in enumerate(data_loader, current_step):
                 current_step = step
                 start_time = time.time()
                 model.train() # TODO: Verify this works as intended

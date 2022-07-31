@@ -1,7 +1,8 @@
+import argparse
+from pathlib import Path
+
 from synthesizer.preprocess import create_align_features
 from utils.argutils import print_args
-from pathlib import Path
-import argparse
 
 # INFO
 # Only needed if intended to train forward-tactotron or fastpitch.
@@ -18,7 +19,7 @@ if __name__ == "__main__":
         "If you let everything as default, it should be <datasets_root>/SV2TTS/synthesizer/.")
     parser.add_argument("-s", "--synthesizer_model_fpath", type=Path,
                         default="synthesizer/saved_models/pretrained.pt", help= \
-        "Path your trained tacotron model.")
+        "Path your trained synthesizer model.")
     parser.add_argument("--skip_existing", action="store_true", default=True, help= \
         "Whether to overwrite existing files with the same name. Useful if the preprocessing was "
         "interrupted.")
