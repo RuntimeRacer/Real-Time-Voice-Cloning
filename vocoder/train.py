@@ -95,7 +95,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
     vis = Visualizations(run_id, vis_every, server=visdom_server, disabled=no_visdom)
     if accelerator.is_local_main_process:
         vis.log_dataset(dataset)
-        vis.log_params()
+        vis.log_params(vocoder_hparams)
         # FIXME: Print all device names in case we got multiple GPUs or CPUs
         if accelerator.state.num_processes > 1:
             vis.log_implementation({"Devices": str(accelerator.state.num_processes)})
