@@ -10,28 +10,33 @@ from accelerate import Accelerator
 from torch import optim
 from torch.utils.data import DataLoader
 
-from config.hparams import wavernn as hp_wavernn, sp
+from config.hparams import wavernn_fatchord, wavernn_geneing
 from vocoder.batch import analyse_and_export_batch
 from vocoder.display import simple_table, stream
 from vocoder.distribution import discretized_mix_logistic_loss
 from vocoder.gen_wavernn import gen_testset
-from vocoder.models.fatchord_version import WaveRNN
+from vocoder.models import base
 from vocoder.visualizations import Visualizations
 from vocoder.vocoder_dataset import VocoderDataset, collate_vocoder
 from vocoder.utils import ValueWindow
 
 
-def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_truth: bool,
+def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_truth: bool,
           save_every: int, backup_every: int, force_restart: bool,
           vis_every: int, visdom_server: str, no_visdom: bool, testset_every: int, threads: int):
-    # Check to make sure the hop length is correctly factorised
-    assert np.cumprod(hp_wavernn.upsample_factors)[-1] == sp.hop_size
+
+    model_dir = models_dir.joinpath(run_id)
+    model_dir.mkdir(exist_ok=True)
+    weights_fpath = model_dir.joinpath(run_id + ".pt")
 
     # Initialize Accelerator
     accelerator = Accelerator()
 
     if accelerator.is_local_main_process:
         print("Accelerator process count: {0}".format(accelerator.num_processes))
+        print("Checkpoint path: {}".format(weights_fpath))
+        print("Loading training data from: {0} and {1}".format(syn_dir, voc_dir))
+        print("Using model: {}".format(model_type))
 
     # Book keeping
     time_window = ValueWindow(100)
@@ -40,31 +45,22 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
     # Let accelerator handle device
     device = accelerator.device
 
-    # Instantiate the model
-    print("{} - Initializing the model...".format(device))
-    model = WaveRNN(
-        rnn_dims=hp_wavernn.rnn_dims,
-        fc_dims=hp_wavernn.fc_dims,
-        bits=hp_wavernn.bits,
-        pad=hp_wavernn.pad,
-        upsample_factors=hp_wavernn.upsample_factors,
-        feat_dims=sp.num_mels,
-        compute_dims=hp_wavernn.compute_dims,
-        res_out_dims=hp_wavernn.res_out_dims,
-        res_blocks=hp_wavernn.res_blocks,
-        hop_length=sp.hop_size,
-        sample_rate=sp.sample_rate,
-        mode=hp_wavernn.mode
-    )
+    # Init the model
+    try:
+        model, pruner = base.init_voc_model(model_type, device)
+    except NotImplementedError as e:
+        print(str(e))
+        return
 
-    loss_func = F.cross_entropy if model.mode == "RAW" else discretized_mix_logistic_loss
+    if model.mode == "MOL":
+        loss_func = discretized_mix_logistic_loss
+    else:
+        # Compared to (N)LL, Cross Entropy is more efficient; see:
+        # https://discuss.pytorch.org/t/difference-between-cross-entropy-loss-or-log-likelihood-loss/38816
+        loss_func = F.cross_entropy
 
     # Initialize the optimizer
     optimizer = optim.Adam(model.parameters())
-
-    model_dir = models_dir.joinpath(run_id)
-    model_dir.mkdir(exist_ok=True)
-    weights_fpath = model_dir.joinpath(run_id + ".pt")
 
     # Initialize the model if not initialized yet
     if force_restart or not weights_fpath.exists():
@@ -105,7 +101,27 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
     epoch = 0
     max_step = 0
 
-    for i, session in enumerate(hp_wavernn.voc_tts_schedule):
+    # Determine a couple of params based on model type
+    if model_type == base.MODEL_TYPE_FATCHORD:
+        tts_schedule = wavernn_fatchord.voc_tts_schedule
+        seq_len = wavernn_fatchord.seq_len
+        anomaly_detection = wavernn_fatchord.anomaly_detection
+        anomaly_trigger_multiplier = wavernn_fatchord.anomaly_trigger_multiplier
+        gen_at_checkpoint = wavernn_fatchord.gen_at_checkpoint
+        gen_batched = wavernn_fatchord.gen_batched
+        gen_target = wavernn_fatchord.gen_target
+        gen_overlap = wavernn_fatchord.gen_overlap
+    elif model_type == base.MODEL_TYPE_GENEING:
+        tts_schedule = wavernn_geneing.voc_tts_schedule
+        seq_len = wavernn_geneing.seq_len
+        anomaly_detection = wavernn_geneing.anomaly_detection
+        anomaly_trigger_multiplier = wavernn_geneing.anomaly_trigger_multiplier
+        gen_at_checkpoint = wavernn_geneing.gen_at_checkpoint
+        gen_batched = wavernn_geneing.gen_batched
+        gen_target = wavernn_geneing.gen_target
+        gen_overlap = wavernn_geneing.gen_overlap
+
+    for i, session in enumerate(tts_schedule):
         # Update epoch information
         epoch += 1
         epoch_steps = max_step
@@ -146,7 +162,7 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
         # Do we need to change to the next session?
         if current_step >= max_step:
             # Are there no further sessions than the current one?
-            if i == len(hp_wavernn.voc_tts_schedule) - 1:
+            if i == len(tts_schedule) - 1:
                 # We have completed training. Save the model and exit
                 with accelerator.local_main_process_first():
                     if accelerator.is_local_main_process:
@@ -163,7 +179,7 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
                           ('Batch size', batch_size),
                           ("Current init LR", lr),
                           ("LR Stepping", sgdr_lr_stepping),
-                          ('Sequence Len', hp_wavernn.seq_len)])
+                          ('Sequence Len', seq_len)])
 
         for p in optimizer.param_groups:
             p["lr"] = lr
@@ -199,7 +215,7 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
                 y = y.unsqueeze(-1)
 
                 # Copy results of forward pass for analysis of needed
-                if hp_wavernn.anomaly_detection:
+                if anomaly_detection:
                     cp_y_hat = torch.clone(y_hat)
                     cp_y = torch.clone(y)
 
@@ -208,6 +224,15 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
                 optimizer.zero_grad()
                 accelerator.backward(loss)
                 optimizer.step()
+
+                # Model Pruning
+                if pruner is not None:
+                    accelerator.wait_for_everyone()
+                    with accelerator.local_main_process_first():
+                        if accelerator.is_local_main_process:
+                            base_model = accelerator.unwrap_model(model)
+                            pruner.update_layers(base_model.prune_layers)
+                            num_pruned, z = pruner.prune(base_model.step)
 
                 time_window.append(time.time() - start_time)
                 loss_window.append(loss.item())
@@ -219,10 +244,10 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
                 else:
                     currentLossDiff = abs(lastLoss - loss.item())
 
-                if hp_wavernn.anomaly_detection and \
+                if anomaly_detection and \
                         (step > 5000 and \
                         avgLossCount > 50 and \
-                        currentLossDiff > (avgLossDiff * hp_wavernn.anomaly_trigger_multiplier) \
+                        currentLossDiff > (avgLossDiff * anomaly_trigger_multiplier) \
                         or math.isnan(currentLossDiff) \
                         or math.isnan(loss.item())): # Give it a few steps to normalize, then do the check
                     print("WARNING - Anomaly detected! (Step {}, Thread {}) - Avg Loss Diff: {}, Current Loss Diff: {}".format(step, accelerator.process_index, avgLossDiff, currentLossDiff))
@@ -241,7 +266,10 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
                 if accelerator.is_local_main_process:
                     epoch_step = step - epoch_steps
                     epoch_max_step = max_step - epoch_steps
-                    msg = f"| Epoch: {epoch} ({epoch_step}/{epoch_max_step}) | LR: {lr:#.6} | Loss: {loss_window.average:#.6} | {1./time_window.average:#.2}steps/s | Step: {step} | "
+                    if pruner is not None:
+                        msg = f"| Epoch: {epoch} ({epoch_step}/{epoch_max_step}) | LR: {lr:#.6} | Loss: {loss_window.average:#.6} | {1. / time_window.average:#.2}steps/s | Step: {step} | {num_pruned} ({z}%) | "
+                    else:
+                        msg = f"| Epoch: {epoch} ({epoch_step}/{epoch_max_step}) | LR: {lr:#.6} | Loss: {loss_window.average:#.6} | {1./time_window.average:#.2}steps/s | Step: {step} | "
                     stream(msg)
 
                 lastLoss = loss.item()
@@ -260,7 +288,7 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
                         if accelerator.is_local_main_process:
                             print("Making a backup (step %d)" % step)
                             backup_fpath = Path("{}/{}_{}.pt".format(str(weights_fpath.parent), run_id, step))
-                            save(accelerator, model, backup_fpath, optimizer)
+                            save(accelerator, model, backup_fpath, optimizer, pruner)
 
                 if save_every != 0 and step % save_every == 0 :
                     # Accelerator: Save in main process after sync
@@ -268,14 +296,16 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
                     with accelerator.local_main_process_first():
                         if accelerator.is_local_main_process:
                             print("Saving the model (step %d)" % step)
-                            save(accelerator, model, weights_fpath, optimizer)
+                            save(accelerator, model, weights_fpath, optimizer, pruner)
 
                 # Evaluate model to generate samples
                 # Accelerator: Only in main process
                 if accelerator.is_local_main_process and testset_every != 0 and step % testset_every == 0:
                     eval_model = accelerator.unwrap_model(model)
-                    gen_testset(eval_model, test_loader, hp_wavernn.gen_at_checkpoint, hp_wavernn.gen_batched,
-                                hp_wavernn.gen_target, hp_wavernn.gen_overlap, model_dir)
+                    pruner.update_layers(eval_model.prune_layers)
+
+                    gen_testset(eval_model, test_loader, gen_at_checkpoint, gen_batched,
+                                gen_target, gen_overlap, model_dir)
 
                 # Break out of loop to update training schedule
                 if step >= max_step:
@@ -293,12 +323,16 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
                 
                 # Generate a testset after each epoch
                 eval_model = accelerator.unwrap_model(model)
-                gen_testset(eval_model, test_loader, hp_wavernn.gen_at_checkpoint, hp_wavernn.gen_batched,
-                            hp_wavernn.gen_target, hp_wavernn.gen_overlap, model_dir)
+                gen_testset(eval_model, test_loader, gen_at_checkpoint, gen_batched,
+                            gen_target, gen_overlap, model_dir)
 
-def save(accelerator, model, path, optimizer=None):
+def save(accelerator, model, path, optimizer=None, pruner=None):
     # Unwrap Model
     model = accelerator.unwrap_model(model)
+
+    if pruner is not None:
+        pruner.update_layers(model.prune_layers)
+        pruner.prune(model.step)
 
     # Save
     if optimizer is not None:

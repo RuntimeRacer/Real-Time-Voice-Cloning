@@ -214,8 +214,8 @@ fast_pitch = HParams(
     
 )
 
-# Parameters for WaveRNN Vocoder
-wavernn = HParams(
+# Parameters for fatchord's WaveRNN Vocoder
+wavernn_fatchord = HParams(
     # Model
     mode='RAW',  # either 'RAW' (softmax on raw bits) or 'MOL' (sample from mixture of logistics)
     bits=9,  # bit depth of signal
@@ -242,16 +242,24 @@ wavernn = HParams(
         (1, 5e-3, 1e-3, 120),
         (2, 1e-3, 5e-4, 160),
         (4, 5e-4, 1e-4, 200),
-        (8, 5e-4, 1e-4, 200),
-        (16, 5e-4, 1e-4, 200),
-        (32, 5e-4, 1e-4, 200),
-        (64, 5e-4, 1e-4, 200),
-        (128, 5e-4, 1e-4, 200),
+        (8, 1e-4, 1e-4, 200),
+        (16, 1e-4, 1e-4, 200),
+        (32, 1e-4, 1e-4, 200),
+        (64, 1e-4, 1e-4, 200),
+        (128, 1e-4, 1e-4, 200),
         (256, 1e-4, 1e-4, 240),
         (256, 1e-4, 1e-4, 240),
         (256, 1e-4, 1e-4, 240),
         (256, 1e-4, 1e-4, 240),
     ],
+
+    # sparsification - compared to geneing's version we're doing it epoch based
+    use_sparsification=False,
+    start_prune_epoch=3,  # epoch after which we prune first time
+    prune_epoch_steps=1,  # stepping of epochs to prune after
+    sparsity_target=0.90,
+    sparsity_target_rnn=0.90,
+    sparse_group=4,
 
     # Anomaly detection in Training
     anomaly_detection=False,
@@ -264,4 +272,66 @@ wavernn = HParams(
     gen_batched=True,  # very fast (realtime+) single utterance batched generation
     gen_target=3000,  # target number of samples to be generated in each batch entry
     gen_overlap=1500,  # number of samples for crossfading between batches
+)
+
+# Parameters for geneing's optimized WaveRNN Vocoder
+wavernn_geneing = HParams(
+    # Model
+    mode='RAW',  # either 'RAW' (softmax on raw bits) or 'MOL' (sample from mixture of logistics)
+    bits=10,  # bit depth of signal
+    mu_law=True,  # Recommended to suppress noise if using raw bits in hp.voc_mode
+    upsample_factors=(5, 5, 8),  # NB - this needs to correctly factorise hop_length
+
+    rnn_dims=256,
+    fc_dims=128,
+    compute_dims=64,
+    res_out_dims=32*2, #aux output is fed into 2 downstream nets
+    res_blocks=3,
+
+    # WaveRNN Training
+    pad=2,  # this will pad the input so that the resnet can 'see' wider than input length
+    seq_len=sp.hop_size * 7,  # must be a multiple of hop_length
+    # seq_len_factor can be adjusted to increase training sequence length (will increase GPU usage)
+
+    # Progressive training schedule
+    # (loops, init_lr, final_lr, batch_size)
+    # loops = amount of loops through the dataset per epoch
+    # init_lr = inital sgdr learning rate
+    # final_lr = amount of loops through the dataset per epoch
+    # batch_size = Size of the batches used for inference. Rule of Thumb: Max. 12 units per GB of VRAM of smallest card.
+    voc_tts_schedule=[
+        (1, 5e-3, 1e-3, 120),
+        (2, 1e-3, 5e-4, 160),
+        (4, 5e-4, 1e-4, 200),
+        (8, 1e-4, 1e-4, 200),
+        (16, 1e-4, 1e-4, 200),
+        (32, 1e-4, 1e-4, 200),
+        (64, 1e-4, 1e-4, 200),
+        (128, 1e-4, 1e-4, 200),
+        (256, 1e-4, 1e-4, 240),
+        (256, 1e-4, 1e-4, 240),
+        (256, 1e-4, 1e-4, 240),
+        (256, 1e-4, 1e-4, 240),
+    ],
+
+    # sparsification
+    use_sparsification=True,
+    start_prune=80000,
+    prune_steps=80000,
+    sparsity_target=0.90,
+    sparsity_target_rnn=0.90,
+    sparse_group=4,
+
+    # Anomaly detection in Training
+    anomaly_detection=False,
+    # Enables Loss anomaly detection. Dataloader will collect more metadata. Reduces training Performance by ~20%.
+    anomaly_trigger_multiplier=6,
+    # Threshold for raising anomaly detection. It is a Multiplier of average loss change
+
+    # Generating / Synthesizing
+    gen_at_checkpoint=5,  # number of samples to generate at each checkpoint
+    gen_batched=True,  # very fast (realtime+) single utterance batched generation
+    gen_target=3000,  # target number of samples to be generated in each batch entry
+    gen_overlap=1500,  # number of samples for crossfading between batches
+
 )

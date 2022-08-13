@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from vocoder.distribution import sample_from_discretized_mix_logistic
+from vocoder.distribution import sample_from_discretized_mix_logistic, sample_from_beta_dist
 from vocoder.display import *
 from vocoder.audio import *
 
@@ -88,7 +88,7 @@ class UpsampleNetwork(nn.Module):
 class WaveRNN(nn.Module):
     def __init__(self, rnn_dims, fc_dims, bits, pad, upsample_factors,
                  feat_dims, compute_dims, res_out_dims, res_blocks,
-                 hop_length, sample_rate, mode='RAW'):
+                 hop_length, sample_rate, mode='BITS', pruning=False):
         super().__init__()
         self.mode = mode
         self.pad = pad
@@ -108,10 +108,12 @@ class WaveRNN(nn.Module):
         self.sample_rate = sample_rate
 
         self.upsample = UpsampleNetwork(feat_dims, upsample_factors, compute_dims, res_blocks, res_out_dims, pad)
-        self.I = nn.Linear(feat_dims + self.aux_dims -1 + 1, rnn_dims)
+        self.I = nn.Linear(feat_dims + self.aux_dims - 1 + 1, rnn_dims)  # First dimension has to be divizible by 8, so we take away one aux channel
         self.rnn1 = nn.GRU(rnn_dims, rnn_dims, batch_first=True)
         self.fc1 = nn.Linear(rnn_dims + self.aux_dims, fc_dims)
         self.fc3 = nn.Linear(fc_dims, self.n_classes)
+
+        self.prune_layers = [self.I, self.rnn1, self.fc1, self.fc3] if pruning else []
 
         self.step = nn.Parameter(torch.zeros(1).long(), requires_grad=False)
         self.num_params()
@@ -299,7 +301,7 @@ class WaveRNN(nn.Module):
                 mels = mels.cuda().unsqueeze(0)
             else:
                 mels = mels.cpu().unsqueeze(0)
-            #wave_len = (mels.size(-1) - 1) * self.hop_length
+            wave_len = (mels.size(-1) - 1) * self.hop_length
             mels = self.pad_tensor(mels.transpose(1, 2), pad=self.pad, side='both')
             mels, aux = self.upsample(mels.transpose(1, 2))
 
@@ -337,21 +339,17 @@ class WaveRNN(nn.Module):
 
                 if self.mode == 'RAW':
                     sample = sample_from_beta_dist(x.unsqueeze(0)).view(-1)
+                    output.append(sample)
+                    x = sample.unsqueeze(-1)
                 elif self.mode == 'MOL':
-
-
-
-                if self.mode == 'MOL':
-                    sample = sample_from_discretized_mix_logistic(logits.unsqueeze(0).transpose(1, 2))
+                    sample = sample_from_discretized_mix_logistic(x.unsqueeze(0).transpose(1, 2))
                     output.append(sample.view(-1))
                     if torch.cuda.is_available():
-                        # x = torch.FloatTensor([[sample]]).cuda()
                         x = sample.transpose(0, 1).cuda()
                     else:
                         x = sample.transpose(0, 1)
-
-                elif self.mode == 'RAW' :
-                    posterior = F.softmax(logits, dim=1)
+                elif self.mode == 'BITS':
+                    posterior = F.softmax(x, dim=1)
                     distrib = torch.distributions.Categorical(posterior)
 
                     sample = 2 * distrib.sample().float() / (self.n_classes - 1.) - 1.

@@ -14,6 +14,9 @@ if __name__ == "__main__":
         "Name for this model instance. If a model state from the same run ID was previously "
         "saved, the training will restart from there. Pass -f to overwrite saved states and "
         "restart from scratch.")
+    parser.add_argument("model_type", type=str, help= \
+        "Model type to be trained. Required. Needs to be either of 'fatchord-wavernn', "
+        "or 'geneing-wavernn'.")
     parser.add_argument("datasets_root", type=str, help= \
         "Path to the directory containing your SV2TTS directory. Specifying --syn_dir or --voc_dir "
         "will take priority over this argument.")
