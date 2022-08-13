@@ -194,10 +194,10 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
 
                 # Forward pass
                 y_hat = model(x, m)
-                if processing_mode == 'RAW':
-                    y_hat = y_hat.transpose(1, 2).unsqueeze(-1)
-                elif processing_mode == 'MOL':
+                if processing_mode == 'MOL':
                     y = y.float()
+                else:
+                    y_hat = y_hat.transpose(1, 2).unsqueeze(-1)
                 y = y.unsqueeze(-1)
 
                 # Copy results of forward pass for analysis of needed
