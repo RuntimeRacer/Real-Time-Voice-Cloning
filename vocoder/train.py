@@ -148,7 +148,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
         # Do we need to change to the next session?
         if current_step >= max_step:
             # Are there no further sessions than the current one?
-            if i == len(vocoder_hparams.tts_schedule) - 1:
+            if i == len(vocoder_hparams.voc_tts_schedule) - 1:
                 # We have completed training. Save the model and exit
                 with accelerator.local_main_process_first():
                     if accelerator.is_local_main_process:
