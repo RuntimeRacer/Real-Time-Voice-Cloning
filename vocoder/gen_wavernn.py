@@ -1,8 +1,8 @@
 from vocoder.models.fatchord_version import WaveRNN
 from vocoder.audio import *
-from config.hparams import wavernn as hp_wavernn, sp
+from config.hparams import sp
 
-def gen_testset(model: WaveRNN, test_set, samples, batched, target, overlap, save_path):
+def gen_testset(model: WaveRNN, test_set, samples, batched, target, overlap, save_path, vocoder_hparams):
     step = model.get_step()
 
     for i, (m, x, idx) in enumerate(test_set, 1):
@@ -13,9 +13,9 @@ def gen_testset(model: WaveRNN, test_set, samples, batched, target, overlap, sav
 
         x = x[0].numpy()
 
-        bits = 16 if hp_wavernn.mode == 'MOL' else hp_wavernn.bits
+        bits = 16 if vocoder_hparams.mode == 'MOL' else vocoder_hparams.bits
 
-        if hp_wavernn.mu_law and hp_wavernn.mode != 'MOL' :
+        if vocoder_hparams.mu_law and vocoder_hparams.mode != 'MOL' :
             x = decode_mu_law(x, 2**bits, from_labels=True)
         else :
             x = label_2_float(x, bits)
@@ -26,6 +26,6 @@ def gen_testset(model: WaveRNN, test_set, samples, batched, target, overlap, sav
             "gen_not_batched"
         save_str = save_path.joinpath("%d_steps_%d_%s.wav" % (step, i, batch_str))
 
-        wav = model.generate(m, batched, target, overlap, hp_wavernn.mu_law, sp.preemphasize)
+        wav = model.generate(m, batched, target, overlap, vocoder_hparams.mu_law, sp.preemphasize)
         save_wav(wav, save_str)
 

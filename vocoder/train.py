@@ -103,25 +103,11 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
 
     # Determine a couple of params based on model type
     if model_type == base.MODEL_TYPE_FATCHORD:
-        tts_schedule = wavernn_fatchord.voc_tts_schedule
-        seq_len = wavernn_fatchord.seq_len
-        anomaly_detection = wavernn_fatchord.anomaly_detection
-        anomaly_trigger_multiplier = wavernn_fatchord.anomaly_trigger_multiplier
-        gen_at_checkpoint = wavernn_fatchord.gen_at_checkpoint
-        gen_batched = wavernn_fatchord.gen_batched
-        gen_target = wavernn_fatchord.gen_target
-        gen_overlap = wavernn_fatchord.gen_overlap
+        vocoder_hparams = wavernn_fatchord
     elif model_type == base.MODEL_TYPE_GENEING:
-        tts_schedule = wavernn_geneing.voc_tts_schedule
-        seq_len = wavernn_geneing.seq_len
-        anomaly_detection = wavernn_geneing.anomaly_detection
-        anomaly_trigger_multiplier = wavernn_geneing.anomaly_trigger_multiplier
-        gen_at_checkpoint = wavernn_geneing.gen_at_checkpoint
-        gen_batched = wavernn_geneing.gen_batched
-        gen_target = wavernn_geneing.gen_target
-        gen_overlap = wavernn_geneing.gen_overlap
+        vocoder_hparams = wavernn_geneing
 
-    for i, session in enumerate(tts_schedule):
+    for i, session in enumerate(vocoder_hparams.voc_tts_schedule):
         # Update epoch information
         epoch += 1
         epoch_steps = max_step
@@ -162,7 +148,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
         # Do we need to change to the next session?
         if current_step >= max_step:
             # Are there no further sessions than the current one?
-            if i == len(tts_schedule) - 1:
+            if i == len(vocoder_hparams.tts_schedule) - 1:
                 # We have completed training. Save the model and exit
                 with accelerator.local_main_process_first():
                     if accelerator.is_local_main_process:
@@ -179,7 +165,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                           ('Batch size', batch_size),
                           ("Current init LR", lr),
                           ("LR Stepping", sgdr_lr_stepping),
-                          ('Sequence Len', seq_len)])
+                          ('Sequence Len', vocoder_hparams.seq_len)])
 
         for p in optimizer.param_groups:
             p["lr"] = lr
@@ -215,7 +201,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                 y = y.unsqueeze(-1)
 
                 # Copy results of forward pass for analysis of needed
-                if anomaly_detection:
+                if vocoder_hparams.anomaly_detection:
                     cp_y_hat = torch.clone(y_hat)
                     cp_y = torch.clone(y)
 
@@ -244,10 +230,10 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                 else:
                     currentLossDiff = abs(lastLoss - loss.item())
 
-                if anomaly_detection and \
+                if vocoder_hparams.anomaly_detection and \
                         (step > 5000 and \
                         avgLossCount > 50 and \
-                        currentLossDiff > (avgLossDiff * anomaly_trigger_multiplier) \
+                        currentLossDiff > (avgLossDiff * vocoder_hparams.anomaly_trigger_multiplier) \
                         or math.isnan(currentLossDiff) \
                         or math.isnan(loss.item())): # Give it a few steps to normalize, then do the check
                     print("WARNING - Anomaly detected! (Step {}, Thread {}) - Avg Loss Diff: {}, Current Loss Diff: {}".format(step, accelerator.process_index, avgLossDiff, currentLossDiff))
@@ -304,8 +290,8 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                     eval_model = accelerator.unwrap_model(model)
                     pruner.update_layers(eval_model.prune_layers)
 
-                    gen_testset(eval_model, test_loader, gen_at_checkpoint, gen_batched,
-                                gen_target, gen_overlap, model_dir)
+                    gen_testset(eval_model, test_loader, vocoder_hparams.gen_at_checkpoint, vocoder_hparams.gen_batched,
+                                vocoder_hparams.gen_target, vocoder_hparams.gen_overlap, model_dir)
 
                 # Break out of loop to update training schedule
                 if step >= max_step:
@@ -323,8 +309,8 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                 
                 # Generate a testset after each epoch
                 eval_model = accelerator.unwrap_model(model)
-                gen_testset(eval_model, test_loader, gen_at_checkpoint, gen_batched,
-                            gen_target, gen_overlap, model_dir)
+                gen_testset(eval_model, test_loader, vocoder_hparams.gen_at_checkpoint, vocoder_hparams.gen_batched,
+                            vocoder_hparams.gen_target, vocoder_hparams.gen_overlap, model_dir)
 
 def save(accelerator, model, path, optimizer=None, pruner=None):
     # Unwrap Model
