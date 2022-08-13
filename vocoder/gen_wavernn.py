@@ -2,14 +2,14 @@ from vocoder.models.fatchord_version import WaveRNN
 from vocoder.audio import *
 from config.hparams import sp
 
-def gen_testset(model: WaveRNN, test_set, samples, batched, target, overlap, save_path, vocoder_hparams):
+def gen_testset(model: WaveRNN, test_set, save_path, vocoder_hparams):
     step = model.get_step()
 
     for i, (m, x, idx) in enumerate(test_set, 1):
-        if i > samples: 
+        if i > vocoder_hparams.gen_at_checkpoint:
             break
 
-        print('\n| Generating: %i/%i' % (i, samples))
+        print('\n| Generating: %i/%i' % (i, vocoder_hparams.gen_at_checkpoint))
 
         x = x[0].numpy()
 
@@ -22,10 +22,10 @@ def gen_testset(model: WaveRNN, test_set, samples, batched, target, overlap, sav
 
         save_wav(x, save_path.joinpath("%d_steps_%d_target.wav" % (step, i)))
         
-        batch_str = "gen_batched_target%d_overlap%d" % (target, overlap) if batched else \
+        batch_str = "gen_batched_target%d_overlap%d" % (vocoder_hparams.gen_target, vocoder_hparams.gen_overlap) if vocoder_hparams.gen_batched else \
             "gen_not_batched"
         save_str = save_path.joinpath("%d_steps_%d_%s.wav" % (step, i, batch_str))
 
-        wav = model.generate(m, batched, target, overlap, vocoder_hparams.mu_law, sp.preemphasize)
+        wav = model.generate(m, vocoder_hparams.gen_batched, vocoder_hparams.gen_target, vocoder_hparams.gen_overlap, vocoder_hparams.mu_law, sp.preemphasize)
         save_wav(wav, save_str)
 

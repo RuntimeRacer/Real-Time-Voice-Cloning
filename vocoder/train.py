@@ -291,8 +291,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                     pruner.update_layers(eval_model.prune_layers)
                     pruner.prune(model.step)
 
-                    gen_testset(eval_model, test_loader, vocoder_hparams.gen_at_checkpoint, vocoder_hparams.gen_batched,
-                                vocoder_hparams.gen_target, vocoder_hparams.gen_overlap, model_dir)
+                    gen_testset(eval_model, test_loader, model_dir, vocoder_hparams)
 
                 # Break out of loop to update training schedule
                 if step >= max_step:
