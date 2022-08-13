@@ -309,8 +309,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                 
                 # Generate a testset after each epoch
                 eval_model = accelerator.unwrap_model(model)
-                gen_testset(eval_model, test_loader, vocoder_hparams.gen_at_checkpoint, vocoder_hparams.gen_batched,
-                            vocoder_hparams.gen_target, vocoder_hparams.gen_overlap, model_dir)
+                gen_testset(eval_model, test_loader, model_dir, vocoder_hparams)
 
 def save(accelerator, model, path, optimizer=None, pruner=None):
     # Unwrap Model
