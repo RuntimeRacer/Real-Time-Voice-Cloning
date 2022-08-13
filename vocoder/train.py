@@ -289,7 +289,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                 if accelerator.is_local_main_process and testset_every != 0 and step % testset_every == 0:
                     eval_model = accelerator.unwrap_model(model)
                     pruner.update_layers(eval_model.prune_layers)
-                    pruner.prune(model.step)
+                    pruner.prune(eval_model.step)
 
                     gen_testset(eval_model, test_loader, model_dir, vocoder_hparams)
 
