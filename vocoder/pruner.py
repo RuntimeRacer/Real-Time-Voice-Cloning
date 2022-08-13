@@ -125,10 +125,10 @@ class Pruner(object):
         if update_masks:
             self.masks = masks_new
 
-    def prune(self, step):
+    def prune(self, step, sparse_group):
         for ((l,z), m) in zip(self.layers, self.masks):
             z_curr = self.update_sparsity(step, z)
-            m.update_mask(l, z_curr)
+            m.update_mask(l, z_curr, sparse_group)
             m.apply_mask(l)
         return self.count_num_pruned(), z_curr
 

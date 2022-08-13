@@ -218,7 +218,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                         if accelerator.is_local_main_process:
                             base_model = accelerator.unwrap_model(model)
                             pruner.update_layers(base_model.prune_layers)
-                            num_pruned, z = pruner.prune(base_model.step)
+                            num_pruned, z = pruner.prune(base_model.step, vocoder_hparams.sparse_group)
 
                 time_window.append(time.time() - start_time)
                 loss_window.append(loss.item())
