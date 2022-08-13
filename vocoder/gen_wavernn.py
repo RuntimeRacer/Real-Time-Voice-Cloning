@@ -1,8 +1,7 @@
-from vocoder.models.fatchord_version import WaveRNN
 from vocoder.audio import *
 from config.hparams import sp
 
-def gen_testset(model: WaveRNN, test_set, save_path, vocoder_hparams):
+def gen_testset(model, test_set, save_path, vocoder_hparams):
     step = model.get_step()
 
     for i, (m, x, idx) in enumerate(test_set, 1):
