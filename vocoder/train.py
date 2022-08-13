@@ -74,12 +74,18 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
     print("{0} - Loading weights at {1}".format(device, weights_fpath))
     load(model, device, weights_fpath, optimizer)
     print("{0} - WaveRNN weights loaded from step {1}".format(device, model.get_step()))
+
+    # Determine a couple of params based on model type
+    if model_type == base.MODEL_TYPE_FATCHORD:
+        vocoder_hparams = wavernn_fatchord
+    elif model_type == base.MODEL_TYPE_GENEING:
+        vocoder_hparams = wavernn_geneing
     
     # Initialize the dataset
     metadata_fpath = syn_dir.joinpath("train.json") if ground_truth else voc_dir.joinpath("synthesized.json")
     mel_dir = syn_dir.joinpath("mels") if ground_truth else voc_dir.joinpath("mels_gta")
     wav_dir = syn_dir.joinpath("wav")
-    dataset = VocoderDataset(metadata_fpath, mel_dir, wav_dir)
+    dataset = VocoderDataset(metadata_fpath, mel_dir, wav_dir, vocoder_hparams)
     test_loader = DataLoader(dataset,
                              batch_size=1,
                              shuffle=True,
@@ -100,12 +106,6 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
     # Init epoch information
     epoch = 0
     max_step = 0
-
-    # Determine a couple of params based on model type
-    if model_type == base.MODEL_TYPE_FATCHORD:
-        vocoder_hparams = wavernn_fatchord
-    elif model_type == base.MODEL_TYPE_GENEING:
-        vocoder_hparams = wavernn_geneing
 
     for i, session in enumerate(vocoder_hparams.voc_tts_schedule):
         # Update epoch information
