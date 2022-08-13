@@ -213,12 +213,12 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
 
                 # Model Pruning
                 if pruner is not None:
-                    # accelerator.wait_for_everyone()
-                    # with accelerator.local_main_process_first():
-                    #     if accelerator.is_local_main_process:
-                    #         base_model = accelerator.unwrap_model(model)
-                    #         pruner.update_layers(base_model.prune_layers)
-                    num_pruned, z = pruner.prune(step)
+                    accelerator.wait_for_everyone()
+                    with accelerator.local_main_process_first():
+                        if accelerator.is_local_main_process:
+                            base_model = accelerator.unwrap_model(model)
+                            pruner.update_layers(base_model.prune_layers)
+                            num_pruned, z = pruner.prune(base_model.step)
 
                 time_window.append(time.time() - start_time)
                 loss_window.append(loss.item())
@@ -288,7 +288,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                 # Accelerator: Only in main process
                 if accelerator.is_local_main_process and testset_every != 0 and step % testset_every == 0:
                     eval_model = accelerator.unwrap_model(model)
-                    # pruner.update_layers(eval_model.prune_layers)
+                    pruner.update_layers(eval_model.prune_layers)
                     pruner.prune(eval_model.step)
 
                     gen_testset(eval_model, test_loader, model_dir, vocoder_hparams)
@@ -316,7 +316,7 @@ def save(accelerator, model, path, optimizer=None, pruner=None):
     model = accelerator.unwrap_model(model)
 
     if pruner is not None:
-        # pruner.update_layers(model.prune_layers)
+        pruner.update_layers(model.prune_layers)
         pruner.prune(model.step)
 
     # Save
