@@ -60,7 +60,7 @@ def init_voc_model(model_type, device, override_hp_fatchord=None, override_hp_ge
 
         # Setup pruner if enabled
         if hparams.use_sparsification:
-            pruner = Pruner(hparams.start_prune, hparams.prune_steps, hparams.sparsity_target)
+            pruner = Pruner(hparams.start_prune, hparams.prune_steps, hparams.sparsity_target, hparams.sparse_group)
             pruner.update_layers(model.prune_layers, True)
 
     else:
