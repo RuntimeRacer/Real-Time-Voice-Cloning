@@ -23,8 +23,8 @@ def analyse_and_export_batch(batch, dataset, individual_loss, save_path, vocoder
         wav_filename = "{}.wav".format(wav_path.with_suffix("").name)
 
         # Convert mels
-        bits = 16 if hp_wavernn.mode == 'MOL' else hp_wavernn.bits
-        if hp_wavernn.mu_law and hp_wavernn.mode != 'MOL':
+        bits = 16 if vocoder_hparams.mode == 'MOL' else vocoder_hparams.bits
+        if vocoder_hparams.mu_law and vocoder_hparams.mode != 'MOL':
             wav_mel = decode_mu_law(wav_mel, 2 ** bits, from_labels=True)
         else:
             wav_mel = label_2_float(wav_mel, bits)

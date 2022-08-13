@@ -5,12 +5,12 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from config.hparams import wavernn as hp_wavernn, sp
+from config.hparams import sp
 from vocoder import audio
 
 
 class VocoderDataset(Dataset):
-    def __init__(self, metadata_fpath: Path, mel_dir: Path, wav_dir: Path):
+    def __init__(self, metadata_fpath: Path, mel_dir: Path, wav_dir: Path, vocoder_hparams):
         self.metadata_fpath = metadata_fpath
         print("Using inputs from:\n\t%s\n\t%s\n\t%s" % (self.metadata_fpath, mel_dir, wav_dir))
 
@@ -24,8 +24,9 @@ class VocoderDataset(Dataset):
         gta_fpaths = [mel_dir.joinpath("%s.npy" % fname) for fname in gta_fnames]
         wav_fnames = [x[0] for x in metadata if int(x[2])]
         wav_fpaths = [wav_dir.joinpath("audio-%s.npy" % fname) for fname in wav_fnames]
+        self.vocoder_hparams = vocoder_hparams
         self.samples_fpaths = list(zip(gta_fpaths, wav_fpaths))
-        self.samples_texts = [x[3].strip() for x in metadata if int(x[2])] if hp_wavernn.anomaly_detection else []
+        self.samples_texts = [x[3].strip() for x in metadata if int(x[2])] if self.vocoder_hparams.anomaly_detection else []
         self.metadata = metadata
         
         print("Found %d samples" % len(self.samples_fpaths))
@@ -50,13 +51,13 @@ class VocoderDataset(Dataset):
         assert len(wav) % sp.hop_size == 0
         
         # Quantize the wav TODO: This can be optimized to be done during preprocessing
-        if hp_wavernn.mode == 'RAW':
-            if hp_wavernn.mu_law:
-                quant = audio.encode_mu_law(wav, mu=2 ** hp_wavernn.bits)
-            else:
-                quant = audio.float_2_label(wav, bits=hp_wavernn.bits)
-        elif hp_wavernn.mode == 'MOL':
+        if self.vocoder_hparams.mode == 'MOL':
             quant = audio.float_2_label(wav, bits=16)
+        else:
+            if self.vocoder_hparams.mu_law:
+                quant = audio.encode_mu_law(wav, mu=2 ** self.vocoder_hparams.bits)
+            else:
+                quant = audio.float_2_label(wav, bits=self.vocoder_hparams.bits)
             
         return mel.astype(np.float32), quant.astype(np.int64), index
 
@@ -69,23 +70,23 @@ class VocoderDataset(Dataset):
         return log_string
 
         
-def collate_vocoder(batch):
-    if hp_wavernn.anomaly_detection:
+def collate_vocoder(batch, vocoder_hparams):
+    if vocoder_hparams.anomaly_detection:
         # collections of data for analyzing the batch
         src_mel_data = [x[0] for x in batch]
         src_wav_data = [x[1] for x in batch]
         indices = [x[2] for x in batch]
-    src_data = (src_mel_data, src_wav_data, indices) if hp_wavernn.anomaly_detection else (None, None, None)
+    src_data = (src_mel_data, src_wav_data, indices) if vocoder_hparams.anomaly_detection else (None, None, None)
 
     # preprocessing for vocoder training
-    mel_win = hp_wavernn.seq_len // sp.hop_size + 2 * hp_wavernn.pad
-    max_offsets = [x[0].shape[-1] -2 - (mel_win + 2 * hp_wavernn.pad) for x in batch]
+    mel_win = vocoder_hparams.seq_len // sp.hop_size + 2 * vocoder_hparams.pad
+    max_offsets = [x[0].shape[-1] -2 - (mel_win + 2 * vocoder_hparams.pad) for x in batch]
     mel_offsets = [np.random.randint(0, offset) for offset in max_offsets]
-    sig_offsets = [(offset + hp_wavernn.pad) * sp.hop_size for offset in mel_offsets]
+    sig_offsets = [(offset + vocoder_hparams.pad) * sp.hop_size for offset in mel_offsets]
 
     mels = [x[0][:, mel_offsets[i]:mel_offsets[i] + mel_win] for i, x in enumerate(batch)]
 
-    labels = [x[1][sig_offsets[i]:sig_offsets[i] + hp_wavernn.seq_len + 1] for i, x in enumerate(batch)]
+    labels = [x[1][sig_offsets[i]:sig_offsets[i] + vocoder_hparams.seq_len + 1] for i, x in enumerate(batch)]
 
     mels = np.stack(mels).astype(np.float32)
     labels = np.stack(labels).astype(np.int64)
@@ -93,14 +94,14 @@ def collate_vocoder(batch):
     mels = torch.tensor(mels)
     labels = torch.tensor(labels).long()
 
-    x = labels[:, :hp_wavernn.seq_len]
+    x = labels[:, :vocoder_hparams.seq_len]
     y = labels[:, 1:]
 
-    bits = 16 if hp_wavernn.mode == 'MOL' else hp_wavernn.bits
+    bits = 16 if vocoder_hparams.mode == 'MOL' else vocoder_hparams.bits
 
     x = audio.label_2_float(x.float(), bits)
 
-    if hp_wavernn.mode == 'MOL' :
+    if vocoder_hparams.mode == 'MOL' :
         y = audio.label_2_float(y.float(), bits)
 
     return x, y, mels, src_data

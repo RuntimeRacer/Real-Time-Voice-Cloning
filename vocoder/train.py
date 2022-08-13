@@ -239,7 +239,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                     print("WARNING - Anomaly detected! (Step {}, Thread {}) - Avg Loss Diff: {}, Current Loss Diff: {}".format(step, accelerator.process_index, avgLossDiff, currentLossDiff))
                     individual_loss = loss_func(cp_y_hat, cp_y, reduce=False)
                     individual_loss = torch.mean(individual_loss, 1, True).tolist()
-                    analyse_and_export_batch(src_data, dataset, individual_loss, model_dir.joinpath("anomalies/step_" + str(current_step) + "_thread_" + str(accelerator.process_index)))
+                    analyse_and_export_batch(src_data, dataset, individual_loss, model_dir.joinpath("anomalies/step_" + str(current_step) + "_thread_" + str(accelerator.process_index)), vocoder_hparams)
 
                 # Kill process if NaN
                 if math.isnan(loss.item()):
