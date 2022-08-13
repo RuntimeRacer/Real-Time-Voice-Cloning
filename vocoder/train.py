@@ -123,7 +123,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
 
         # Init dataloader
         data_loader = DataLoader(dataset,
-                                 collate_fn=collate_vocoder,
+                                 collate_fn=lambda batch: collate_vocoder(batch, vocoder_hparams),
                                  batch_size=batch_size,
                                  num_workers=threads,
                                  shuffle=True,
