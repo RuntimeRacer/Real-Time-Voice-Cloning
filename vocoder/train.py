@@ -273,7 +273,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                         if accelerator.is_local_main_process:
                             print("Making a backup (step %d)" % step)
                             backup_fpath = Path("{}/{}_{}.pt".format(str(weights_fpath.parent), run_id, step))
-                            save(accelerator, model, backup_fpath, optimizer, pruner)
+                            save(accelerator, model, backup_fpath, optimizer)
 
                 if save_every != 0 and step % save_every == 0 :
                     # Accelerator: Save in main process after sync
@@ -281,7 +281,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                     with accelerator.local_main_process_first():
                         if accelerator.is_local_main_process:
                             print("Saving the model (step %d)" % step)
-                            save(accelerator, model, weights_fpath, optimizer, pruner)
+                            save(accelerator, model, weights_fpath, optimizer)
 
                 # Evaluate model to generate samples
                 # Accelerator: Only in main process
