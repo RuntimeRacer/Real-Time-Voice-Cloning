@@ -218,6 +218,8 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                         base_model = accelerator.unwrap_model(model)
                         pruner.update_layers(base_model.prune_layers)
                         num_pruned, z = pruner.prune(base_model.step)
+                else:
+                    num_pruned, z = 0, 0
 
                 time_window.append(time.time() - start_time)
                 loss_window.append(loss.item())
