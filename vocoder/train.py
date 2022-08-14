@@ -212,7 +212,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                 optimizer.step()
 
                 # Model Pruning
-                if pruner is not None:
+                if pruner is not None and step >= vocoder_hparams.start_prune:
                     accelerator.wait_for_everyone()
                     with accelerator.local_main_process_first():
                         base_model = accelerator.unwrap_model(model)
