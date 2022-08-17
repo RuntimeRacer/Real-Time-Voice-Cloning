@@ -1,6 +1,6 @@
 from vocoder.audio import *
 import synthesizer.audio as syn_audio
-from config.hparams import sp, preprocessing
+from config.hparams import sp
 
 def gen_testset(model, test_set, save_path, vocoder_hparams):
     step = model.get_step()
@@ -22,15 +22,8 @@ def gen_testset(model, test_set, save_path, vocoder_hparams):
 
         save_wav(x, save_path.joinpath("%d_steps_%d_target.wav" % (step, i)))
 
-        # WaveRNN mel spectrograms are normalized to [0, 1] so zero padding adds silence
-        # By default, SV2TTS uses symmetric mels, where -1*max_abs_value is silence.
-        if preprocessing.symmetric_mels:
-            mel_pad_value = -1 * sp.max_abs_value
-        else:
-            mel_pad_value = 0
-
-        glim_mel = m.T
-        glim_wav = syn_audio.inv_mel_spectrogram(pad2d(glim_mel, glim_mel.shape[1], pad_value=mel_pad_value))
+        glim_mel = m[0].numpy()
+        glim_wav = syn_audio.inv_mel_spectrogram(glim_mel)
         glim_str = "gen_griffinlim"
         glim_save_str = save_path.joinpath("%d_steps_%d_%s.wav" % (step, i, glim_str))
         syn_audio.save_wav(glim_wav, str(glim_save_str), sr=sp.sample_rate)
@@ -42,6 +35,3 @@ def gen_testset(model, test_set, save_path, vocoder_hparams):
         wav = model.generate(m, vocoder_hparams.gen_batched, vocoder_hparams.gen_target, vocoder_hparams.gen_overlap, vocoder_hparams.mu_law, sp.preemphasize)
         save_wav(wav, save_str)
 
-
-def pad2d(x, max_len, pad_value=0):
-    return np.pad(x, ((0, 0), (0, max_len - x.shape[-1])), mode="constant", constant_values=pad_value)
