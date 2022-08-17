@@ -24,6 +24,7 @@ def gen_testset(model, test_set, save_path, vocoder_hparams):
 
         glim_mel = m[0].numpy()
         glim_wav = syn_audio.inv_mel_spectrogram(glim_mel)
+        glim_wav / np.abs(glim_wav).max() * 0.97
         glim_str = "gen_griffinlim"
         glim_save_str = save_path.joinpath("%d_steps_%d_%s.wav" % (step, i, glim_str))
         syn_audio.save_wav(glim_wav, str(glim_save_str), sr=sp.sample_rate)
