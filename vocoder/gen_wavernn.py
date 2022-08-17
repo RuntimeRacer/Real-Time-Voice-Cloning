@@ -22,7 +22,7 @@ def gen_testset(model, test_set, save_path, vocoder_hparams):
 
         save_wav(x, save_path.joinpath("%d_steps_%d_target.wav" % (step, i)))
 
-        glim_mel = m[0].astype(np.float32)
+        glim_mel = m[0].numpy().astype(np.float32)
         glim_wav = syn_audio.inv_mel_spectrogram(glim_mel)
         glim_wav / np.abs(glim_wav).max() * 0.97
         glim_str = "gen_griffinlim"
