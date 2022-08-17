@@ -1,4 +1,5 @@
 from vocoder.audio import *
+import synthesizer.audio as syn_audio
 from config.hparams import sp
 
 def gen_testset(model, test_set, save_path, vocoder_hparams):
@@ -20,6 +21,11 @@ def gen_testset(model, test_set, save_path, vocoder_hparams):
             x = label_2_float(x, bits)
 
         save_wav(x, save_path.joinpath("%d_steps_%d_target.wav" % (step, i)))
+
+        glim_wav = syn_audio.inv_mel_spectrogram(m)
+        glim_str = "gen_griffinlim"
+        glim_save_str = save_path.joinpath("%d_steps_%d_%s.wav" % (step, i, glim_str))
+        syn_audio.save_wav(glim_wav, str(glim_save_str), sr=sp.sample_rate)
         
         batch_str = "gen_batched_target%d_overlap%d" % (vocoder_hparams.gen_target, vocoder_hparams.gen_overlap) if vocoder_hparams.gen_batched else \
             "gen_not_batched"
