@@ -118,6 +118,13 @@ def run_synthesis(in_dir, out_dir, model_dir, skip_existing, threads=2):
             mel_lens = mel_lens.to(device)
             phoneme_pitchs = phoneme_pitchs.to(device)
             phoneme_energies = phoneme_energies.to(device)
+
+            # Prepare Pitch & energy values
+            pitch_zoneout_mask = torch.rand(texts.size()) > hp_forward_tacotron.pitch_zoneout
+            energy_zoneout_mask = torch.rand(texts.size()) > hp_forward_tacotron.energy_zoneout
+            phoneme_pitchs = phoneme_pitchs * pitch_zoneout_mask.to(device).float()
+            phoneme_energies = phoneme_energies * energy_zoneout_mask.to(device).float()
+
             # Forward Pass / GTA generation
             _, mels_out, _, _, _ = model(texts, mels, durations, embeds, mel_lens, phoneme_pitchs, phoneme_energies)
 
