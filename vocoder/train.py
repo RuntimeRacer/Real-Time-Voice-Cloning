@@ -84,6 +84,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
     last_recovery_step = 0
     recovery_active = True
     while recovery_active:
+        accelerator.wait_for_everyone()
         # Set recovery to false, so the process ends in case no recovery needed
         recovery_active = False
 
