@@ -314,21 +314,33 @@ def save(accelerator, model, path, optimizer=None):
     # Unwrap Model
     model = accelerator.unwrap_model(model)
 
+    # Get model type
+    model_type = base.get_model_type(model)
+
     # Save
     if optimizer is not None:
         torch.save({
             "model_state": model.state_dict(),
             "optimizer_state": optimizer.state_dict(),
+            "model_type": model_type,
         }, str(path))
     else:
         torch.save({
             "model_state": model.state_dict(),
+            "model_type": model_type,
         }, str(path))
 
 
 def load(model, device, path, optimizer=None):
     # Use device of model params as location for loaded state
     checkpoint = torch.load(str(path), map_location=device)
+
+    # Load and print model type if detected.
+    # Here this is mainly for debug reasons; when training you'll need to provide
+    # the correct model type anyway, esp. when training initially.
+    if "model_type" in checkpoint:
+        model_type = checkpoint["model_type"]
+        print("Detected model type: %s" % model_type)
 
     # Load model state
     model.load_state_dict(checkpoint["model_state"])
