@@ -308,10 +308,10 @@ wavernn_geneing = HParams(
         (32, 1e-4, 1e-4, 200),
         (64, 1e-4, 1e-4, 200),
         (128, 1e-4, 1e-4, 200),
-        (256, 1e-4, 1e-4, 240),
-        (256, 1e-4, 1e-4, 240),
-        (256, 1e-4, 1e-4, 240),
-        (256, 1e-4, 1e-4, 240),
+        (256, 1e-4, 1e-4, 200),
+        (256, 1e-4, 1e-4, 200),
+        (256, 1e-4, 1e-4, 200),
+        (256, 1e-4, 1e-4, 200),
     ],
 
     # sparsification
@@ -322,11 +322,16 @@ wavernn_geneing = HParams(
     sparsity_target_rnn=0.90,
     sparse_group=4,
 
-    # Anomaly detection in Training
-    anomaly_detection=False,
-    # Enables Loss anomaly detection. Dataloader will collect more metadata. Reduces training Performance by ~20%.
-    anomaly_trigger_multiplier=6,
-    # Threshold for raising anomaly detection. It is a Multiplier of average loss change
+    # Anomaly / Loss explosion detection in Training
+    anomaly_detection=True,  # Enables Loss anomaly detection.
+    anomaly_trigger_multiplier=6,  # Threshold for raising anomaly detection. It is a Multiplier of average loss change.
+    anomaly_blacklist_batches=False,  # Experimental: whether the batch triggering the anomaly should be blacklisted.
+    # Remark: Loss explosion can be caused either by bad data in the training set, or by too high learning rate.
+    # Explosion due to high learning rate will happen usually early on.
+    # Explosion due to bad data randomly happens even at a high training step.
+    # If blacklisting enabled, it will blacklist the batch trained at the moment when the loss explosion occurs
+    # However, there is a chance that the bad batch was already being trained a few steps earlier and thus blacklisting
+    # here might only blacklist a completely valid batch
 
     # Generating / Synthesizing
     gen_at_checkpoint=5,  # number of samples to generate at each checkpoint

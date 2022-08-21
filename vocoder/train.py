@@ -11,7 +11,6 @@ from torch import optim
 from torch.utils.data import DataLoader
 
 from config.hparams import wavernn_fatchord, wavernn_geneing
-from vocoder.batch import analyse_and_export_batch
 from vocoder.display import simple_table, stream
 from vocoder.distribution import discretized_mix_logistic_loss
 from vocoder.gen_wavernn import gen_testset
@@ -72,7 +71,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
 
     # Model has been initialized - Load the weights
     print("{0} - Loading weights at {1}".format(device, weights_fpath))
-    load(model, device, weights_fpath, optimizer)
+    last_backup_path, blacklisted_indices = load(model, device, weights_fpath, optimizer)
     print("{0} - WaveRNN weights loaded from step {1}".format(device, model.get_step()))
 
     # Determine a couple of params based on model type
@@ -80,255 +79,272 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
         vocoder_hparams = wavernn_fatchord
     elif model_type == base.MODEL_TYPE_GENEING:
         vocoder_hparams = wavernn_geneing
-    
-    # Initialize the dataset
-    metadata_fpath = syn_dir.joinpath("train.json") if ground_truth else voc_dir.joinpath("synthesized.json")
-    mel_dir = syn_dir.joinpath("mels") if ground_truth else voc_dir.joinpath("mels_gta")
-    wav_dir = syn_dir.joinpath("wav")
-    dataset = VocoderDataset(metadata_fpath, mel_dir, wav_dir, vocoder_hparams)
-    test_loader = DataLoader(dataset,
-                             batch_size=1,
-                             shuffle=True,
-                             pin_memory=True)
 
-    # Initialize the visualization environment
-    vis = Visualizations(run_id, vis_every, server=visdom_server, disabled=no_visdom)
-    if accelerator.is_local_main_process:
-        vis.log_dataset(dataset)
-        vis.log_params(vocoder_hparams)
-        # FIXME: Print all device names in case we got multiple GPUs or CPUs
-        if accelerator.state.num_processes > 1:
-            vis.log_implementation({"Devices": str(accelerator.state.num_processes)})
-        else:
-            device_name = str(torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU")
-            vis.log_implementation({"Device": device_name})
+    # Init recovery loop with true
+    last_recovery_step = 0
+    recovery_active = True
+    while recovery_active:
+        # Set recovery to false, so the process ends in case no recovery needed
+        recovery_active = False
 
-    # Init epoch information
-    epoch = 0
-    max_step = 0
-
-    for i, session in enumerate(vocoder_hparams.voc_tts_schedule):
-        # Update epoch information
-        epoch += 1
-        epoch_steps = max_step
-
-        # Unwrap model after each epoch (if necessary) for re-calibration
-        model = accelerator.unwrap_model(model)
-
-        # Get the current step being processed
-        current_step = model.get_step() + 1
-
-        # Get session info
-        loops, sgdr_init_lr, sgdr_final_lr, batch_size = session
-
-        # Init dataloader
-        data_loader = DataLoader(dataset,
-                                 collate_fn=lambda batch: collate_vocoder(batch, vocoder_hparams),
-                                 batch_size=batch_size,
-                                 num_workers=threads,
+        # Initialize the dataset
+        metadata_fpath = syn_dir.joinpath("train.json") if ground_truth else voc_dir.joinpath("synthesized.json")
+        mel_dir = syn_dir.joinpath("mels") if ground_truth else voc_dir.joinpath("mels_gta")
+        wav_dir = syn_dir.joinpath("wav")
+        dataset = VocoderDataset(metadata_fpath, mel_dir, wav_dir, vocoder_hparams, blacklisted_indices)
+        test_loader = DataLoader(dataset,
+                                 batch_size=1,
                                  shuffle=True,
                                  pin_memory=True)
 
-        # Processing mode
-        processing_mode = model.mode
-
-        # Accelerator code - optimize and prepare model
-        model, optimizer, data_loader = accelerator.prepare(model, optimizer, data_loader)
-
-        # Iterate over whole dataset for X loops according to schedule
-        total_samples = len(dataset)
-        overall_batch_size = batch_size * accelerator.state.num_processes  # Split training steps by amount of overall batch
-        max_step = np.ceil((total_samples * loops) / overall_batch_size).astype(np.int32) + epoch_steps
-        training_steps = np.ceil(max_step - current_step).astype(np.int32)
-
-        # Calc SGDR values
-        sgdr_lr_stepping = (sgdr_init_lr - sgdr_final_lr) / np.ceil((total_samples * loops) / overall_batch_size).astype(np.int32)
-        lr = sgdr_init_lr - (sgdr_lr_stepping * ((current_step-1) - epoch_steps))
-
-        # Do we need to change to the next session?
-        if current_step >= max_step:
-            # Are there no further sessions than the current one?
-            if i == len(vocoder_hparams.voc_tts_schedule) - 1:
-                # We have completed training. Save the model and exit
-                with accelerator.local_main_process_first():
-                    if accelerator.is_local_main_process:
-                        save(accelerator, model, weights_fpath, optimizer)
-                break
-            else:
-                # There is a following session, go to it and inc epoch
-                continue
-
-        # Begin the training
+        # Initialize the visualization environment
+        vis = Visualizations(run_id, vis_every, server=visdom_server, disabled=no_visdom)
         if accelerator.is_local_main_process:
-            simple_table([("Epoch", epoch),
-                          (f"Remaining Steps in current epoch", str(training_steps) + " Steps"),
-                          ('Batch size', batch_size),
-                          ("Current init LR", lr),
-                          ("LR Stepping", sgdr_lr_stepping),
-                          ('Sequence Len', vocoder_hparams.seq_len)])
+            vis.log_dataset(dataset)
+            vis.log_params(vocoder_hparams)
+            # FIXME: Print all device names in case we got multiple GPUs or CPUs
+            if accelerator.state.num_processes > 1:
+                vis.log_implementation({"Devices": str(accelerator.state.num_processes)})
+            else:
+                device_name = str(torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU")
+                vis.log_implementation({"Device": device_name})
 
-        for p in optimizer.param_groups:
-            p["lr"] = lr
+        # Init epoch information
+        epoch = 0
+        max_step = 0
 
-        # Loss anomaly detection
-        # If loss change after a step differs by > 50%, this will print info which training data was in the last batch
-        avgLossDiff = 0
-        avgLossCount = 0
-        lastLoss = 0
+        for i, session in enumerate(vocoder_hparams.voc_tts_schedule):
+            # Update epoch information
+            epoch += 1
+            epoch_steps = max_step
 
-        # Training loop
-        while current_step < max_step:
-            for step, (x, y, m, src_data) in enumerate(data_loader, current_step):
-                current_step = step
-                start_time = time.time()
+            # Unwrap model after each epoch (if necessary) for re-calibration
+            model = accelerator.unwrap_model(model)
 
-                # Break out of loop to update training schedule
-                if current_step > max_step:
-                    # Next epoch
-                    break
+            # Get the current step being processed
+            current_step = model.get_step() + 1
 
-                # Update lr
-                lr = sgdr_init_lr - (sgdr_lr_stepping * ((current_step-1) - epoch_steps))
-                for p in optimizer.param_groups:
-                    p["lr"] = lr
+            # Get session info
+            loops, sgdr_init_lr, sgdr_final_lr, batch_size = session
 
-                # Forward pass
-                y_hat = model(x, m)
-                if processing_mode == 'MOL':
-                    y = y.float()
-                else:
-                    y_hat = y_hat.transpose(1, 2).unsqueeze(-1)
-                y = y.unsqueeze(-1)
+            # Init dataloader
+            data_loader = DataLoader(dataset,
+                                     collate_fn=lambda batch: collate_vocoder(batch, vocoder_hparams),
+                                     batch_size=batch_size,
+                                     num_workers=threads,
+                                     shuffle=True,
+                                     pin_memory=True)
 
-                # Copy results of forward pass for analysis of needed
-                if vocoder_hparams.anomaly_detection:
-                    cp_y_hat = torch.clone(y_hat)
-                    cp_y = torch.clone(y)
+            # Processing mode
+            processing_mode = model.mode
 
-                # Backward pass
-                loss = loss_func(y_hat, y)
-                optimizer.zero_grad()
-                accelerator.backward(loss)
-                optimizer.step()
+            # Accelerator code - optimize and prepare model
+            model, optimizer, data_loader = accelerator.prepare(model, optimizer, data_loader)
 
-                # Model Pruning
-                if pruner is not None and step >= vocoder_hparams.start_prune:
-                    accelerator.wait_for_everyone()
-                    with accelerator.local_main_process_first():
-                        base_model = accelerator.unwrap_model(model)
-                        pruner.update_layers(base_model.prune_layers)
-                        num_pruned, z = pruner.prune(base_model.step)
-                else:
-                    num_pruned, z = 0, torch.FloatTensor([0.0])
+            # Iterate over whole dataset for X loops according to schedule
+            total_samples = len(dataset)
+            overall_batch_size = batch_size * accelerator.state.num_processes  # Split training steps by amount of overall batch
+            max_step = np.ceil((total_samples * loops) / overall_batch_size).astype(np.int32) + epoch_steps
+            training_steps = np.ceil(max_step - current_step).astype(np.int32)
 
-                time_window.append(time.time() - start_time)
-                loss_window.append(loss.item())
+            # Calc SGDR values
+            sgdr_lr_stepping = (sgdr_init_lr - sgdr_final_lr) / np.ceil((total_samples * loops) / overall_batch_size).astype(np.int32)
+            lr = sgdr_init_lr - (sgdr_lr_stepping * ((current_step-1) - epoch_steps))
 
-                # anomaly detection
-                if avgLossCount == 0:
-                    currentLossDiff = 0
-                    avgLossDiff = 0
-                else:
-                    currentLossDiff = abs(lastLoss - loss.item())
-
-                if vocoder_hparams.anomaly_detection and \
-                        (step > 5000 and \
-                        avgLossCount > 50 and \
-                        currentLossDiff > (avgLossDiff * vocoder_hparams.anomaly_trigger_multiplier) \
-                        or math.isnan(currentLossDiff) \
-                        or math.isnan(loss.item())): # Give it a few steps to normalize, then do the check
-                    print("WARNING - Anomaly detected! (Step {}, Thread {}) - Avg Loss Diff: {}, Current Loss Diff: {}".format(step, accelerator.process_index, avgLossDiff, currentLossDiff))
-                    individual_loss = loss_func(cp_y_hat, cp_y, reduce=False)
-                    individual_loss = torch.mean(individual_loss, 1, True).tolist()
-                    analyse_and_export_batch(src_data, dataset, individual_loss, model_dir.joinpath("anomalies/step_" + str(current_step) + "_thread_" + str(accelerator.process_index)), vocoder_hparams)
-
-                # Kill process if NaN
-                if math.isnan(loss.item()):
-                    currentLossDiff /= 0
-
-                # Update avg loss count
-                avgLossDiff = (avgLossDiff * avgLossCount + currentLossDiff) / (avgLossCount + 1)
-                avgLossCount += 1
-
-                if accelerator.is_local_main_process:
-                    epoch_step = step - epoch_steps
-                    epoch_max_step = max_step - epoch_steps
-                    if pruner is not None:
-                        msg = f"| Epoch: {epoch} ({epoch_step}/{epoch_max_step}) | LR: {lr:#.6} | Loss: {loss_window.average:#.6} | {1. / time_window.average:#.2}steps/s | Step: {step} | Pruned: {num_pruned} ({(round(z.item() * 100, 2))}%) | "
-                    else:
-                        msg = f"| Epoch: {epoch} ({epoch_step}/{epoch_max_step}) | LR: {lr:#.6} | Loss: {loss_window.average:#.6} | {1./time_window.average:#.2}steps/s | Step: {step} | "
-                    stream(msg)
-
-                lastLoss = loss.item()
-
-                # Update visualizations
-                vis.update(loss.item(), step)
-
-                # Save visdom values
-                if accelerator.is_local_main_process and vis_every != 0 and step % vis_every == 0:
-                    vis.save()
-
-                if backup_every != 0 and step % backup_every == 0:
-                    # Accelerator: Save in main process after sync
-                    accelerator.wait_for_everyone()
+            # Do we need to change to the next session?
+            if current_step >= max_step:
+                # Are there no further sessions than the current one?
+                if i == len(vocoder_hparams.voc_tts_schedule) - 1:
+                    # We have completed training. Save the model and exit
                     with accelerator.local_main_process_first():
                         if accelerator.is_local_main_process:
-                            print("Making a backup (step %d)" % step)
-                            backup_fpath = Path("{}/{}_{}.pt".format(str(weights_fpath.parent), run_id, step))
-                            save(accelerator, model, backup_fpath, optimizer)
-
-                if save_every != 0 and step % save_every == 0 :
-                    # Accelerator: Save in main process after sync
-                    accelerator.wait_for_everyone()
-                    with accelerator.local_main_process_first():
-                        if accelerator.is_local_main_process:
-                            print("Saving the model (step %d)" % step)
                             save(accelerator, model, weights_fpath, optimizer)
+                    break
+                else:
+                    # There is a following session, go to it and inc epoch
+                    continue
 
-                # Evaluate model to generate samples
-                # Accelerator: Only in main process
-                if accelerator.is_local_main_process and testset_every != 0 and step % testset_every == 0:
+            # Begin the training
+            if accelerator.is_local_main_process:
+                simple_table([("Epoch", epoch),
+                              (f"Remaining Steps in current epoch", str(training_steps) + " Steps"),
+                              ('Batch size', batch_size),
+                              ("Current init LR", lr),
+                              ("LR Stepping", sgdr_lr_stepping),
+                              ('Sequence Len', vocoder_hparams.seq_len)])
+
+            for p in optimizer.param_groups:
+                p["lr"] = lr
+
+            # Loss anomaly detection
+            # If loss change after a step differs by > 50%, this will print info which training data was in the last batch
+            avgLossDiff = 0
+            avgLossCount = 0
+            lastLoss = 0
+
+            # Training loop
+            while current_step < max_step and not recovery_active:
+                for step, (x, y, m, indices) in enumerate(data_loader, current_step):
+                    current_step = step
+                    start_time = time.time()
+
+                    # Break out of loop to update training schedule
+                    if current_step > max_step:
+                        # Next epoch
+                        break
+
+                    # Update lr
+                    lr = sgdr_init_lr - (sgdr_lr_stepping * ((current_step-1) - epoch_steps))
+                    for p in optimizer.param_groups:
+                        p["lr"] = lr
+
+                    # Forward pass
+                    y_hat = model(x, m)
+                    if processing_mode == 'MOL':
+                        y = y.float()
+                    else:
+                        y_hat = y_hat.transpose(1, 2).unsqueeze(-1)
+                    y = y.unsqueeze(-1)
+
+                    # Backward pass
+                    loss = loss_func(y_hat, y)
+                    optimizer.zero_grad()
+                    accelerator.backward(loss)
+                    optimizer.step()
+
+                    # Model Pruning
+                    if pruner is not None and step >= vocoder_hparams.start_prune:
+                        accelerator.wait_for_everyone()
+                        with accelerator.local_main_process_first():
+                            base_model = accelerator.unwrap_model(model)
+                            pruner.update_layers(base_model.prune_layers)
+                            num_pruned, z = pruner.prune(base_model.step)
+                    else:
+                        num_pruned, z = 0, torch.FloatTensor([0.0])
+
+                    time_window.append(time.time() - start_time)
+                    loss_window.append(loss.item())
+
+                    # anomaly detection
+                    if avgLossCount == 0:
+                        currentLossDiff = 0
+                        avgLossDiff = 0
+                    else:
+                        currentLossDiff = abs(lastLoss - loss.item())
+
+                    if vocoder_hparams.anomaly_detection and \
+                            (step > 5000 and \
+                            avgLossCount > 50 and \
+                            currentLossDiff > (avgLossDiff * vocoder_hparams.anomaly_trigger_multiplier) \
+                            or math.isnan(currentLossDiff) \
+                            or math.isnan(loss.item())): # Give it a few steps to normalize, then do the check
+                        print("WARNING - Anomaly detected! (Step {}, Thread {}) - Avg Loss Diff: {}, Current Loss Diff: {}".format(step, accelerator.process_index, avgLossDiff, currentLossDiff))
+                        accelerator.wait_for_everyone()
+                        if vocoder_hparams.anomaly_blacklist_batches:
+                            last_backup_path, blacklisted_indices, model = recover_and_blacklist_indices(last_backup_path, blacklisted_indices, indices, accelerator, model, device, optimizer)
+                            last_recovery_step = step
+                            recovery_active = True
+                            break
+                        else:
+                            last_backup_path, blacklisted_indices, model = recover(last_backup_path, model, device, accelerator, optimizer)
+                            last_recovery_step = step
+                            recovery_active = True
+                            break
+
+                    # Kill process if NaN
+                    if math.isnan(loss.item()):
+                        currentLossDiff /= 0
+
+                    # Update avg loss count
+                    avgLossDiff = (avgLossDiff * avgLossCount + currentLossDiff) / (avgLossCount + 1)
+                    avgLossCount += 1
+
+                    if accelerator.is_local_main_process:
+                        epoch_step = step - epoch_steps
+                        epoch_max_step = max_step - epoch_steps
+                        if pruner is not None:
+                            msg = f"| Epoch: {epoch} ({epoch_step}/{epoch_max_step}) | LR: {lr:#.6} | Loss: {loss_window.average:#.6} | {1. / time_window.average:#.2}steps/s | Step: {step} | Pruned: {num_pruned} ({(round(z.item() * 100, 2))}%) | Last Recovery: {last_recovery_step} |"
+                        else:
+                            msg = f"| Epoch: {epoch} ({epoch_step}/{epoch_max_step}) | LR: {lr:#.6} | Loss: {loss_window.average:#.6} | {1./time_window.average:#.2}steps/s | Step: {step} | Last Recovery: {last_recovery_step} |"
+                        stream(msg)
+
+                    lastLoss = loss.item()
+
+                    # Update visualizations
+                    vis.update(loss.item(), step)
+
+                    # Save visdom values
+                    if accelerator.is_local_main_process and vis_every != 0 and step % vis_every == 0:
+                        vis.save()
+
+                    if backup_every != 0 and step % backup_every == 0:
+                        # Accelerator: Save in main process after sync
+                        accelerator.wait_for_everyone()
+                        with accelerator.local_main_process_first():
+                            if accelerator.is_local_main_process:
+                                print("Making a backup (step %d)" % step)
+                                backup_fpath = Path("{}/{}_{}.pt".format(str(weights_fpath.parent), run_id, step))
+                                save(accelerator, model, backup_fpath, optimizer, backup_fpath, blacklisted_indices)
+
+                    if save_every != 0 and step % save_every == 0 :
+                        # Accelerator: Save in main process after sync
+                        accelerator.wait_for_everyone()
+                        with accelerator.local_main_process_first():
+                            if accelerator.is_local_main_process:
+                                print("Saving the model (step %d)" % step)
+                                save(accelerator, model, weights_fpath, optimizer, last_backup_path, blacklisted_indices)
+
+                    # Evaluate model to generate samples
+                    # Accelerator: Only in main process
+                    if accelerator.is_local_main_process and testset_every != 0 and step % testset_every == 0:
+                        eval_model = accelerator.unwrap_model(model)
+                        gen_testset(eval_model, test_loader, model_dir, vocoder_hparams)
+
+                    # Break out of loop to update training schedule
+                    if step >= max_step:
+                        break
+
+            # Abort here if in recovery
+            if recovery_active:
+                break
+
+            # Add line break to output and make a backup after every epoch
+            # Accelerator: Save in main process after sync
+            accelerator.wait_for_everyone()
+            with accelerator.local_main_process_first():
+                if accelerator.is_local_main_process:
+                    print("")
+                    print("Making a backup (step %d)" % current_step)
+                    backup_fpath = Path("{}/{}_{}.pt".format(str(weights_fpath.parent), run_id, current_step))
+                    save(accelerator, model, backup_fpath, optimizer, backup_fpath, blacklisted_indices)
+
+                    # Generate a testset after each epoch
                     eval_model = accelerator.unwrap_model(model)
                     gen_testset(eval_model, test_loader, model_dir, vocoder_hparams)
 
-                # Break out of loop to update training schedule
-                if step >= max_step:
-                    break
 
-        # Add line break to output and make a backup after every epoch
-        # Accelerator: Save in main process after sync
-        accelerator.wait_for_everyone()
-        with accelerator.local_main_process_first():
-            if accelerator.is_local_main_process:
-                print("")
-                print("Making a backup (step %d)" % current_step)
-                backup_fpath = Path("{}/{}_{}.pt".format(str(weights_fpath.parent), run_id, current_step))
-                save(accelerator, model, backup_fpath, optimizer)
-                
-                # Generate a testset after each epoch
-                eval_model = accelerator.unwrap_model(model)
-                gen_testset(eval_model, test_loader, model_dir, vocoder_hparams)
-
-
-def save(accelerator, model, path, optimizer=None):
+def save(accelerator, model, path, optimizer=None, last_backup_path=None, blacklisted_indices=[]):
     # Unwrap Model
     model = accelerator.unwrap_model(model)
 
     # Get model type
     model_type = base.get_model_type(model)
 
-    # Save
+    # Build state to be saved
+    state = {
+        "model_state": model.state_dict(),
+        "model_type": model_type,
+    }
     if optimizer is not None:
-        torch.save({
-            "model_state": model.state_dict(),
-            "optimizer_state": optimizer.state_dict(),
-            "model_type": model_type,
-        }, str(path))
-    else:
-        torch.save({
-            "model_state": model.state_dict(),
-            "model_type": model_type,
-        }, str(path))
+        state["optimizer_state"] = optimizer.state_dict()
+    if len(blacklisted_indices) > 0:
+        print("Current amount of blacklisted dataset indices: %d" % len(blacklisted_indices))
+        state["blacklisted_indices"] = blacklisted_indices
+    if last_backup_path is not None:
+        state["last_backup_path"] = last_backup_path
+
+    # Save
+    torch.save(state, str(path))
 
 
 def load(model, device, path, optimizer=None):
@@ -348,3 +364,26 @@ def load(model, device, path, optimizer=None):
     # Load optimizer state
     if "optimizer_state" in checkpoint and optimizer is not None:
         optimizer.load_state_dict(checkpoint["optimizer_state"])
+
+    # Load training meta information
+    last_backup_path = None
+    blacklisted_indices = []
+    if "blacklisted_indices" in checkpoint and len(checkpoint["blacklisted_indices"]) > 0:
+        blacklisted_indices = checkpoint["blacklisted_indices"]
+    if "last_backup_path" in checkpoint and checkpoint["last_backup_path"] is not None:
+        last_backup_path = checkpoint["last_backup_path"]
+    return last_backup_path, blacklisted_indices
+
+
+def recover_and_blacklist_indices(last_backup_path, batch, blacklisted_indices, accelerator, model, device, optimizer):
+    # TODO: Actual blacklist function
+    last_backup_path, blacklisted_indices, model = recover(last_backup_path, accelerator, model, device, optimizer)
+    return last_backup_path, blacklisted_indices, model
+
+
+def recover(last_backup_path, accelerator, model, device, optimizer):
+    # Unwrap Model
+    model = accelerator.unwrap_model(model)
+    # Load model state from backup
+    last_backup_path, blacklisted_indices = load(model, device, last_backup_path, optimizer)
+    return last_backup_path, blacklisted_indices, model

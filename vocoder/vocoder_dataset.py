@@ -10,7 +10,7 @@ from vocoder import audio
 
 
 class VocoderDataset(Dataset):
-    def __init__(self, metadata_fpath: Path, mel_dir: Path, wav_dir: Path, vocoder_hparams):
+    def __init__(self, metadata_fpath: Path, mel_dir: Path, wav_dir: Path, vocoder_hparams, blacklisted_indices):
         self.metadata_fpath = metadata_fpath
         print("Using inputs from:\n\t%s\n\t%s\n\t%s" % (self.metadata_fpath, mel_dir, wav_dir))
 
@@ -26,7 +26,6 @@ class VocoderDataset(Dataset):
         wav_fpaths = [wav_dir.joinpath("audio-%s.npy" % fname) for fname in wav_fnames]
         self.vocoder_hparams = vocoder_hparams
         self.samples_fpaths = list(zip(gta_fpaths, wav_fpaths))
-        self.samples_texts = [x[3].strip() for x in metadata if int(x[2])] if self.vocoder_hparams.anomaly_detection else []
         self.metadata = metadata
         
         print("Found %d samples" % len(self.samples_fpaths))
@@ -71,12 +70,8 @@ class VocoderDataset(Dataset):
 
         
 def collate_vocoder(batch, vocoder_hparams):
-    if vocoder_hparams.anomaly_detection:
-        # collections of data for analyzing the batch
-        src_mel_data = [x[0] for x in batch]
-        src_wav_data = [x[1] for x in batch]
-        indices = [x[2] for x in batch]
-    src_data = (src_mel_data, src_wav_data, indices) if vocoder_hparams.anomaly_detection else (None, None, None)
+    # Indices; used for debugging
+    indices = [x[2] for x in batch]
 
     # preprocessing for vocoder training
     mel_win = vocoder_hparams.seq_len // sp.hop_size + 2 * vocoder_hparams.pad
@@ -104,4 +99,4 @@ def collate_vocoder(batch, vocoder_hparams):
     if vocoder_hparams.mode == 'MOL' :
         y = audio.label_2_float(y.float(), bits)
 
-    return x, y, mels, src_data
+    return x, y, mels, indices
