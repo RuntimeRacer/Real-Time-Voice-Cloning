@@ -316,8 +316,8 @@ wavernn_geneing = HParams(
 
     # sparsification
     use_sparsification=True,
-    start_prune=80000,
-    prune_steps=80000,
+    start_prune=3000000,
+    prune_steps=1000000,
     sparsity_target=0.90,
     sparsity_target_rnn=0.90,
     sparse_group=4,
