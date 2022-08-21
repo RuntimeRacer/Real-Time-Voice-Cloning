@@ -280,7 +280,7 @@ wavernn_geneing = HParams(
     mode='BITS',  # either 'RAW' (softmax on raw bits) or 'MOL' (sample from mixture of logistics)
     bits=10,  # bit depth of signal
     mu_law=True,  # Recommended to suppress noise if using raw bits in hp.voc_mode
-    upsample_factors=(5, 5, 8),  # NB - this needs to correctly factorise hop_length
+    upsample_factors=(4, 5, 10),  # NB - this needs to correctly factorise hop_length
 
     rnn_dims=256,
     fc_dims=128,
