@@ -234,12 +234,12 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
 
                     if vocoder_hparams.anomaly_detection and \
                             (step > 5000 and \
-                            avgLossCount > 50 and \
-                            currentLossDiff > (avgLossDiff * vocoder_hparams.anomaly_trigger_multiplier) \
-                            or math.isnan(currentLossDiff) \
-                            or math.isnan(loss.item())): # Give it a few steps to normalize, then do the check
+                             avgLossCount > 50 and \
+                             currentLossDiff > (avgLossDiff * vocoder_hparams.anomaly_trigger_multiplier) \
+                             or math.isnan(currentLossDiff) \
+                             or math.isnan(loss.item())):  # Give it a few steps to normalize, then do the check
                         print("WARNING - Anomaly detected! (Step {}, Thread {}) - Avg Loss Diff: {}, Current Loss Diff: {}".format(step, accelerator.process_index, avgLossDiff, currentLossDiff))
-                        accelerator.wait_for_everyone()
+
                         if vocoder_hparams.anomaly_blacklist_batches:
                             last_backup_path, blacklisted_indices, model = recover_and_blacklist_indices(last_backup_path, blacklisted_indices, indices, accelerator, model, device, optimizer)
                             last_recovery_step = step
