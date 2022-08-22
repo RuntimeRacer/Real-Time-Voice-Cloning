@@ -247,7 +247,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                             recovery_active = True
                             break
                         else:
-                            last_backup_path, blacklisted_indices, model = recover(last_backup_path, model, device, accelerator, optimizer)
+                            last_backup_path, blacklisted_indices, model = recover(last_backup_path, accelerator, model, device, optimizer)
                             last_recovery_step = step
                             recovery_active = True
                             break
@@ -376,7 +376,7 @@ def load(model, device, path, optimizer=None):
     return last_backup_path, blacklisted_indices
 
 
-def recover_and_blacklist_indices(last_backup_path, batch, blacklisted_indices, accelerator, model, device, optimizer):
+def recover_and_blacklist_indices(last_backup_path, blacklisted_indices, batch, accelerator, model, device, optimizer):
     # TODO: Actual blacklist function
     last_backup_path, blacklisted_indices, model = recover(last_backup_path, accelerator, model, device, optimizer)
     return last_backup_path, blacklisted_indices, model
