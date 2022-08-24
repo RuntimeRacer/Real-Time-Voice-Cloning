@@ -220,55 +220,38 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                 else:
                     num_pruned, z = 0, torch.FloatTensor([0.0])
 
-                time_window.append(time.time() - start_time)
-                loss_window.append(loss.item())
-
                 # anomaly detection
-                if avgLossCount == 0:
-                    currentLossDiff = 0
-                    avgLossDiff = 0
-                else:
-                    currentLossDiff = abs(lastLoss - loss.item())
+                if vocoder_hparams.anomaly_detection:
+                    if avgLossCount == 0:
+                        currentLossDiff = 0
+                        avgLossDiff = 0
+                    else:
+                        currentLossDiff = abs(lastLoss - loss.item())
 
-                if vocoder_hparams.anomaly_detection and \
-                        (step > 5000 and \
-                         avgLossCount > 50 and \
-                         currentLossDiff > (avgLossDiff * vocoder_hparams.anomaly_trigger_multiplier) \
+                    if (step > 5000 and avgLossCount > 50 and currentLossDiff > (avgLossDiff * vocoder_hparams.anomaly_trigger_multiplier) \
                          or math.isnan(currentLossDiff) \
                          or math.isnan(loss.item())):  # Give it a few steps to normalize, then do the check
-                    print("WARNING - Anomaly detected! (Step {}, Thread {}) - Avg Loss Diff: {}, Current Loss Diff: {}".format(step, accelerator.process_index, avgLossDiff, currentLossDiff))
+                        print("WARNING - Anomaly detected! (Step {}, Thread {}) - Avg Loss Diff: {}, Current Loss Diff: {}".format(step, accelerator.process_index, avgLossDiff, currentLossDiff))
 
-                    if vocoder_hparams.anomaly_blacklist_batches:
-                        # blacklist indices and update dataset
-                        global blacklist_lock
-                        with blacklist_lock:
-                            blacklisted_indices.extend(indices)
-                            print("Blacklisting {} indices from dataset. Total blacklisted: {}.".format(len(indices), len(blacklisted_indices)))
+                        if vocoder_hparams.anomaly_blacklist_batches:
+                            # blacklist indices and update dataset
+                            global blacklist_lock
+                            with blacklist_lock:
+                                blacklisted_indices.extend(indices)
+                                print("Blacklisting {} indices from dataset. Total blacklisted: {}.".format(len(indices), len(blacklisted_indices)))
 
-                # Comparison to ensure all threads have the same blacklisting
-                if len(dataset.get_blacklisted_indices()) != len(blacklisted_indices):
-                    dataset.blacklisted_indices(blacklisted_indices)
+                    # Comparison to ensure all threads have the same blacklisting
+                    if len(dataset.get_blacklisted_indices()) != len(blacklisted_indices):
+                        dataset.blacklisted_indices(blacklisted_indices)
 
-                # Kill process if NaN
-                if math.isnan(loss.item()):
-                    currentLossDiff /= 0
+                    # Kill process if NaN
+                    if math.isnan(loss.item()):
+                        currentLossDiff /= 0
 
-                # Update avg loss count
-                avgLossDiff = (avgLossDiff * avgLossCount + currentLossDiff) / (avgLossCount + 1)
-                avgLossCount += 1
-
-                if accelerator.is_local_main_process:
-                    epoch_step = step - epoch_steps
-                    epoch_max_step = max_step - epoch_steps
-                    if pruner is not None:
-                        if torch.is_tensor(z):
-                            z = z.item()
-                        msg = f"| Epoch: {epoch} ({epoch_step}/{epoch_max_step}) | LR: {lr:#.6} | Loss: {loss_window.average:#.6} | {1. / time_window.average:#.2}steps/s | Step: {step} | Pruned: {num_pruned} ({(round(z * 100, 2))}%) | Currently blacklisted: {len(blacklisted_indices)} |"
-                    else:
-                        msg = f"| Epoch: {epoch} ({epoch_step}/{epoch_max_step}) | LR: {lr:#.6} | Loss: {loss_window.average:#.6} | {1./time_window.average:#.2}steps/s | Step: {step} | Currently blacklisted: {len(blacklisted_indices)} |"
-                    stream(msg)
-
-                lastLoss = loss.item()
+                    # Update avg loss count & last loss
+                    avgLossDiff = (avgLossDiff * avgLossCount + currentLossDiff) / (avgLossCount + 1)
+                    avgLossCount += 1
+                    lastLoss = loss.item()
 
                 # Update visualizations
                 vis.update(loss.item(), step)
@@ -299,6 +282,22 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                 if accelerator.is_local_main_process and testset_every != 0 and step % testset_every == 0:
                     eval_model = accelerator.unwrap_model(model)
                     gen_testset(eval_model, test_loader, model_dir, vocoder_hparams)
+
+                # Update Metrics
+                time_window.append(time.time() - start_time)
+                loss_window.append(loss.item())
+
+                if accelerator.is_local_main_process:
+                    epoch_step = step - epoch_steps
+                    epoch_max_step = max_step - epoch_steps
+
+                    if pruner is not None:
+                        if torch.is_tensor(z):
+                            z = z.item()
+                        msg = f"| Epoch: {epoch} ({epoch_step}/{epoch_max_step}) | LR: {lr:#.6} | Loss: {loss_window.average:#.6} | {1. / time_window.average:#.2}steps/s | Step: {step} | Pruned: {num_pruned} ({(round(z * 100, 2))}%) | Currently blacklisted: {len(blacklisted_indices)} |"
+                    else:
+                        msg = f"| Epoch: {epoch} ({epoch_step}/{epoch_max_step}) | LR: {lr:#.6} | Loss: {loss_window.average:#.6} | {1. / time_window.average:#.2}steps/s | Step: {step} | Currently blacklisted: {len(blacklisted_indices)} |"
+                    stream(msg)
 
                 # Break out of loop to update training schedule
                 if step >= max_step:
