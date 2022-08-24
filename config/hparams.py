@@ -315,15 +315,15 @@ wavernn_geneing = HParams(
     ],
 
     # sparsification
-    use_sparsification=True,
-    start_prune=1000000,
+    use_sparsification=False,
+    start_prune=10000000,
     prune_steps=1000000,
     sparsity_target=0.90,
     sparsity_target_rnn=0.90,
     sparse_group=4,
 
     # Anomaly / Loss explosion detection in Training
-    anomaly_detection=True,  # Enables Loss anomaly detection.
+    anomaly_detection=False,  # Enables Loss anomaly detection.
     anomaly_trigger_multiplier=6,  # Threshold for raising anomaly detection. It is a Multiplier of average loss change.
     anomaly_blacklist_batches=False,  # Experimental: whether the batch triggering the anomaly should be blacklisted.
     # Remark: Loss explosion can be caused either by bad data in the training set, or by too high learning rate.
