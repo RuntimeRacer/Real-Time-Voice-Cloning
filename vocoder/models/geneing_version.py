@@ -149,12 +149,120 @@ class WaveRNN(nn.Module):
         else:
             raise ValueError("input_type: {self.mode} not supported")
 
-
     def preview_upsampling(self, mels) :
         mels, aux = self.upsample(mels)
         return mels, aux
 
+    def generate(self, mels, batched, target, overlap, mu_law, apply_preemphasis, progress_callback=None):
+        mu_law = mu_law if self.mode == 'RAW' else False
+        progress_callback = progress_callback or self.gen_display
 
+        self.eval()
+        output = []
+        start = time.time()
+        rnn1 = self.get_gru_cell(self.rnn1)
+
+        with torch.no_grad():
+            if torch.cuda.is_available():
+                mels = mels.cuda()
+            else:
+                mels = mels.cpu()
+            wave_len = (mels.size(-1) - 1) * self.hop_length
+            mels = self.pad_tensor(mels.transpose(1, 2), pad=self.pad, side='both')
+            mels, aux = self.upsample(mels.transpose(1, 2))
+
+            if batched:
+                mels = self.fold_with_overlap(mels, target, overlap)
+                aux = self.fold_with_overlap(aux, target, overlap)
+
+            b_size, seq_len, _ = mels.size()
+
+            if torch.cuda.is_available():
+                h1 = torch.zeros(b_size, self.rnn_dims).cuda()
+                x = torch.zeros(b_size, 1).cuda()
+            else:
+                h1 = torch.zeros(b_size, self.rnn_dims).cpu()
+                x = torch.zeros(b_size, 1).cpu()
+
+            d = self.aux_dims
+            aux_split = [aux[:, :, d * i:d * (i + 1)] for i in range(2)]
+
+            for i in range(seq_len):
+
+                m_t = mels[:, i, :]
+
+                a1_t, a2_t = (a[:, i, :] for a in aux_split)
+
+                x = torch.cat([x, m_t, a1_t[:,:-1]], dim=1)
+                x = self.I(x)
+                h1 = rnn1(x, h1)
+
+                x = x + h1
+                x = torch.cat([x, a2_t], dim=1)
+                x = F.relu(self.fc1(x))
+
+                x = self.fc3(x)
+
+                if self.mode == 'RAW':
+                    sample = sample_from_beta_dist(x.unsqueeze(0)).view(-1)
+                    output.append(sample)
+                    x = sample.unsqueeze(-1)
+                elif self.mode == 'MOL':
+                    sample = sample_from_discretized_mix_logistic(x.unsqueeze(0).transpose(1, 2))
+                    output.append(sample.view(-1))
+                    if torch.cuda.is_available():
+                        x = sample.transpose(0, 1).cuda()
+                    else:
+                        x = sample.transpose(0, 1)
+                elif self.mode == 'BITS':
+                    posterior = F.softmax(x, dim=1)
+                    distrib = torch.distributions.Categorical(posterior)
+
+                    sample = 2 * distrib.sample().float() / (self.n_classes - 1.) - 1.
+                    output.append(sample)
+                    x = sample.unsqueeze(-1)
+                else:
+                    raise RuntimeError("Unknown model mode value - ", self.mode)
+
+                if i % 100 == 0:
+                    gen_rate = (i + 1) / (time.time() - start) * b_size / 1000
+                    progress_callback(i, seq_len, b_size, gen_rate)
+
+        output = torch.stack(output).transpose(0, 1)
+        output = output.cpu().numpy()
+        output = output.astype(np.float64)
+
+        if batched:
+            output = self.xfade_and_unfold(output, target, overlap)
+        else:
+            output = output[0]
+
+        if mu_law:
+            output = decode_mu_law(output, self.n_classes, False)
+        if apply_preemphasis:
+            output = de_emphasis(output)
+
+        # Fade-out at the end to avoid signal cutting out suddenly
+        fade_out = np.linspace(1, 0, 20 * self.hop_length)
+        output = output[:wave_len]
+        output[-20 * self.hop_length:] *= fade_out
+
+        self.train()
+
+        return output
+
+    def gen_display(self, i, seq_len, b_size, gen_rate):
+        pbar = progbar(i, seq_len)
+        msg = f'| {pbar} {i*b_size}/{seq_len*b_size} | Batch Size: {b_size} | Gen Rate: {gen_rate:.1f}kHz | '
+        stream(msg)
+
+    def get_gru_cell(self, gru):
+        gru_cell = nn.GRUCell(gru.input_size, gru.hidden_size)
+        gru_cell.weight_hh.data = gru.weight_hh_l0.data
+        gru_cell.weight_ih.data = gru.weight_ih_l0.data
+        gru_cell.bias_hh.data = gru.bias_hh_l0.data
+        gru_cell.bias_ih.data = gru.bias_ih_l0.data
+        return gru_cell
 
     def pad_tensor(self, x, pad, side='both'):
         # NB - this is just a quick method i need right now
@@ -286,118 +394,6 @@ class WaveRNN(nn.Module):
             unfolded[start:end] += y[i]
 
         return unfolded
-
-    def generate(self, mels, batched, target, overlap, mu_law, apply_preemphasis, progress_callback=None):
-        mu_law = mu_law if self.mode == 'RAW' else False
-        progress_callback = progress_callback or self.gen_display
-
-        self.eval()
-        output = []
-        start = time.time()
-        rnn1 = self.get_gru_cell(self.rnn1)
-
-        with torch.no_grad():
-            if torch.cuda.is_available():
-                mels = mels.cuda()
-            else:
-                mels = mels.cpu()
-            wave_len = (mels.size(-1) - 1) * self.hop_length
-            mels = self.pad_tensor(mels.transpose(1, 2), pad=self.pad, side='both')
-            mels, aux = self.upsample(mels.transpose(1, 2))
-
-            if batched:
-                mels = self.fold_with_overlap(mels, target, overlap)
-                aux = self.fold_with_overlap(aux, target, overlap)
-
-            b_size, seq_len, _ = mels.size()
-
-            if torch.cuda.is_available():
-                h1 = torch.zeros(b_size, self.rnn_dims).cuda()
-                x = torch.zeros(b_size, 1).cuda()
-            else:
-                h1 = torch.zeros(b_size, self.rnn_dims).cpu()
-                x = torch.zeros(b_size, 1).cpu()
-
-            d = self.aux_dims
-            aux_split = [aux[:, :, d * i:d * (i + 1)] for i in range(2)]
-
-            for i in range(seq_len):
-
-                m_t = mels[:, i, :]
-
-                a1_t, a2_t = (a[:, i, :] for a in aux_split)
-
-                x = torch.cat([x, m_t, a1_t[:,:-1]], dim=1)
-                x = self.I(x)
-                h1 = rnn1(x, h1)
-
-                x = x + h1
-                x = torch.cat([x, a2_t], dim=1)
-                x = F.relu(self.fc1(x))
-
-                x = self.fc3(x)
-
-                if self.mode == 'RAW':
-                    sample = sample_from_beta_dist(x.unsqueeze(0)).view(-1)
-                    output.append(sample)
-                    x = sample.unsqueeze(-1)
-                elif self.mode == 'MOL':
-                    sample = sample_from_discretized_mix_logistic(x.unsqueeze(0).transpose(1, 2))
-                    output.append(sample.view(-1))
-                    if torch.cuda.is_available():
-                        x = sample.transpose(0, 1).cuda()
-                    else:
-                        x = sample.transpose(0, 1)
-                elif self.mode == 'BITS':
-                    posterior = F.softmax(x, dim=1)
-                    distrib = torch.distributions.Categorical(posterior)
-
-                    sample = 2 * distrib.sample().float() / (self.n_classes - 1.) - 1.
-                    output.append(sample)
-                    x = sample.unsqueeze(-1)
-                else:
-                    raise RuntimeError("Unknown model mode value - ", self.mode)
-
-                if i % 100 == 0:
-                    gen_rate = (i + 1) / (time.time() - start) * b_size / 1000
-                    progress_callback(i, seq_len, b_size, gen_rate)
-
-        output = torch.stack(output).transpose(0, 1)
-        output = output.cpu().numpy()
-        output = output.astype(np.float64)
-
-        if batched:
-            output = self.xfade_and_unfold(output, target, overlap)
-        else:
-            output = output[0]
-
-        if mu_law:
-            output = decode_mu_law(output, self.n_classes, False)
-        if apply_preemphasis:
-            output = de_emphasis(output)
-
-        # Fade-out at the end to avoid signal cutting out suddenly
-        fade_out = np.linspace(1, 0, 20 * self.hop_length)
-        output = output[:wave_len]
-        output[-20 * self.hop_length:] *= fade_out
-
-        self.train()
-
-        return output
-
-
-    def gen_display(self, i, seq_len, b_size, gen_rate):
-        pbar = progbar(i, seq_len)
-        msg = f'| {pbar} {i*b_size}/{seq_len*b_size} | Batch Size: {b_size} | Gen Rate: {gen_rate:.1f}kHz | '
-        stream(msg)
-
-    def get_gru_cell(self, gru):
-        gru_cell = nn.GRUCell(gru.input_size, gru.hidden_size)
-        gru_cell.weight_hh.data = gru.weight_hh_l0.data
-        gru_cell.weight_ih.data = gru.weight_ih_l0.data
-        gru_cell.bias_hh.data = gru.bias_hh_l0.data
-        gru_cell.bias_ih.data = gru.bias_ih_l0.data
-        return gru_cell
 
     def get_step(self) :
         return self.step.data.item()

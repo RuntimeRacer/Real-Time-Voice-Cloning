@@ -277,7 +277,7 @@ wavernn_fatchord = HParams(
 # Parameters for geneing's optimized WaveRNN Vocoder
 wavernn_geneing = HParams(
     # Model
-    mode='BITS',  # either 'RAW' (softmax on raw bits) or 'MOL' (sample from mixture of logistics)
+    mode='BITS',  # either 'BITS' (softmax on raw bits) or 'MOL' (sample from mixture of logistics)
     bits=10,  # bit depth of signal
     mu_law=False,  # Recommended to suppress noise if using raw bits in hp.voc_mode
     upsample_factors=(4, 5, 10),  # NB - this needs to correctly factorise hop_length
@@ -306,12 +306,12 @@ wavernn_geneing = HParams(
         (8, 1e-4, 1e-4, 100),
         (16, 1e-4, 1e-4, 120),
         (32, 1e-4, 1e-4, 140),
-        (64, 1e-4, 1e-4, 160),
-        (128, 1e-4, 1e-4, 180),
-        (256, 1e-4, 1e-4, 200),
-        (256, 1e-4, 1e-4, 200),
-        (256, 1e-4, 1e-4, 200),
-        (256, 1e-4, 1e-4, 200),
+        (64, 1e-4, 5e-5, 160),
+        (128, 5e-5, 1e-5, 180),
+        (256, 1e-5, 1e-5, 200),
+        (256, 1e-5, 1e-5, 200),
+        (256, 1e-5, 1e-5, 200),
+        (256, 1e-5, 1e-5, 200),
     ],
 
     # sparsification
