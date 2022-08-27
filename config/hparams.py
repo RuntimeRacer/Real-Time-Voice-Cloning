@@ -237,7 +237,8 @@ wavernn_fatchord = HParams(
 
     # MOL Training params
     num_classes=65536,
-    log_scale_min=float(np.log(1e-14)),
+    log_scale_min=-32.23619130191664,  # = float(np.log(1e-14))
+    # log_scale_min=-16.11809565095831,  # = float(np.log(1e-7))
 
     # Progressive training schedule
     # (loops, init_lr, final_lr, batch_size)
@@ -302,7 +303,8 @@ wavernn_geneing = HParams(
 
     # MOL Training params
     num_classes=256,
-    log_scale_min=32.23619130191664,  # = float(np.log(1e-7))
+    log_scale_min=-32.23619130191664,  # = float(np.log(1e-14))
+    #log_scale_min=-16.11809565095831,  # = float(np.log(1e-7))
 
     # Progressive training schedule
     # (loops, init_lr, final_lr, batch_size)
