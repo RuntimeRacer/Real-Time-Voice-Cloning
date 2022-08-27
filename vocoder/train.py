@@ -55,13 +55,6 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
         print(str(e))
         return
 
-    if model.mode == "MOL":
-        loss_func = discretized_mix_logistic_loss
-    else:
-        # Compared to (N)LL, Cross Entropy is more efficient; see:
-        # https://discuss.pytorch.org/t/difference-between-cross-entropy-loss-or-log-likelihood-loss/38816
-        loss_func = F.cross_entropy
-
     # Initialize the optimizer
     optimizer = optim.Adam(model.parameters())
 
@@ -205,7 +198,16 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                 y = y.unsqueeze(-1)
 
                 # Backward pass
-                loss = loss_func(y_hat, y)
+                if model.mode == "MOL":
+                    loss = discretized_mix_logistic_loss(y_hat,
+                                                         y,
+                                                         num_classes=vocoder_hparams.num_classes,
+                                                         log_scale_min=vocoder_hparams.log_scale_min)
+                else:
+                    # Compared to (N)LL, Cross Entropy is more efficient; see:
+                    # https://discuss.pytorch.org/t/difference-between-cross-entropy-loss-or-log-likelihood-loss/38816
+                    loss = F.cross_entropy(y_hat, y)
+
                 optimizer.zero_grad()
                 accelerator.backward(loss)
                 optimizer.step()

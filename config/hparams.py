@@ -1,6 +1,8 @@
 import ast
 import pprint
 
+import numpy as np
+
 
 class HParams(object):
     def __init__(self, **kwargs):
@@ -231,6 +233,11 @@ wavernn_fatchord = HParams(
     # WaveRNN Training
     pad=2,  # this will pad the input so that the resnet can 'see' wider than input length
     seq_len=sp.hop_size * 5,  # must be a multiple of hop_length
+    # seq_len_factor can be adjusted to increase training sequence length (will increase GPU usage)
+
+    # MOL Training params
+    num_classes=65536,
+    log_scale_min=float(np.log(1e-14)),
 
     # Progressive training schedule
     # (loops, init_lr, final_lr, batch_size)
@@ -293,6 +300,10 @@ wavernn_geneing = HParams(
     seq_len=sp.hop_size * 7,  # must be a multiple of hop_length
     # seq_len_factor can be adjusted to increase training sequence length (will increase GPU usage)
 
+    # MOL Training params
+    num_classes=256,
+    log_scale_min=32.23619130191664,  # = float(np.log(1e-7))
+
     # Progressive training schedule
     # (loops, init_lr, final_lr, batch_size)
     # loops = amount of loops through the dataset per epoch
@@ -316,8 +327,8 @@ wavernn_geneing = HParams(
 
     # sparsification
     use_sparsification=False,
-    start_prune=10000000,
-    prune_steps=1000000,
+    start_prune=100000,
+    prune_steps=100000,
     sparsity_target=0.90,
     sparsity_target_rnn=0.90,
     sparse_group=4,
@@ -338,5 +349,4 @@ wavernn_geneing = HParams(
     gen_batched=True,  # very fast (realtime+) single utterance batched generation
     gen_target=3000,  # target number of samples to be generated in each batch entry
     gen_overlap=1500,  # number of samples for crossfading between batches
-
 )

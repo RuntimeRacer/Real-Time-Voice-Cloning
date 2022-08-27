@@ -110,7 +110,7 @@ def collate_vocoder(batch, vocoder_hparams):
 
     x = audio.label_2_float(x.float(), bits)
 
-    if vocoder_hparams.mode == 'MOL' :
+    if vocoder_hparams.mode == 'MOL':
         y = audio.label_2_float(y.float(), bits)
 
     return x, y, mels, indices
