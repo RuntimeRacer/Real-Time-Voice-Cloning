@@ -198,7 +198,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                 y = y.unsqueeze(-1)
 
                 # Backward pass
-                if model.mode == "MOL":
+                if processing_mode == "MOL":
                     loss = discretized_mix_logistic_loss(y_hat,
                                                          y,
                                                          num_classes=vocoder_hparams.num_classes,
