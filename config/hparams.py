@@ -285,10 +285,10 @@ wavernn_fatchord = HParams(
 # Parameters for geneing's optimized WaveRNN Vocoder
 wavernn_geneing = HParams(
     # Model
-    mode='BITS',  # either 'BITS' (softmax on raw bits) or 'MOL' (sample from mixture of logistics)
+    mode='MOL',  # either 'BITS' (softmax on raw bits) or 'MOL' (sample from mixture of logistics)
     bits=10,  # bit depth of signal
     mu_law=False,  # Recommended to suppress noise if using raw bits in hp.voc_mode
-    upsample_factors=(4, 5, 10),  # NB - this needs to correctly factorise hop_length
+    upsample_factors=(5, 5, 8),  # NB - this needs to correctly factorise hop_length
 
     rnn_dims=256,
     fc_dims=128,
@@ -313,18 +313,18 @@ wavernn_geneing = HParams(
     # final_lr = amount of loops through the dataset per epoch
     # batch_size = Size of the batches used for inference. Rule of Thumb: Max. 12 units per GB of VRAM of smallest card.
     voc_tts_schedule=[
-        (1, 1e-3, 5e-4, 40),
-        (2, 5e-4, 1e-4, 60),
-        (4, 1e-4, 1e-4, 80),
-        (8, 1e-4, 1e-4, 100),
-        (16, 1e-4, 1e-4, 120),
-        (32, 1e-4, 1e-4, 140),
-        (64, 1e-4, 5e-5, 160),
-        (128, 5e-5, 1e-5, 180),
-        (256, 1e-5, 1e-5, 200),
-        (256, 1e-5, 1e-5, 200),
-        (256, 1e-5, 1e-5, 200),
-        (256, 1e-5, 1e-5, 200),
+        (0.25, 1e-3, 5e-4, 40),
+        (0.50, 5e-4, 1e-4, 60),
+        (1, 1e-4, 5e-5, 80),
+        (2, 5e-5, 5e-5, 100),
+        (4, 5e-5, 5e-5, 120),
+        (8, 5e-5, 5e-5, 140),
+        (16, 5e-5, 5e-5, 160),
+        (32, 5e-5, 1e-5, 180),
+        (64, 1e-5, 1e-5, 200),
+        (64, 1e-5, 1e-5, 200),
+        (64, 1e-5, 1e-5, 200),
+        (64, 1e-5, 1e-5, 200),
     ],
 
     # sparsification
