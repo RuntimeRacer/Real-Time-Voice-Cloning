@@ -361,7 +361,7 @@ class UI(QDialog):
             model_files_missing("Vocoder")
         else:
             vocoder_fpaths.sort()
-        vocoder_items = [(f.stem, f) for f in vocoder_fpaths] + [("Griffin-Lim", None)]
+        vocoder_items = [("Griffin-Lim", None)] + [(f.stem, f) for f in vocoder_fpaths]
         self.repopulate_box(self.vocoder_box, vocoder_items)
         
     @property
