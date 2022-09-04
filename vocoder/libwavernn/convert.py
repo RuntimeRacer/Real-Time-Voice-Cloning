@@ -7,8 +7,7 @@ import numpy as np
 import scipy as sp
 
 from vocoder.models import base
-
-from config.hparams import sp, wavernn_fatchord, wavernn_geneing
+from config.hparams import wavernn_fatchord, wavernn_geneing
 
 elSize = 4 #change to 2 for fp16
 
@@ -30,6 +29,9 @@ def convert_model(model_fpath: str, default_model_type: str, out_dir: Path):
         print(str(e))
         return
 
+    # Load model state
+    model.load_state_dict(checkpoint["model_state"])
+
     # Define hparams
     if model_type == base.MODEL_TYPE_FATCHORD:
         hparams = wavernn_fatchord
@@ -37,6 +39,13 @@ def convert_model(model_fpath: str, default_model_type: str, out_dir: Path):
         hparams = wavernn_geneing
     else:
         raise NotImplementedError("Invalid model of type '%s' provided. Aborting..." % model_type)
+
+    # Test the Model
+    # torch_test_gru(model, checkpoint)
+    # torch_test_conv1d(model, checkpoint)
+    # torch_test_conv1d_1x(model, checkpoint)
+    # torch_test_conv2d(model, checkpoint)
+    # torch_test_batchnorm1d(model, checkpoint)
 
     # Build Model filename and convert
     out_filename = out_dir.joinpath(Path(model_fpath).stem).with_suffix(".bin")
@@ -169,7 +178,7 @@ def torch_test_gru(model, checkpoint):
     x = 1.+1./np.arange(1,513)
     h = -3. + 2./np.arange(1,513)
 
-    state=checkpoint['state_dict']
+    state=checkpoint['model_state']
     rnn1 = model.rnn1
 
     weight_ih_l0 = rnn1.weight_ih_l0.detach().cpu().numpy()

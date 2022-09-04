@@ -1,5 +1,4 @@
 import argparse
-from pathlib import Path
 
 from utils.argutils import print_args
 from vocoder.libwavernn.convert import *
@@ -12,8 +11,8 @@ if __name__ == "__main__":
 
     # Arguments
     parser.add_argument("model_fpath", type=str, help="Path to the model")
-    parser.add_argument("default_model_type", type=str, default=base.MODEL_TYPE_FATCHORD, help="default model type")
-    parser.add_argument("out_dir", type=str, default="libwavernn/models", help="Path to the output file")
+    parser.add_argument("--default_model_type", type=str, default=base.MODEL_TYPE_FATCHORD, help="default model type")
+    parser.add_argument("--out_dir", type=str, default="vocoder/libwavernn/models/", help="Path to the output file")
     args = parser.parse_args()
 
     # Process the arguments

@@ -1,6 +1,17 @@
-cmake_minimum_required (VERSION 3.0)
+cmake_minimum_required (VERSION 3.14...3.24)
 
 project(WaveRNN)
+
+include(FetchContent)
+
+# CMake Requirements
+find_package (Python3 COMPONENTS Interpreter Development)
+FetchContent_Declare(
+  pybind11
+  GIT_REPOSITORY https://github.com/pybind/pybind11
+  GIT_TAG        v2.2.3
+)
+FetchContent_MakeAvailable(pybind11)
 
 set(CMAKE_CXX_STANDARD 11)
 
@@ -14,6 +25,5 @@ add_executable (vocoder vocoder.cpp)
 add_library(wavernn wavernn.cpp net_impl.cpp)
 target_link_libraries(vocoder wavernn Eigen3::Eigen)
 
-add_subdirectory(pybind11)
 pybind11_add_module(WaveRNNVocoder WaveRNNVocoder.cpp wavernn.cpp net_impl.cpp)
 
