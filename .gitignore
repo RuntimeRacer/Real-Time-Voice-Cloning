@@ -14,6 +14,13 @@
 *.bcf
 *.toc
 *.wav
+*.pt
+*.pth
+*.bin
+*.zip
+*.mp3
+*.so
+build
 encoder/saved_models/*
 synthesizer/saved_models/*
 vocoder/saved_models/*
