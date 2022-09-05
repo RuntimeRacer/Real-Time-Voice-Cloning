@@ -9,7 +9,7 @@ _model_type = None
 
 
 def load_model(weights_fpath, verbose=True):
-    global _model, _device
+    global _model, _device, _model_type
 
     if torch.cuda.is_available():
         _device = torch.device('cuda')
@@ -18,13 +18,13 @@ def load_model(weights_fpath, verbose=True):
 
     # Load model weights from provided model path
     checkpoint = torch.load(weights_fpath, map_location=_device)
-    model_type = base.MODEL_TYPE_FATCHORD
+    _model_type = base.MODEL_TYPE_FATCHORD
     if "model_type" in checkpoint:
-        model_type = checkpoint["model_type"]
+        _model_type = checkpoint["model_type"]
 
     # Init the model
     try:
-        _model, _ = base.init_voc_model(model_type, _device)
+        _model, _ = base.init_voc_model(_model_type, _device)
         _model = _model.eval()
     except NotImplementedError as e:
         print(str(e))
@@ -34,7 +34,7 @@ def load_model(weights_fpath, verbose=True):
     _model.load_state_dict(checkpoint["model_state"])
     
     if verbose:
-        print("Loaded synthesizer of model '%s' at path '%s'." % (model_type, weights_fpath))
+        print("Loaded synthesizer of model '%s' at path '%s'." % (_model_type, weights_fpath))
         print("Model has been trained to step %d." % (_model.state_dict()["step"]))
 
 

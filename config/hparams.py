@@ -290,11 +290,11 @@ wavernn_geneing = HParams(
     mu_law=False,  # Recommended to suppress noise if using raw bits in hp.voc_mode
     upsample_factors=(5, 5, 8),  # NB - this needs to correctly factorise hop_length
 
-    rnn_dims=256,
-    fc_dims=128,
-    compute_dims=64,
+    rnn_dims=512,
+    fc_dims=256,
+    compute_dims=128,
     res_out_dims=32*2, #aux output is fed into 2 downstream nets
-    res_blocks=3,
+    res_blocks=5,
 
     # WaveRNN Training
     pad=2,  # this will pad the input so that the resnet can 'see' wider than input length
