@@ -29,6 +29,9 @@ def load_model(weights_fpath, verbose=True):
     except NotImplementedError as e:
         print(str(e))
         return
+
+    # Load model state
+    _model.load_state_dict(checkpoint["model_state"])
     
     if verbose:
         print("Loaded synthesizer of model '%s' at path '%s'." % (model_type, weights_fpath))
