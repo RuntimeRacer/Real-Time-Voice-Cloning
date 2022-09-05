@@ -119,7 +119,8 @@ class WaveRNN(nn.Module):
         self.num_params()
 
     def forward(self, x, mels):
-        self.step += 1
+        if self.training:
+            self.step += 1
         bsize = x.size(0)
         if torch.cuda.is_available():
             h1 = torch.zeros(1, bsize, self.rnn_dims).cuda()

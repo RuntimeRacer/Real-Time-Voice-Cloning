@@ -11,7 +11,8 @@ from accelerate import Accelerator
 from torch import optim
 from torch.utils.data import DataLoader
 
-from config.hparams import wavernn_fatchord, wavernn_geneing
+import torch_pruning as tp
+from config.hparams import sp, wavernn_fatchord, wavernn_geneing
 from vocoder.display import simple_table, stream
 from vocoder.distribution import discretized_mix_logistic_loss
 from vocoder.gen_wavernn import gen_testset
@@ -365,3 +366,78 @@ def load(model, device, path, optimizer=None):
     if "blacklisted_indices" in checkpoint and len(checkpoint["blacklisted_indices"]) > 0:
         blacklisted_indices = checkpoint["blacklisted_indices"]
     return blacklisted_indices
+
+
+def runtime_prune(model, hparams_sp, hparams_vocoder):
+    # TODO: Test if this also works at runtime when model is on GPU, or we rather need to move to CPU first
+    # Apply the pruning using the simplify
+    mel_win = hparams_vocoder.seq_len // hparams_sp.hop_size + 2 * hparams_vocoder.pad
+
+    if torch.cuda.is_available():
+        dummy_input = (torch.randn(1, hparams_vocoder.seq_len).cuda(), torch.randn(1, hparams_sp.num_mels,mel_win).cuda())  # Tensor shape is that of a standard input for the given model
+    else:
+        dummy_input = (torch.randn(1, hparams_vocoder.seq_len), torch.randn(1, hparams_sp.num_mels, mel_win))  # Tensor shape is that of a standard input for the given model
+
+    # 1. setup strategy (L1 Norm)
+    strategy = tp.strategy.L1Strategy()
+
+    # 2. build dependency graph for resnet18
+    DG = tp.DependencyGraph()
+    DG.build_dependency(model, example_inputs=dummy_input, verbose=True)
+
+    # 3. get a pruning plan from the dependency graph.
+    pruning_idxs = strategy(model.I.weight, amount=0.9)  # or pruning_idxs=[2, 6, 9, ...]
+    pruning_plan = DG.get_pruning_plan(model.I, tp.prune_linear_out_channel, idxs=pruning_idxs)
+    print(pruning_plan)
+
+    # 4. execute this plan after checking (prune the model)
+    #    if the plan prunes some channels to zero,
+    #    DG.check_pruning plan will return False.
+    if DG.check_pruning_plan(pruning_plan):
+        pruning_plan.exec()
+
+    return model
+
+
+def apply_prune(model_fpath: str, default_model_type: str, out_dir: Path):
+    # Do all of this on CPU
+    device = torch.device("cpu")
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+
+    # Load model weights from provided model path
+    checkpoint = torch.load(model_fpath, map_location=device)
+    model_type = default_model_type
+    if "model_type" in checkpoint:
+        model_type = checkpoint["model_type"]
+
+    # Init the model
+    try:
+        model, _ = base.init_voc_model(model_type, device)
+        model = model.eval()
+    except NotImplementedError as e:
+        print(str(e))
+        return
+
+    # Load model state
+    model.load_state_dict(checkpoint["model_state"])
+
+    # Define hparams
+    if model_type == base.MODEL_TYPE_FATCHORD:
+        hparams = wavernn_fatchord
+    elif model_type == base.MODEL_TYPE_GENEING:
+        hparams = wavernn_geneing
+    else:
+        raise NotImplementedError("Invalid model of type '%s' provided. Aborting..." % model_type)
+
+    # Apply the pruning
+    simplified_model = runtime_prune(model, hparams_sp=sp, hparams_vocoder=hparams)
+
+    # Save the pruned model
+    out_filename = out_dir.joinpath(Path(model_fpath).stem + '_pruned').with_suffix(".pt")
+    state = {
+        "model_state": simplified_model.state_dict(),
+        "model_type": model_type,
+    }
+    torch.save(state, str(out_filename))
+
