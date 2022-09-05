@@ -21,4 +21,4 @@ webrtcvad
 sox
 webvtt-py
 accelerate==0.4.0
-pybind11
+# pybind11
