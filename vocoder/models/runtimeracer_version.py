@@ -144,6 +144,7 @@ class WaveRNN(nn.Module):
         aux_idx = [self.aux_dims * i for i in range(3)]
         a1 = aux[:, :, aux_idx[0]:aux_idx[1]]
         a2 = aux[:, :, aux_idx[1]:aux_idx[2]]
+        a3z = torch.zeros_like(a2)
 
         x = torch.cat([x.unsqueeze(-1), mels, a1[:,:,:-1]], dim=2)
         x = self.I(x)
@@ -156,6 +157,7 @@ class WaveRNN(nn.Module):
         x, _ = self.rnn2(x, h2)
         x = x + res
 
+        x = torch.cat([x, a3z], dim=2)
         x = F.relu(self.fc1(x))
 
         x = self.fc3(x)
@@ -213,16 +215,18 @@ class WaveRNN(nn.Module):
                 m_t = mels[:, i, :]
 
                 a1_t, a2_t = (a[:, i, :] for a in aux_split)
+                a3z_t = torch.zeros_like(a1_t)
 
                 x = torch.cat([x, m_t, a1_t[:,:-1]], dim=1)
                 x = self.I(x)
                 h1 = rnn1(x, h1)
 
                 x = x + h1
-                x = torch.cat([x, a2_t], dim=1)
-                h2 = rnn1(x, h2)
+                inp = torch.cat([x, a2_t], dim=1)
+                h2 = rnn2(inp, h2)
 
                 x = x + h2
+                x = torch.cat([x, a3z_t], dim=1)
                 x = F.relu(self.fc1(x))
 
                 x = self.fc3(x)
