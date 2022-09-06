@@ -120,11 +120,12 @@ class WaveRNN(nn.Module):
         self.upsample = UpsampleNetwork(feat_dims, upsample_factors, compute_dims, res_blocks, res_out_dims, pad)
         self.I = nn.Linear(feat_dims + self.aux_dims - 1 + 1, rnn_dims)  # First dimension has to be divizible by 8, so we take away one aux channel
         self.rnn1 = nn.GRU(rnn_dims, rnn_dims, batch_first=True)
-        self.rnn2 = nn.GRU(rnn_dims + self.aux_dims, rnn_dims, batch_first=True)
+        self.rnn2 = nn.GRU(rnn_dims, rnn_dims, batch_first=True)
         self.fc1 = nn.Linear(rnn_dims + self.aux_dims, fc_dims)
+        self.fc2 = nn.Linear(fc_dims, fc_dims)
         self.fc3 = nn.Linear(fc_dims, self.n_classes)
 
-        self.prune_layers = [self.I, self.rnn1, self.rnn2, self.fc1, self.fc3] if pruning else []
+        self.prune_layers = [self.I, self.rnn1, self.rnn2, self.fc1, self.fc2, self.fc3] if pruning else []
 
         self.step = nn.Parameter(torch.zeros(1).long(), requires_grad=False)
         self.num_params()
@@ -144,7 +145,6 @@ class WaveRNN(nn.Module):
         aux_idx = [self.aux_dims * i for i in range(3)]
         a1 = aux[:, :, aux_idx[0]:aux_idx[1]]
         a2 = aux[:, :, aux_idx[1]:aux_idx[2]]
-        a3z = torch.zeros_like(a2)
 
         x = torch.cat([x.unsqueeze(-1), mels, a1[:,:,:-1]], dim=2)
         x = self.I(x)
@@ -157,8 +157,9 @@ class WaveRNN(nn.Module):
         x, _ = self.rnn2(x, h2)
         x = x + res
 
-        x = torch.cat([x, a3z], dim=2)
         x = F.relu(self.fc1(x))
+
+        x = F.relu(self.fc2(x))
 
         x = self.fc3(x)
 
@@ -215,7 +216,6 @@ class WaveRNN(nn.Module):
                 m_t = mels[:, i, :]
 
                 a1_t, a2_t = (a[:, i, :] for a in aux_split)
-                a3z_t = torch.zeros_like(a1_t)
 
                 x = torch.cat([x, m_t, a1_t[:,:-1]], dim=1)
                 x = self.I(x)
@@ -226,8 +226,9 @@ class WaveRNN(nn.Module):
                 h2 = rnn2(inp, h2)
 
                 x = x + h2
-                x = torch.cat([x, a3z_t], dim=1)
                 x = F.relu(self.fc1(x))
+
+                x = F.relu(self.fc2(x))
 
                 x = self.fc3(x)
 
