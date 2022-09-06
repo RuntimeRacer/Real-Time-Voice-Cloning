@@ -47,6 +47,8 @@ if __name__ == "__main__":
     parser.add_argument("-ts", "--testset_every", type=int, default=5000, help= \
         "Number of steps between generation of a testset.")
     parser.add_argument("-t", "--threads", type=int, default=2)
+    parser.add_argument("-pr", "--pruned", action="store_true", help= \
+        "Model to load has been pruned; loads it directly from disk.")
     args = parser.parse_args()
 
     # Process the arguments

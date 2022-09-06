@@ -12,7 +12,7 @@ from torch import optim
 from torch.utils.data import DataLoader
 
 import torch_pruning as tp
-from config.hparams import sp, wavernn_fatchord, wavernn_geneing
+from config.hparams import sp, wavernn_fatchord, wavernn_geneing, wavernn_runtimeracer
 from vocoder.display import simple_table, stream
 from vocoder.distribution import discretized_mix_logistic_loss
 from vocoder.gen_wavernn import gen_testset
@@ -27,7 +27,7 @@ blacklisted_indices = []
 
 def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_truth: bool,
           save_every: int, backup_every: int, force_restart: bool,
-          vis_every: int, visdom_server: str, no_visdom: bool, testset_every: int, threads: int):
+          vis_every: int, visdom_server: str, no_visdom: bool, testset_every: int, threads: int, pruned: bool):
 
     model_dir = models_dir.joinpath(run_id)
     model_dir.mkdir(exist_ok=True)
@@ -50,11 +50,15 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
     device = accelerator.device
 
     # Init the model
-    try:
-        model, pruner = base.init_voc_model(model_type, device)
-    except NotImplementedError as e:
-        print(str(e))
-        return
+    pruner = None
+    if pruned:
+        model = torch.load(weights_fpath).to(device)
+    else:
+        try:
+            model, pruner = base.init_voc_model(model_type, device)
+        except NotImplementedError as e:
+            print(str(e))
+            return
 
     # Initialize the optimizer
     optimizer = optim.Adam(model.parameters())
@@ -68,9 +72,10 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                 save(accelerator, model, weights_fpath)
 
     # Model has been initialized - Load the weights
-    print("{0} - Loading weights at {1}".format(device, weights_fpath))
-    global blacklisted_indices
-    blacklisted_indices = load(model, device, weights_fpath, optimizer)
+    if not pruned:
+        print("{0} - Loading weights at {1}".format(device, weights_fpath))
+        global blacklisted_indices
+        blacklisted_indices = load(model, device, weights_fpath, optimizer)
     print("{0} - WaveRNN weights loaded from step {1}".format(device, model.get_step()))
 
     # Determine a couple of params based on model type
@@ -78,6 +83,8 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
         vocoder_hparams = wavernn_fatchord
     elif model_type == base.MODEL_TYPE_GENEING:
         vocoder_hparams = wavernn_geneing
+    elif model_type == base.MODEL_TYPE_RUNTIMERACER:
+        vocoder_hparams = wavernn_runtimeracer
 
     # Initialize the dataset
     metadata_fpath = syn_dir.joinpath("train.json") if ground_truth else voc_dir.joinpath("synthesized.json")
@@ -427,6 +434,8 @@ def apply_prune(model_fpath: str, default_model_type: str, out_dir: Path):
         hparams = wavernn_fatchord
     elif model_type == base.MODEL_TYPE_GENEING:
         hparams = wavernn_geneing
+    elif model_type == base.MODEL_TYPE_RUNTIMERACER:
+        hparams = wavernn_runtimeracer
     else:
         raise NotImplementedError("Invalid model of type '%s' provided. Aborting..." % model_type)
 
@@ -435,9 +444,5 @@ def apply_prune(model_fpath: str, default_model_type: str, out_dir: Path):
 
     # Save the pruned model
     out_filename = out_dir.joinpath(Path(model_fpath).stem + '_pruned').with_suffix(".pt")
-    state = {
-        "model_state": simplified_model.state_dict(),
-        "model_type": model_type,
-    }
-    torch.save(state, str(out_filename))
+    torch.save(simplified_model, str(out_filename))
 
