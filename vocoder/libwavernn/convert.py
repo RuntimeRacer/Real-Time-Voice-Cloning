@@ -7,7 +7,7 @@ import numpy as np
 import scipy as sp
 
 from vocoder.models import base
-from config.hparams import wavernn_fatchord, wavernn_geneing
+from config.hparams import wavernn_fatchord, wavernn_geneing, wavernn_runtimeracer
 
 elSize = 4 #change to 2 for fp16
 
@@ -37,6 +37,8 @@ def convert_model(model_fpath: str, default_model_type: str, out_dir: Path):
         hparams = wavernn_fatchord
     elif model_type == base.MODEL_TYPE_GENEING:
         hparams = wavernn_geneing
+    elif model_type == base.MODEL_TYPE_RUNTIMERACER:
+        hparams = wavernn_runtimeracer
     else:
         raise NotImplementedError("Invalid model of type '%s' provided. Aborting..." % model_type)
 
@@ -322,8 +324,17 @@ def save_upsample(f, model, hparams):
     return
 
 def save_main(f, model, hparams):
-    save_layer(f, model.I, hparams)
-    save_layer(f, model.rnn1, hparams)
-    save_layer(f, model.fc1, hparams)
-    save_layer(f, model.fc3, hparams)
+    if base.get_model_type(model) == base.MODEL_TYPE_GENEING:
+        save_layer(f, model.I, hparams)
+        save_layer(f, model.rnn1, hparams)
+        save_layer(f, model.fc1, hparams)
+        save_layer(f, model.fc3, hparams)
+    elif base.get_model_type(model) == base.MODEL_TYPE_RUNTIMERACER:
+        save_layer(f, model.I, hparams)
+        save_layer(f, model.rnn1, hparams)
+        save_layer(f, model.rnn2, hparams)
+        save_layer(f, model.fc1, hparams)
+        save_layer(f, model.fc3, hparams)
+    else:
+        raise NotImplementedError("Provided object is not a valid vocoder model.")
     return

@@ -285,16 +285,16 @@ wavernn_fatchord = HParams(
 # Parameters for geneing's optimized WaveRNN Vocoder
 wavernn_geneing = HParams(
     # Model
-    mode='MOL',  # either 'BITS' (softmax on raw bits) or 'MOL' (sample from mixture of logistics)
+    mode='BITS',  # either 'BITS' (softmax on raw bits) or 'MOL' (sample from mixture of logistics)
     bits=10,  # bit depth of signal
     mu_law=False,  # Recommended to suppress noise if using raw bits in hp.voc_mode
-    upsample_factors=(5, 5, 8),  # NB - this needs to correctly factorise hop_length
+    upsample_factors=(4, 5, 10),  # NB - this needs to correctly factorise hop_length
 
-    rnn_dims=512,
-    fc_dims=256,
-    compute_dims=128,
+    rnn_dims=256,
+    fc_dims=128,
+    compute_dims=64,
     res_out_dims=32*2, #aux output is fed into 2 downstream nets
-    res_blocks=5,
+    res_blocks=3,
 
     # WaveRNN Training
     pad=2,  # this will pad the input so that the resnet can 'see' wider than input length
@@ -303,6 +303,77 @@ wavernn_geneing = HParams(
 
     # MOL Training params
     num_classes=256,
+    log_scale_min=-32.23619130191664,  # = float(np.log(1e-14))
+    #log_scale_min=-16.11809565095831,  # = float(np.log(1e-7))
+
+    # Progressive training schedule
+    # (loops, init_lr, final_lr, batch_size)
+    # loops = amount of loops through the dataset per epoch
+    # init_lr = inital sgdr learning rate
+    # final_lr = amount of loops through the dataset per epoch
+    # batch_size = Size of the batches used for inference. Rule of Thumb: Max. 12 units per GB of VRAM of smallest card.
+    voc_tts_schedule=[
+        (0.25, 1e-3, 5e-4, 40),
+        (0.50, 5e-4, 1e-4, 60),
+        (1, 1e-4, 5e-5, 80),
+        (2, 5e-5, 5e-5, 100),
+        (4, 5e-5, 5e-5, 110),
+        (8, 5e-5, 5e-5, 120),
+        (16, 5e-5, 5e-5, 130),
+        (32, 5e-5, 5e-5, 140),
+        (64, 5e-5, 5e-5, 150),
+        (64, 5e-5, 5e-5, 150),
+        (64, 5e-5, 5e-5, 150),
+        (64, 5e-5, 5e-5, 150),
+    ],
+
+    # sparsification
+    use_sparsification=False,
+    start_prune=100000,
+    prune_steps=100000,
+    sparsity_target=0.90,
+    sparsity_target_rnn=0.90,
+    sparse_group=4,
+
+    # Anomaly / Loss explosion detection in Training
+    anomaly_detection=False,  # Enables Loss anomaly detection.
+    anomaly_trigger_multiplier=6,  # Threshold for raising anomaly detection. It is a Multiplier of average loss change.
+    anomaly_blacklist_batches=False,  # Experimental: whether the batch triggering the anomaly should be blacklisted.
+    # Remark: Loss explosion can be caused either by bad data in the training set, or by too high learning rate.
+    # Explosion due to high learning rate will happen usually early on.
+    # Explosion due to bad data randomly happens even at a high training step.
+    # If blacklisting enabled, it will blacklist the batch trained at the moment when the loss explosion occurs
+    # However, there is a chance that the bad batch was already being trained a few steps earlier and thus blacklisting
+    # here might only blacklist a completely valid batch
+
+    # Generating / Synthesizing
+    gen_at_checkpoint=5,  # number of samples to generate at each checkpoint
+    gen_batched=True,  # very fast (realtime+) single utterance batched generation
+    gen_target=3000,  # target number of samples to be generated in each batch entry
+    gen_overlap=1500,  # number of samples for crossfading between batches
+)
+
+# Parameters for RuntimeRacer's optimized WaveRNN Vocoder
+wavernn_runtimeracer = HParams(
+    # Model
+    mode='BITS',  # either 'BITS' (softmax on raw bits) or 'MOL' (sample from mixture of logistics)
+    bits=10,  # bit depth of signal
+    mu_law=False,  # Recommended to suppress noise if using raw bits in hp.voc_mode
+    upsample_factors=(4, 5, 10),  # NB - this needs to correctly factorise hop_length
+
+    rnn_dims=256,
+    fc_dims=128,
+    compute_dims=64,
+    res_out_dims=32*2, #aux output is fed into 2 downstream nets
+    res_blocks=5,
+
+    # WaveRNN Training
+    pad=2,  # this will pad the input so that the resnet can 'see' wider than input length
+    seq_len=sp.hop_size * 5,  # must be a multiple of hop_length
+    # seq_len_factor can be adjusted to increase training sequence length (will increase GPU usage)
+
+    # MOL Training params
+    num_classes=65536,
     log_scale_min=-32.23619130191664,  # = float(np.log(1e-14))
     #log_scale_min=-16.11809565095831,  # = float(np.log(1e-7))
 
