@@ -120,10 +120,10 @@ class WaveRNN(nn.Module):
         self.upsample = UpsampleNetwork(feat_dims, upsample_factors, compute_dims, res_blocks, res_out_dims, pad)
         self.I = nn.Linear(feat_dims + self.aux_dims - 1 + 1, rnn_dims)  # First dimension has to be divizible by 8, so we take away one aux channel
         self.rnn1 = nn.GRU(rnn_dims, rnn_dims, batch_first=True)
+        self.fc1 = nn.Linear(rnn_dims + self.aux_dims, rnn_dims)
         self.rnn2 = nn.GRU(rnn_dims, rnn_dims, batch_first=True)
-        self.fc1 = nn.Linear(rnn_dims + self.aux_dims, fc_dims)
-        self.fc2 = nn.Linear(fc_dims, fc_dims)
-        self.fc3 = nn.Linear(fc_dims, self.n_classes)
+        self.fc2 = nn.Linear(rnn_dims + self.aux_dims, fc_dims)
+        self.fc3 = nn.Linear(fc_dims + self.aux_dims, self.n_classes)
 
         self.prune_layers = [self.I, self.rnn1, self.rnn2, self.fc1, self.fc2, self.fc3] if pruning else []
 
@@ -148,19 +148,22 @@ class WaveRNN(nn.Module):
 
         x = torch.cat([x.unsqueeze(-1), mels, a1[:,:,:-1]], dim=2)
         x = self.I(x)
+
         res = x
         x, _ = self.rnn1(x, h1)
         x = x + res
 
-        res = x
         x = torch.cat([x, a2], dim=2)
+        x = F.relu(self.fc1(x))
+
+        res = x
         x, _ = self.rnn2(x, h2)
         x = x + res
 
-        x = F.relu(self.fc1(x))
-
+        x = torch.cat([x, a1], dim=2)
         x = F.relu(self.fc2(x))
 
+        x = torch.cat([x, a2], dim=2)
         x = self.fc3(x)
 
         if self.mode == 'RAW' or self.mode == 'MOL':
@@ -219,17 +222,20 @@ class WaveRNN(nn.Module):
 
                 x = torch.cat([x, m_t, a1_t[:,:-1]], dim=1)
                 x = self.I(x)
+
                 h1 = rnn1(x, h1)
-
                 x = x + h1
-                inp = torch.cat([x, a2_t], dim=1)
-                h2 = rnn2(inp, h2)
 
-                x = x + h2
+                x = torch.cat([x, a2_t], dim=1)
                 x = F.relu(self.fc1(x))
 
+                h2 = rnn2(x, h2)
+                x = x + h2
+
+                x = torch.cat([x, a1_t], dim=1)
                 x = F.relu(self.fc2(x))
 
+                x = torch.cat([x, a2_t], dim=1)
                 x = self.fc3(x)
 
                 if self.mode == 'RAW':
