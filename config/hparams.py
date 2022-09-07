@@ -356,15 +356,15 @@ wavernn_geneing = HParams(
 # Parameters for RuntimeRacer's optimized WaveRNN Vocoder
 wavernn_runtimeracer = HParams(
     # Model
-    mode='BITS',  # either 'BITS' (softmax on raw bits) or 'MOL' (sample from mixture of logistics)
+    mode='RAW',  # either 'BITS' (softmax on raw bits) or 'MOL' (sample from mixture of logistics)
     bits=10,  # bit depth of signal
-    mu_law=False,  # Recommended to suppress noise if using raw bits in hp.voc_mode
-    upsample_factors=(4, 5, 10),  # NB - this needs to correctly factorise hop_length
+    mu_law=True,  # Recommended to suppress noise if using raw bits in hp.voc_mode
+    upsample_factors=(5, 5, 8),  # NB - this needs to correctly factorise hop_length
 
     rnn_dims=256,
-    fc_dims=128,
-    compute_dims=64,
-    res_out_dims=32*2, #aux output is fed into 2 downstream nets
+    fc_dims=256,
+    compute_dims=128,
+    res_out_dims=32*4, #aux output is fed into 4 downstream nets
     res_blocks=5,
 
     # WaveRNN Training
@@ -385,17 +385,17 @@ wavernn_runtimeracer = HParams(
     # batch_size = Size of the batches used for inference. Rule of Thumb: Max. 12 units per GB of VRAM of smallest card.
     voc_tts_schedule=[
         (0.25, 1e-3, 5e-4, 40),
-        (0.50, 5e-4, 1e-4, 60),
-        (1, 1e-4, 5e-5, 80),
-        (2, 5e-5, 5e-5, 100),
-        (4, 5e-5, 5e-5, 110),
-        (8, 5e-5, 5e-5, 120),
-        (16, 5e-5, 5e-5, 130),
-        (32, 5e-5, 5e-5, 140),
-        (64, 5e-5, 5e-5, 150),
-        (64, 5e-5, 5e-5, 150),
-        (64, 5e-5, 5e-5, 150),
-        (64, 5e-5, 5e-5, 150),
+        (0.50, 5e-4, 1e-4, 50),
+        (1, 1e-4, 5e-5, 60),
+        (2, 5e-5, 5e-5, 70),
+        (4, 5e-5, 5e-5, 80),
+        (8, 5e-5, 5e-5, 90),
+        (16, 5e-5, 5e-5, 100),
+        (32, 5e-5, 5e-5, 110),
+        (64, 5e-5, 5e-5, 120),
+        (64, 5e-5, 5e-5, 120),
+        (64, 5e-5, 5e-5, 120),
+        (64, 5e-5, 5e-5, 120),
     ],
 
     # sparsification
