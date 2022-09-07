@@ -291,7 +291,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                 # Accelerator: Only in main process
                 if accelerator.is_local_main_process and testset_every != 0 and step % testset_every == 0:
                     eval_model = accelerator.unwrap_model(model)
-                    #gen_testset(eval_model, test_loader, model_dir, vocoder_hparams)
+                    gen_testset(eval_model, test_loader, model_dir, vocoder_hparams)
 
                 # Update Metrics
                 time_window.append(time.time() - start_time)
@@ -325,7 +325,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
 
                 # Generate a testset after each epoch
                 eval_model = accelerator.unwrap_model(model)
-                #gen_testset(eval_model, test_loader, model_dir, vocoder_hparams)
+                gen_testset(eval_model, test_loader, model_dir, vocoder_hparams)
 
 
 def save(accelerator, model, path, optimizer=None, blacklisted_indices=[]):

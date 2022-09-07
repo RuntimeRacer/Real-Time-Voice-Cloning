@@ -114,7 +114,6 @@ class WaveRNN(nn.Module):
 
         self.rnn_dims = rnn_dims
         self.aux_dims = res_out_dims // 2
-        self.aux_split = self.aux_dims // 2
         self.hop_length = hop_length
         self.sample_rate = sample_rate
 
@@ -145,9 +144,7 @@ class WaveRNN(nn.Module):
 
         aux_idx = [self.aux_dims * i for i in range(3)]
         a1 = aux[:, :, aux_idx[0]:aux_idx[1]]
-        a2 = aux[:, :, (aux_idx[0]+self.aux_split):(aux_idx[1]+self.aux_split)]
-        a3 = aux[:, :, (aux_idx[1]-self.aux_split):(aux_idx[2]-self.aux_split)]
-        a4 = aux[:, :, aux_idx[1]:aux_idx[2]]
+        a2 = aux[:, :, aux_idx[1]:aux_idx[2]]
 
         x = torch.cat([x.unsqueeze(-1), mels, a1[:,:,:-1]], dim=2)
         x = self.I(x)
@@ -156,17 +153,17 @@ class WaveRNN(nn.Module):
         x, _ = self.rnn1(x, h1)
         x = x + res
 
-        x = torch.cat([x, a4], dim=2)
+        x = torch.cat([x, a2], dim=2)
         x = F.relu(self.fc1(x))
 
         res = x
         x, _ = self.rnn2(x, h2)
         x = x + res
 
-        x = torch.cat([x, a2], dim=2)
+        x = torch.cat([x, a1], dim=2)
         x = F.relu(self.fc2(x))
 
-        x = torch.cat([x, a3], dim=2)
+        x = torch.cat([x, a2], dim=2)
         x = self.fc3(x)
 
         if self.mode == 'RAW' or self.mode == 'MOL':
