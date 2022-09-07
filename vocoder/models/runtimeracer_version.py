@@ -166,12 +166,12 @@ class WaveRNN(nn.Module):
         x = torch.cat([x, a2], dim=2)
         x = self.fc3(x)
 
-        if self.mode == 'RAW' or self.mode == 'MOL':
-            return x
-        elif self.mode == 'BITS':
-            return F.log_softmax(x, dim=-1)
-        else:
-            raise ValueError("input_type: {self.mode} not supported")
+        #if self.mode == 'RAW' or self.mode == 'MOL':
+        return x
+        #elif self.mode == 'BITS':
+        #    return F.log_softmax(x, dim=-1)
+        #else:
+        #    raise ValueError("input_type: {self.mode} not supported")
 
     def preview_upsampling(self, mels) :
         mels, aux = self.upsample(mels)
