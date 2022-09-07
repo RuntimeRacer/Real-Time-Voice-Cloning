@@ -123,7 +123,7 @@ class WaveRNN(nn.Module):
         self.fc2 = nn.Linear(rnn_dims + self.aux_dims, rnn_dims)
         self.rnn3 = nn.GRU(rnn_dims, rnn_dims, batch_first=True)
         self.fc3 = nn.Linear(rnn_dims + self.aux_dims, rnn_dims)
-        self.rnn3 = nn.GRU(rnn_dims, rnn_dims, batch_first=True)
+        self.rnn4 = nn.GRU(rnn_dims, rnn_dims, batch_first=True)
         self.fc4 = nn.Linear(rnn_dims, self.n_classes)
 
         self.prune_layers = [self.I, self.rnn1, self.rnn2, self.rnn3, self.rnn4, self.fc1, self.fc2, self.fc3, self.fc4] if pruning else []
