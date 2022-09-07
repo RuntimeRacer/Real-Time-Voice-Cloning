@@ -356,7 +356,7 @@ wavernn_geneing = HParams(
 # Parameters for RuntimeRacer's optimized WaveRNN Vocoder
 wavernn_runtimeracer = HParams(
     # Model
-    mode='RAW',  # either 'BITS' (softmax on raw bits) or 'MOL' (sample from mixture of logistics)
+    mode='RAW',  # either 'RAW' (softmax on raw bits) or 'MOL' (sample from mixture of logistics)
     bits=10,  # bit depth of signal
     mu_law=True,  # Recommended to suppress noise if using raw bits in hp.voc_mode
     upsample_factors=(5, 5, 8),  # NB - this needs to correctly factorise hop_length
