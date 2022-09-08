@@ -362,8 +362,8 @@ wavernn_runtimeracer = HParams(
     upsample_factors=(5, 5, 8),  # NB - this needs to correctly factorise hop_length
 
     rnn_dims=256,
-    fc_dims=256,
-    compute_dims=128,
+    fc_dims=128,
+    compute_dims=64,
     res_out_dims=32*4, #aux output is fed into 4 downstream nets
     res_blocks=5,
 
@@ -399,9 +399,9 @@ wavernn_runtimeracer = HParams(
     ],
 
     # sparsification
-    use_sparsification=False,
-    start_prune=100000,
-    prune_steps=100000,
+    use_sparsification=True,
+    start_prune=1000,
+    prune_steps=10000,
     sparsity_target=0.90,
     sparsity_target_rnn=0.90,
     sparse_group=4,
