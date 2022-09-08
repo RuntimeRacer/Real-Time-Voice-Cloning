@@ -124,10 +124,9 @@ class WaveRNN(nn.Module):
         self.rnn3 = nn.GRU(rnn_dims, rnn_dims, batch_first=True)
         self.fc3 = nn.Linear(rnn_dims + self.aux_dims, rnn_dims)
         self.rnn4 = nn.GRU(rnn_dims, rnn_dims, batch_first=True)
-        self.fc4 = nn.Linear(rnn_dims, fc_dims)
-        self.fc5 = nn.Linear(fc_dims, self.n_classes)
+        self.fc4 = nn.Linear(rnn_dims, self.n_classes)
 
-        self.prune_layers = [self.I, self.rnn1, self.rnn2, self.rnn3, self.rnn4, self.fc1, self.fc2, self.fc3, self.fc4, self.fc5] if pruning else []
+        self.prune_layers = [self.I, self.rnn1, self.rnn2, self.rnn3, self.rnn4, self.fc1, self.fc2, self.fc3, self.fc4] if pruning else []
 
         self.step = nn.Parameter(torch.zeros(1).long(), requires_grad=False)
         self.num_params()
@@ -182,9 +181,7 @@ class WaveRNN(nn.Module):
         x, _ = self.rnn4(x, h4)
         x = x + res
 
-        x = F.relu(self.fc4(x))
-
-        return self.fc5(x)
+        return self.fc4(x)
 
     def preview_upsampling(self, mels) :
         mels, aux = self.upsample(mels)
@@ -263,9 +260,7 @@ class WaveRNN(nn.Module):
                 h4 = rnn4(x, h4)
                 x = x + h4
 
-                x = F.relu(self.fc4(x))
-
-                x = self.fc5(x)
+                x = self.fc4(x)
 
                 if self.mode == 'MOL':
                     sample = sample_from_discretized_mix_logistic(x.unsqueeze(0).transpose(1, 2))
