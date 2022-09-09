@@ -362,8 +362,8 @@ wavernn_runtimeracer = HParams(
     upsample_factors=(5, 5, 8),  # NB - this needs to correctly factorise hop_length
 
     rnn_dims=256,
-    fc_dims=128,
-    compute_dims=64,
+    fc_dims=256,
+    compute_dims=128,
     res_out_dims=64*2, #aux output is fed into 2 downstream nets
     res_blocks=5,
 
