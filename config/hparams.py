@@ -364,7 +364,7 @@ wavernn_runtimeracer = HParams(
     rnn_dims=256,
     fc_dims=128,
     compute_dims=64,
-    res_out_dims=32*4, #aux output is fed into 4 downstream nets
+    res_out_dims=64*2, #aux output is fed into 2 downstream nets
     res_blocks=5,
 
     # WaveRNN Training
@@ -399,9 +399,9 @@ wavernn_runtimeracer = HParams(
     ],
 
     # sparsification
-    use_sparsification=True,
-    start_prune=1000,
-    prune_steps=10000,
+    use_sparsification=False,
+    start_prune=100000,
+    prune_steps=100000,
     sparsity_target=0.90,
     sparsity_target_rnn=0.90,
     sparse_group=4,
