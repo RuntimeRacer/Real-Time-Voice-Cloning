@@ -307,6 +307,7 @@ Stretch2dLayer *Stretch2dLayer::loadNext(FILE *fd)
     fread( &header, sizeof(Stretch2dLayer::Header), 1, fd);
     x_scale = header.x_scale;
     y_scale = header.y_scale;
+    return this;
 }
 
 Matrixf Stretch2dLayer::apply(const Matrixf &x)

@@ -1,7 +1,8 @@
 #ifndef WAVERNN_H
 #define WAVERNN_H
 
-#include <stdio.h>
+#include <cstdio>
+#include <cstdlib>
 #include <vector>
 #include <Eigen/Dense>
 
@@ -30,12 +31,20 @@ class CompMatrix{
 
     void prepData( std::vector<float>& wght, std::vector<uint8_t>& idx )
     {
+
+#ifdef __linux__
         weight = static_cast<float*>(aligned_alloc(32, sizeof(float)*wght.size()));
 
         nGroups = wght.size()/SPARSE_GROUP_SIZE;
         rowIdx = static_cast<int*>(aligned_alloc(32, sizeof(int)*nGroups));
         colIdx = static_cast<int8_t*>(aligned_alloc(32, sizeof(int8_t)*nGroups));
+#elif _WIN32
+        weight = static_cast<float*>(_aligned_malloc(32, sizeof(float)*wght.size()));
 
+        nGroups = wght.size()/SPARSE_GROUP_SIZE;
+        rowIdx = static_cast<int*>(_aligned_malloc(32, sizeof(int)*nGroups));
+        colIdx = static_cast<int8_t*>(_aligned_malloc(32, sizeof(int8_t)*nGroups));
+#endif
         std::copy(wght.begin(), wght.end(), weight);
 
         int row = 0;
