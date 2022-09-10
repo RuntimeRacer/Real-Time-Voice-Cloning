@@ -32,19 +32,12 @@ class CompMatrix{
     void prepData( std::vector<float>& wght, std::vector<uint8_t>& idx )
     {
 
-#ifdef __linux__
-        weight = static_cast<float*>(aligned_alloc(32, sizeof(float)*wght.size()));
+        weight = static_cast<float*>(CompMatrix::aligned_alloc(32, sizeof(float)*wght.size()));
 
         nGroups = wght.size()/SPARSE_GROUP_SIZE;
-        rowIdx = static_cast<int*>(aligned_alloc(32, sizeof(int)*nGroups));
-        colIdx = static_cast<int8_t*>(aligned_alloc(32, sizeof(int8_t)*nGroups));
-#elif _WIN32
-        weight = static_cast<float*>(_aligned_malloc(32, sizeof(float)*wght.size()));
+        rowIdx = static_cast<int*>(CompMatrix::aligned_alloc(32, sizeof(int)*nGroups));
+        colIdx = static_cast<int8_t*>(CompMatrix::aligned_alloc(32, sizeof(int8_t)*nGroups));
 
-        nGroups = wght.size()/SPARSE_GROUP_SIZE;
-        rowIdx = static_cast<int*>(_aligned_malloc(32, sizeof(int)*nGroups));
-        colIdx = static_cast<int8_t*>(_aligned_malloc(32, sizeof(int8_t)*nGroups));
-#endif
         std::copy(wght.begin(), wght.end(), weight);
 
         int row = 0;
@@ -62,6 +55,45 @@ class CompMatrix{
         }
         assert( n == nGroups );
     };
+
+#if _WIN32
+    static void *align( std::size_t alignment, std::size_t size,
+                 void *&ptr, std::size_t &space ) {
+        std::uintptr_t pn = reinterpret_cast< std::uintptr_t >( ptr );
+        std::uintptr_t aligned = ( pn + alignment - 1 ) & - alignment;
+        std::size_t padding = aligned - pn;
+        if ( space < size + padding ) return nullptr;
+        space -= padding;
+        return ptr = reinterpret_cast< void * >( aligned );
+    }
+#endif
+
+    static void* aligned_alloc(std::size_t size, std::size_t alignment){
+#ifdef __linux__
+        return aligned_alloc(size, alignment);
+#elif _WIN32
+        if(alignment < alignof(void*)) {
+            alignment = alignof(void*);
+        }
+        std::size_t space = size + alignment - 1;
+        void* allocated_mem = ::operator new(space + sizeof(void*));
+        void* aligned_mem = static_cast<void*>(static_cast<char*>(allocated_mem) + sizeof(void*));
+        ////////////// #1 ///////////////
+        CompMatrix::align(alignment, size, aligned_mem, space);
+        ////////////// #2 ///////////////
+        *(static_cast<void**>(aligned_mem) - 1) = allocated_mem;
+        ////////////// #3 ///////////////
+        return aligned_mem;
+#endif
+    }
+
+    static void aligned_free(void* p) noexcept {
+#ifdef __linux__
+        return align_free(p);
+#elif _WIN32
+        ::operator delete(*(static_cast<void**>(p) - 1));
+#endif
+    }
 
 public:
     CompMatrix()=default;

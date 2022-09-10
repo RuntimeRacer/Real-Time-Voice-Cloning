@@ -46,7 +46,7 @@ int main(int argc, char* argv[])
     string mel_file = result["mel"].as<string>();
 
     FILE *fdMel = fopen( mel_file.c_str(), "rb");
-    Matrixf mel = loadMel( fdMel );
+    //Matrixf mel = loadMel( fdMel );
 
 
     FILE *fd = fopen(weights_file.c_str(), "rb");
@@ -55,11 +55,11 @@ int main(int argc, char* argv[])
     Model model;
     model.loadNext(fd);
 
-    Vectorf wav = model.apply(mel);
-
-    FILE *fdout = fopen("wavout.bin","wb");
-    fwrite(wav.data(), sizeof(float), wav.size(), fdout);
-    fclose(fdout);
+//    Vectorf wav = model.apply(mel);
+//
+//    FILE *fdout = fopen("wavout.bin","wb");
+//    fwrite(wav.data(), sizeof(float), wav.size(), fdout);
+//    fclose(fdout);
 
 //    TorchLayer I;  I.loadNext(fd);
 //    TorchLayer GRU; GRU.loadNext(fd);
