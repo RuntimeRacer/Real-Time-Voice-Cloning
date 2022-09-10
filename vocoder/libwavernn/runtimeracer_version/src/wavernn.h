@@ -35,6 +35,7 @@ class CompMatrix{
         weight = static_cast<float*>(CompMatrix::aligned_alloc(32, sizeof(float)*wght.size()));
 
         nGroups = wght.size()/SPARSE_GROUP_SIZE;
+        // FIXME: This alloc code breaks sonner or later. Debug on Linux to ensure it is the code and not the hotfix
         rowIdx = static_cast<int*>(CompMatrix::aligned_alloc(32, sizeof(int)*nGroups));
         colIdx = static_cast<int8_t*>(CompMatrix::aligned_alloc(32, sizeof(int8_t)*nGroups));
 
