@@ -101,7 +101,9 @@ void Model::loadNext(FILE *fd)
     I.loadNext(fd);
     rnn1.loadNext(fd);
     fc1.loadNext(fd);
+    rnn2.loadNext(fd);
     fc2.loadNext(fd);
+    fc3.loadNext(fd);
 }
 
 
@@ -147,7 +149,8 @@ inline float invMulawQuantize( float x_mu )
 
 Vectorf Model::apply(const Matrixf &mels_in)
 {
-    std::vector<int> rnn_shape = rnn1.shape();
+    std::vector<int> rnn_shape_1 = rnn1.shape();
+    std::vector<int> rnn_shape_2 = rnn2.shape();
 
     Matrixf mel_padded = pad(mels_in, header.nPad);
     Matrixf mels = upsample.apply(mel_padded);
@@ -168,23 +171,34 @@ Vectorf Model::apply(const Matrixf &mels_in)
 
     Vectorf x = Vectorf::Zero(1); //current sound amplitude
 
-    Vectorf h1 = Vectorf::Zero(rnn_shape[0]);
+    Vectorf h1 = Vectorf::Zero(rnn_shape_1[0]);
+    Vectorf h2 = Vectorf::Zero(rnn_shape_2[0]);
 
     for(int i=0; i<seq_len; ++i){
         Vectorf y = vstack( x, mels.col(i), a1.col(i) );
         y = I( y );
+
         h1 = rnn1( y, h1 );
         y += h1;
 
         y = vstack( y, a2.col(i) );
-
         y = relu( fc1( y ) );
-        Vectorf logits = fc2( y );
+
+        h2 = rnn2(y, h2);
+        y += h2;
+
+        y = vstack( y, a1.col(i) );
+        y = relu(fc2( y ));
+
+        y = vstack( y, a2.col(i) );
+        Vectorf logits = fc3( y );
+
         Vectorf posterior = softmax( logits );
 
         float newAmplitude = sampleCategorical( posterior );
-        newAmplitude = (2.*newAmplitude) / (posterior.size()-1.) - 1.; //for bits output
-        //newAmplitude = invMulawQuantize( newAmplitude );   //mulaw output
+        // TODO: Make this nice / Parameterized based on model type to be provided on Read to the lib
+        //newAmplitude = (2.*newAmplitude) / (posterior.size()-1.) - 1.; //for bits output
+        newAmplitude = invMulawQuantize( newAmplitude );   //mulaw output
         wav_out(i) = x(0) = newAmplitude;
 
     }

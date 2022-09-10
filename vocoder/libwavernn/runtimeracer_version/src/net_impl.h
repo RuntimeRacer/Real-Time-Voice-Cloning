@@ -5,7 +5,7 @@
 #include <vector>
 #include "wavernn.h"
 
-const int RES_BLOCKS = 3;
+const int RES_BLOCKS = 5;
 const int UPSAMPLE_LAYERS = 3;
 
 Vectorf softmax( const Vectorf& x );
@@ -51,12 +51,15 @@ class Model{
 
     Header header;
 
+    // Sub Networks
     UpsampleNetwork upsample;
     Resnet resnet;
     TorchLayer I;
     TorchLayer rnn1;
     TorchLayer fc1;
+    TorchLayer rnn2;
     TorchLayer fc2;
+    TorchLayer fc3;
 
 public:
     Model() = default;
