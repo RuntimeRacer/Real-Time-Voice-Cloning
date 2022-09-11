@@ -21,6 +21,7 @@ using namespace std;
 
 Matrixf loadMel( string npy_fname )
 {
+    // Fixed With peeking at: https://rancheng.github.io/npy-cpp/
     cnpy::NpyArray npy_data = cnpy::npy_load(npy_fname);
     int nRows = npy_data.shape[0];
     int nCols = npy_data.shape[1];
