@@ -164,7 +164,8 @@ Vectorf Model::apply(const Matrixf &mels_in)
     int seq_len = mels.cols();
     int n_aux = aux.rows();
 
-    Matrixf a1 = aux.block(0, 0, n_aux/2-1, aux.cols()); //we are throwing away the last aux row to keep network input a mulitple of 8.
+    Matrixf a1_I = aux.block(0, 0, n_aux/2-1, aux.cols()); //we are throwing away the last aux row to keep network input a mulitple of 8.
+    Matrixf a1 = aux.block(0, 0, n_aux/2, aux.cols());
     Matrixf a2 = aux.block(n_aux/2, 0, n_aux/2, aux.cols());
 
     Vectorf wav_out(seq_len);     //output vector
@@ -175,7 +176,7 @@ Vectorf Model::apply(const Matrixf &mels_in)
     Vectorf h2 = Vectorf::Zero(rnn_shape_2[0]);
 
     for(int i=0; i<seq_len; ++i){
-        Vectorf y = vstack( x, mels.col(i), a1.col(i) );
+        Vectorf y = vstack( x, mels.col(i), a1_I.col(i) );
         y = I( y );
 
         h1 = rnn1( y, h1 );
