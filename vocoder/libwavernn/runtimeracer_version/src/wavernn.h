@@ -32,11 +32,11 @@ class CompMatrix{
     void prepData( std::vector<float>& wght, std::vector<uint8_t>& idx )
     {
 
-        weight = static_cast<float*>(CompMatrix::aligned_alloc(32, sizeof(float)*wght.size()));
+        weight = static_cast<float*>(CompMatrix::aligned_alloc_impl(32, sizeof(float)*wght.size()));
 
         nGroups = wght.size()/SPARSE_GROUP_SIZE;
-        rowIdx = static_cast<int*>(CompMatrix::aligned_alloc(32, sizeof(int)*nGroups));
-        colIdx = static_cast<int8_t*>(CompMatrix::aligned_alloc(32, sizeof(int8_t)*nGroups));
+        rowIdx = static_cast<int*>(CompMatrix::aligned_alloc_impl(32, sizeof(int)*nGroups));
+        colIdx = static_cast<int8_t*>(CompMatrix::aligned_alloc_impl(32, sizeof(int8_t)*nGroups));
 
         std::copy(wght.begin(), wght.end(), weight);
 
@@ -68,9 +68,9 @@ class CompMatrix{
     }
 #endif
 
-    static void* aligned_alloc(std::size_t size, std::size_t alignment){
+    static void* aligned_alloc_impl(std::size_t alignment, std::size_t size){
 #ifdef __linux__
-        return aligned_alloc(size, alignment);
+        return std::aligned_alloc(alignment, size);
 #elif _WIN32
         if(alignment < alignof(void*)) {
             alignment = alignof(void*);
@@ -84,14 +84,6 @@ class CompMatrix{
         *(static_cast<void**>(aligned_mem) - 1) = allocated_mem;
         ////////////// #3 ///////////////
         return aligned_mem;
-#endif
-    }
-
-    static void aligned_free(void* p) noexcept {
-#ifdef __linux__
-        return align_free(p);
-#elif _WIN32
-        ::operator delete(*(static_cast<void**>(p) - 1));
 #endif
     }
 
