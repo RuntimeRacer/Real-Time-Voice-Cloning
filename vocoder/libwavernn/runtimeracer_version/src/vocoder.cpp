@@ -48,9 +48,7 @@ int main(int argc, char* argv[])
     string weights_file = result["weights"].as<string>();
     string mel_file = result["mel"].as<string>();
 
-    //FILE *fdMel = fopen( mel_file.c_str(), "rb");
     Matrixf mel = loadMel( mel_file );
-
 
     FILE *fd = fopen(weights_file.c_str(), "rb");
     assert(fd);
