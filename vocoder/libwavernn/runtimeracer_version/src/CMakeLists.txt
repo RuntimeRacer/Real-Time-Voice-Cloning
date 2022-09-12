@@ -32,6 +32,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(Eigen3)
 set(EIGEN3_INCLUDE_DIR ${Eigen3_SOURCE_DIR})
 
+#set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_CXX_STANDARD 17)
 
 #find_package (Eigen3 3.3 REQUIRED NO_MODULE)
