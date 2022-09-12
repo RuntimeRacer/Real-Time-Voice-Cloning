@@ -4,6 +4,9 @@ import WaveRNNVocoder
 import torch
 
 import synthesizer.audio as syn_audio
+import vocoder.audio as voc_audio
+
+from config.hparams import wavernn_runtimeracer
 
 from scipy.io.wavfile import write
 
@@ -38,6 +41,7 @@ if __name__ == "__main__":
 
 
     wav = vocoder.melToWav(mel)
+    wav = voc_audio.decode_mu_law(wav, 2 ** wavernn_runtimeracer.bits, False)
     #wav = wav.T
 
     syn_audio.save_wav(wav, args.wav_out, sr=sp.sample_rate)

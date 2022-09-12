@@ -198,8 +198,8 @@ Vectorf Model::apply(const Matrixf &mels_in)
 
         float newAmplitude = sampleCategorical( posterior );
         // TODO: Make this nice / Parameterized based on model type to be provided on Read to the lib
-        //newAmplitude = (2.*newAmplitude) / (posterior.size()-1.) - 1.; //for bits output
-        newAmplitude = invMulawQuantize( newAmplitude );   //mulaw output
+        newAmplitude = (2.*newAmplitude) / (posterior.size()-1.) - 1.; //for bits output; but also when doing MuLaw
+        //newAmplitude = invMulawQuantize( newAmplitude );   //mulaw output
         wav_out(i) = x(0) = newAmplitude;
 
     }

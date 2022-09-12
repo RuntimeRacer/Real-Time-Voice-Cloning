@@ -32,6 +32,8 @@ Matrixf loadMel( string npy_fname )
     // Important!
     mel.transposeInPlace();
 
+    // Fixme: Apply max_abs_value similar to NumPy Operation
+
     return mel;
 }
 
@@ -59,6 +61,9 @@ int main(int argc, char* argv[])
 
     Vectorf wav = model.apply(mel);
 
+    // Fixme: Proper MuLaw-Decode using Matrix Operation similar to NumPy
+
+    // Fixme: Save as .wav instead of binary
     FILE *fdout = fopen("wavout.bin","wb");
     fwrite(wav.data(), sizeof(float), wav.size(), fdout);
     fclose(fdout);
