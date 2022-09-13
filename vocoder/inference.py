@@ -1,5 +1,5 @@
 
-from config.hparams import sp, wavernn_fatchord, wavernn_geneing
+from config.hparams import sp, wavernn_fatchord, wavernn_geneing, wavernn_runtimeracer
 from vocoder.models import base
 import torch
 
@@ -60,6 +60,8 @@ def infer_waveform(mel, normalize=True,  batched=True, target=None, overlap=None
         hp_wavernn = wavernn_fatchord
     elif _model_type == base.MODEL_TYPE_GENEING:
         hp_wavernn = wavernn_geneing
+    elif _model_type == base.MODEL_TYPE_RUNTIMERACER:
+        hp_wavernn = wavernn_runtimeracer
     else:
         raise NotImplementedError("Invalid model of type '%s' provided. Aborting..." % _model_type)
 
