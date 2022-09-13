@@ -34,8 +34,14 @@ def init_voc_model(model_type, device, override_hp_fatchord=None, override_hp_ge
             res_blocks=hparams.res_blocks,
             hop_length=sp.hop_size,
             sample_rate=sp.sample_rate,
-            mode=hparams.mode
+            mode=hparams.mode,
+            pruning=True
         ).to(device)
+
+        # Setup pruner if enabled
+        if hparams.use_sparsification:
+            pruner = Pruner(hparams.start_prune, hparams.prune_steps, hparams.sparsity_target, hparams.sparse_group)
+            pruner.update_layers(model.prune_layers, True)
     elif model_type == MODEL_TYPE_GENEING:
         hparams = wavernn_geneing
         if override_hp_geneing is not None:
@@ -66,8 +72,8 @@ def init_voc_model(model_type, device, override_hp_fatchord=None, override_hp_ge
             pruner.update_layers(model.prune_layers, True)
     elif model_type == MODEL_TYPE_RUNTIMERACER:
         hparams = wavernn_runtimeracer
-        if override_hp_geneing is not None:
-            hparams = override_hp_geneing
+        if override_hp_runtimeracer is not None:
+            hparams = override_hp_runtimeracer
 
         # Check to make sure the hop length is correctly factorised
         assert np.cumprod(hparams.upsample_factors)[-1] == sp.hop_size

@@ -227,7 +227,7 @@ wavernn_fatchord = HParams(
     rnn_dims=512,
     fc_dims=512,
     compute_dims=128,
-    res_out_dims=128,
+    res_out_dims=32*4, #aux output is fed into 2 downstream nets
     res_blocks=10,
 
     # WaveRNN Training
@@ -261,12 +261,12 @@ wavernn_fatchord = HParams(
         (256, 1e-4, 1e-4, 240),
     ],
 
-    # sparsification - compared to geneing's version we're doing it epoch based
-    use_sparsification=False,
-    start_prune_epoch=3,  # epoch after which we prune first time
-    prune_epoch_steps=1,  # stepping of epochs to prune after
-    sparsity_target=0.90,
-    sparsity_target_rnn=0.90,
+    # sparsification
+    use_sparsification=True,
+    start_prune=1605500,
+    prune_steps=10000,
+    sparsity_target=0.05,
+    sparsity_target_rnn=0.05,
     sparse_group=4,
 
     # Anomaly detection in Training
@@ -365,7 +365,7 @@ wavernn_runtimeracer = HParams(
     fc_dims=256,
     compute_dims=128,
     res_out_dims=64*2, #aux output is fed into 2 downstream nets
-    res_blocks=5,
+    res_blocks=10,
 
     # WaveRNN Training
     pad=2,  # this will pad the input so that the resnet can 'see' wider than input length

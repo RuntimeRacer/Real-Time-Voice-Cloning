@@ -324,7 +324,14 @@ def save_upsample(f, model, hparams):
     return
 
 def save_main(f, model, hparams):
-    if base.get_model_type(model) == base.MODEL_TYPE_GENEING:
+    if base.get_model_type(model) == base.MODEL_TYPE_FATCHORD:
+        save_layer(f, model.I, hparams)
+        save_layer(f, model.rnn1, hparams)
+        save_layer(f, model.rnn2, hparams)
+        save_layer(f, model.fc1, hparams)
+        save_layer(f, model.fc2, hparams)
+        save_layer(f, model.fc3, hparams)
+    elif base.get_model_type(model) == base.MODEL_TYPE_GENEING:
         save_layer(f, model.I, hparams)
         save_layer(f, model.rnn1, hparams)
         save_layer(f, model.fc1, hparams)
