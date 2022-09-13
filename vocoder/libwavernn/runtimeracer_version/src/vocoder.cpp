@@ -12,22 +12,27 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 #include <string>
 #include "cxxopts.hpp"
 
+#include "cnpy.h"
 #include "vocoder.h"
 #include "net_impl.h"
 #include "wavernn.h"
 
 using namespace std;
 
-Matrixf loadMel( FILE *fd )
+Matrixf loadMel( string npy_fname )
 {
+    // Fixed With peeking at: https://rancheng.github.io/npy-cpp/
+    cnpy::NpyArray npy_data = cnpy::npy_load(npy_fname);
+    int nRows = npy_data.shape[0];
+    int nCols = npy_data.shape[1];
 
-    struct Header{
-        int nRows, nCols;
-    } header;
-    fread( &header, sizeof( Header ), 1, fd);
+    Matrixf mel( nRows, nCols );
+    memcpy(mel.data(), npy_data.data<float>(), nRows * nCols * sizeof(float));
 
-    Matrixf mel( header.nRows, header.nCols );
-    fread(mel.data(), sizeof(float), header.nRows*header.nCols, fd);
+    // Important!
+    mel.transposeInPlace();
+
+    // Fixme: Apply max_abs_value similar to NumPy Operation
 
     return mel;
 }
@@ -45,21 +50,23 @@ int main(int argc, char* argv[])
     string weights_file = result["weights"].as<string>();
     string mel_file = result["mel"].as<string>();
 
-    FILE *fdMel = fopen( mel_file.c_str(), "rb");
-    //Matrixf mel = loadMel( fdMel );
-
+    Matrixf mel = loadMel( mel_file );
 
     FILE *fd = fopen(weights_file.c_str(), "rb");
     assert(fd);
 
     Model model;
     model.loadNext(fd);
+    fclose(fd);
 
-//    Vectorf wav = model.apply(mel);
-//
-//    FILE *fdout = fopen("wavout.bin","wb");
-//    fwrite(wav.data(), sizeof(float), wav.size(), fdout);
-//    fclose(fdout);
+    Vectorf wav = model.apply(mel);
+
+    // Fixme: Proper MuLaw-Decode using Matrix Operation similar to NumPy
+
+    // Fixme: Save as .wav instead of binary
+    FILE *fdout = fopen("wavout.bin","wb");
+    fwrite(wav.data(), sizeof(float), wav.size(), fdout);
+    fclose(fdout);
 
 //    TorchLayer I;  I.loadNext(fd);
 //    TorchLayer GRU; GRU.loadNext(fd);
@@ -95,9 +102,6 @@ int main(int argc, char* argv[])
     //Matrixf aux = conv_in(mel);
     //Matrixf cv2 = conv_2d(mel);
 //    Matrixf batchnorm = batch_norm(mel);
-
-    fclose(fd);
-    fclose(fdMel);
 
     return 0;
 }
