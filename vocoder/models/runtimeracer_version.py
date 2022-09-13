@@ -169,9 +169,9 @@ class WaveRNN(nn.Module):
         x, _ = self.rnn2(x, h2)
         x = x + res
 
+        res = x
         x = torch.cat([x, a2], dim=2)
         # 2x RNN-256 mimicing RNN-512
-        res = x
         x, _ = self.rnn3(x, h3)
         x = x + res
         res = x
