@@ -156,6 +156,7 @@ class WaveRNN(nn.Module):
         res = x
         x = torch.cat([x, a2], dim=2)
         x, _ = self.rnn2(x, h2)
+        x = x + res
 
         x = torch.cat([x, a3], dim=2)
         x = F.relu(self.fc1(x))
