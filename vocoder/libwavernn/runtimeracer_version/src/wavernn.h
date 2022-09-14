@@ -68,9 +68,9 @@ class CompMatrix{
     }
 #endif
 
-    static void* aligned_alloc(std::size_t size, std::size_t alignment){
+    static void* aligned_alloc_impl(std::size_t alignment, std::size_t size){
 #ifdef __linux__
-        return aligned_alloc(size, alignment);
+        return std::aligned_alloc(alignment, size);
 #elif _WIN32
         if(alignment < alignof(void*)) {
             alignment = alignof(void*);
@@ -84,14 +84,6 @@ class CompMatrix{
         *(static_cast<void**>(aligned_mem) - 1) = allocated_mem;
         ////////////// #3 ///////////////
         return aligned_mem;
-#endif
-    }
-
-    static void aligned_free(void* p) noexcept {
-#ifdef __linux__
-        return align_free(p);
-#elif _WIN32
-        ::operator delete(*(static_cast<void**>(p) - 1));
 #endif
     }
 
