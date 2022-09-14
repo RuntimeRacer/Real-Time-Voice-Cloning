@@ -384,18 +384,18 @@ wavernn_runtimeracer = HParams(
     # final_lr = amount of loops through the dataset per epoch
     # batch_size = Size of the batches used for inference. Rule of Thumb: Max. 12 units per GB of VRAM of smallest card.
     voc_tts_schedule=[
-        (0.25, 1e-3, 5e-4, 40),
-        (0.50, 5e-4, 1e-4, 50),
-        (1, 1e-4, 5e-5, 60),
-        (2, 5e-5, 5e-5, 70),
-        (4, 5e-5, 5e-5, 80),
-        (8, 5e-5, 5e-5, 90),
-        (16, 5e-5, 5e-5, 100),
-        (32, 5e-5, 5e-5, 110),
-        (64, 5e-5, 5e-5, 120),
-        (64, 5e-5, 5e-5, 120),
-        (64, 5e-5, 5e-5, 120),
-        (64, 5e-5, 5e-5, 120),
+        (1, 1e-3, 5e-4, 40),
+        (2, 5e-4, 1e-4, 50),
+        (4, 1e-4, 5e-5, 60),
+        (8, 5e-5, 5e-5, 70),
+        (16, 5e-5, 5e-5, 80),
+        (32, 5e-5, 5e-5, 90),
+        (64, 5e-5, 5e-5, 100),
+        (128, 5e-5, 5e-5, 110),
+        (256, 5e-5, 5e-5, 120),
+        (256, 5e-5, 5e-5, 120),
+        (256, 5e-5, 5e-5, 120),
+        (256, 5e-5, 5e-5, 120),
     ],
 
     # sparsification
