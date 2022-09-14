@@ -206,7 +206,7 @@ class WaveRNN(nn.Module):
                 x = torch.zeros(b_size, 1).cpu()
 
             d = self.aux_dims
-            aux_split = [aux[:, :, d * i:d * (i + 1)] for i in range(2)]
+            aux_split = [aux[:, :, d * i:d * (i + 1)] for i in range(4)]
 
             for i in range(seq_len):
 

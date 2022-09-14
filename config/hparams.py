@@ -361,8 +361,8 @@ wavernn_runtimeracer = HParams(
     mu_law=True,  # Recommended to suppress noise if using raw bits in hp.voc_mode
     upsample_factors=(5, 5, 8),  # NB - this needs to correctly factorise hop_length
 
-    rnn_dims=256,
-    fc_dims=256,
+    rnn_dims=512,
+    fc_dims=512,
     compute_dims=128,
     res_out_dims=64*2, #aux output is fed into 2 downstream nets
     res_blocks=10,
