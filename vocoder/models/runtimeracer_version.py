@@ -200,17 +200,29 @@ class WaveRNN(nn.Module):
         # 4x RNN-256 mimicing RNN-512
         res = x
         x, _ = self.rnn1(x, h1)
+        x = x + res
+        res = x
         x, _ = self.rnn2(x, h2)
+        x = x + res
+        res = x
         x, _ = self.rnn3(x, h3)
+        x = x + res
+        res = x
         x, _ = self.rnn4(x, h4)
         x = x + res
 
         res = x
         x = torch.cat([x, a2], dim=2)
-        # 4x RNN-256 mimicing RNN-512
+        # 2x RNN-256 mimicing RNN-512
         x, _ = self.rnn5(x, h5)
+        x = x + res
+        res = x
         x, _ = self.rnn6(x, h6)
+        x = x + res
+        res = x
         x, _ = self.rnn7(x, h7)
+        x = x + res
+        res = x
         x, _ = self.rnn8(x, h8)
         x = x + res
 
@@ -301,16 +313,22 @@ class WaveRNN(nn.Module):
                 x = self.I(x)
 
                 h1 = rnn1(x, h1)
-                h2 = rnn2(h1, h2)
-                h3 = rnn3(h2, h3)
-                h4 = rnn4(h3, h4)
+                x = x + h1
+                h2 = rnn2(x, h2)
+                x = x + h2
+                h3 = rnn3(x, h3)
+                x = x + h3
+                h4 = rnn4(x, h4)
                 x = x + h4
 
                 inp = torch.cat([x, a2_t], dim=1)
                 h5 = rnn5(inp, h5)
-                h6 = rnn6(h5, h6)
-                h7 = rnn7(h6, h7)
-                h8 = rnn8(h7, h8)
+                x = x + h5
+                h6 = rnn6(x, h6)
+                x = x + h6
+                h7 = rnn7(x, h7)
+                x = x + h7
+                h8 = rnn8(x, h8)
                 x = x + h8
 
                 x = torch.cat([x, a3_t], dim=1)
