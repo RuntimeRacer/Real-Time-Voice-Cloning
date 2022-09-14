@@ -117,13 +117,21 @@ class WaveRNN(nn.Module):
 
         self.upsample = UpsampleNetwork(feat_dims, upsample_factors, compute_dims, res_blocks, res_out_dims, pad)
         self.I = nn.Linear(feat_dims + self.aux_dims - 1 + 1, rnn_dims)  # First dimension has to be divizible by 8, so we take away one aux channel
+        # This mimics 1x512 RNN
         self.rnn1 = nn.GRU(rnn_dims, rnn_dims, batch_first=True)
-        self.rnn2 = nn.GRU(rnn_dims + self.aux_dims, rnn_dims, batch_first=True)
-        self.fc1 = nn.Linear(rnn_dims + self.aux_dims, rnn_dims)
-        self.fc2 = nn.Linear(rnn_dims + self.aux_dims, fc_dims)
-        self.fc3 = nn.Linear(fc_dims, self.n_classes)
+        self.rnn2 = nn.GRU(rnn_dims, rnn_dims, batch_first=True)
+        # This mimics 1x512 RNN
+        self.rnn3 = nn.GRU(rnn_dims + self.aux_dims, rnn_dims, batch_first=True)
+        self.rnn4 = nn.GRU(rnn_dims, rnn_dims, batch_first=True)
+        # This mimics 1x512 FC
+        self.fc1 = nn.Linear(rnn_dims + self.aux_dims, fc_dims)
+        self.fc2 = nn.Linear(fc_dims, fc_dims)
+        # This mimics 1x512 FC
+        self.fc3 = nn.Linear(rnn_dims + self.aux_dims, fc_dims)
+        self.fc4 = nn.Linear(fc_dims, fc_dims)
+        self.fc5 = nn.Linear(fc_dims, self.n_classes)
 
-        self.prune_layers = [self.I, self.rnn1, self.rnn2, self.fc1, self.fc2, self.fc3] if pruning else []
+        self.prune_layers = [self.I, self.rnn1, self.rnn2, self.rnn3, self.rnn4, self.fc1, self.fc2, self.fc3, self.fc4, self.fc5] if pruning else []
 
         self.step = nn.Parameter(torch.zeros(1).long(), requires_grad=False)
         self.num_params()
@@ -135,9 +143,13 @@ class WaveRNN(nn.Module):
         if torch.cuda.is_available():
             h1 = torch.zeros(1, bsize, self.rnn_dims).cuda()
             h2 = torch.zeros(1, bsize, self.rnn_dims).cuda()
+            h3 = torch.zeros(1, bsize, self.rnn_dims).cuda()
+            h4 = torch.zeros(1, bsize, self.rnn_dims).cuda()
         else:
             h1 = torch.zeros(1, bsize, self.rnn_dims).cpu()
             h2 = torch.zeros(1, bsize, self.rnn_dims).cpu()
+            h3 = torch.zeros(1, bsize, self.rnn_dims).cpu()
+            h4 = torch.zeros(1, bsize, self.rnn_dims).cpu()
         mels, aux = self.upsample(mels)
 
         aux_idx = [self.aux_dims * i for i in range(5)]
@@ -149,22 +161,34 @@ class WaveRNN(nn.Module):
         x = torch.cat([x.unsqueeze(-1), mels, a1[:,:,:-1]], dim=2)
         x = self.I(x)
 
+        # 2x RNN-256 mimicing RNN-512
         res = x
         x, _ = self.rnn1(x, h1)
+        x = x + res
+        res = x
+        x, _ = self.rnn2(x, h2)
         x = x + res
 
         res = x
         x = torch.cat([x, a2], dim=2)
-        x, _ = self.rnn2(x, h2)
+        # 2x RNN-256 mimicing RNN-512
+        x, _ = self.rnn3(x, h3)
+        x = x + res
+        res = x
+        x, _ = self.rnn4(x, h4)
         x = x + res
 
         x = torch.cat([x, a3], dim=2)
-        x = F.relu(self.fc1(x))
-
-        x = torch.cat([x, a4], dim=2)
+        # 2x FC-256 mimicing FC-512
+        x = self.fc1(x)
         x = F.relu(self.fc2(x))
 
+        x = torch.cat([x, a4], dim=2)
+        # 2x FC-256 mimicing FC-512
         x = self.fc3(x)
+        x = F.relu(self.fc4(x))
+
+        x = self.fc5(x)
 
         return x
 
@@ -181,6 +205,8 @@ class WaveRNN(nn.Module):
         start = time.time()
         rnn1 = self.get_gru_cell(self.rnn1)
         rnn2 = self.get_gru_cell(self.rnn2)
+        rnn3 = self.get_gru_cell(self.rnn3)
+        rnn4 = self.get_gru_cell(self.rnn4)
 
         with torch.no_grad():
             if torch.cuda.is_available():
@@ -200,10 +226,14 @@ class WaveRNN(nn.Module):
             if torch.cuda.is_available():
                 h1 = torch.zeros(b_size, self.rnn_dims).cuda()
                 h2 = torch.zeros(b_size, self.rnn_dims).cuda()
+                h3 = torch.zeros(b_size, self.rnn_dims).cuda()
+                h4 = torch.zeros(b_size, self.rnn_dims).cuda()
                 x = torch.zeros(b_size, 1).cuda()
             else:
                 h1 = torch.zeros(b_size, self.rnn_dims).cpu()
                 h2 = torch.zeros(b_size, self.rnn_dims).cpu()
+                h3 = torch.zeros(b_size, self.rnn_dims).cpu()
+                h4 = torch.zeros(b_size, self.rnn_dims).cpu()
                 x = torch.zeros(b_size, 1).cpu()
 
             d = self.aux_dims
@@ -220,18 +250,24 @@ class WaveRNN(nn.Module):
 
                 h1 = rnn1(x, h1)
                 x = x + h1
-
-                inp = torch.cat([x, a2_t], dim=1)
-                h2 = rnn2(inp, h2)
+                h2 = rnn2(x, h2)
                 x = x + h2
 
-                x = torch.cat([x, a3_t], dim=1)
-                x = F.relu(self.fc1(x))
+                inp = torch.cat([x, a2_t], dim=1)
+                h3 = rnn3(inp, h3)
+                x = x + h3
+                h4 = rnn4(x, h4)
+                x = x + h4
 
-                x = torch.cat([x, a4_t], dim=1)
+                x = torch.cat([x, a3_t], dim=1)
+                x = self.fc1(x)
                 x = F.relu(self.fc2(x))
 
+                x = torch.cat([x, a4_t], dim=1)
                 x = self.fc3(x)
+                x = F.relu(self.fc4(x))
+
+                x = self.fc5(x)
 
                 if self.mode == 'MOL':
                     sample = sample_from_discretized_mix_logistic(x.unsqueeze(0).transpose(1, 2))
