@@ -194,7 +194,7 @@ class WaveRNN(nn.Module):
         a3 = aux[:, :, aux_idx[2]:aux_idx[3]]
         a4 = aux[:, :, aux_idx[3]:aux_idx[4]]
 
-        x = torch.cat([x.unsqueeze(-1), mels, a1], dim=2)
+        x = torch.cat([x.unsqueeze(-1), mels, a1[:,:,:-1]], dim=2)
         x = self.I(x)
 
         # 4x RNN-256 mimicing RNN-512
@@ -309,7 +309,7 @@ class WaveRNN(nn.Module):
 
                 a1_t, a2_t, a3_t, a4_t = (a[:, i, :] for a in aux_split)
 
-                x = torch.cat([x, m_t, a1_t], dim=1)
+                x = torch.cat([x, m_t, a1_t[:,:-1]], dim=1)
                 x = self.I(x)
 
                 h1 = rnn1(x, h1)
