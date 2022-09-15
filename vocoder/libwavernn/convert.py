@@ -340,9 +340,13 @@ def save_main(f, model, hparams):
         save_layer(f, model.I, hparams)
         save_layer(f, model.rnn1, hparams)
         save_layer(f, model.rnn2, hparams)
+        save_layer(f, model.rnn3, hparams)
+        save_layer(f, model.rnn4, hparams)
         save_layer(f, model.fc1, hparams)
         save_layer(f, model.fc2, hparams)
         save_layer(f, model.fc3, hparams)
+        save_layer(f, model.fc4, hparams)
+        save_layer(f, model.fc5, hparams)
     else:
         raise NotImplementedError("Provided object is not a valid vocoder model.")
     return

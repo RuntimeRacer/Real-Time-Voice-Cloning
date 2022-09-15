@@ -101,9 +101,13 @@ void Model::loadNext(FILE *fd)
     I.loadNext(fd);
     rnn1.loadNext(fd);
     rnn2.loadNext(fd);
+    rnn3.loadNext(fd);
+    rnn4.loadNext(fd);
     fc1.loadNext(fd);
     fc2.loadNext(fd);
     fc3.loadNext(fd);
+    fc4.loadNext(fd);
+    fc5.loadNext(fd);
 }
 
 
@@ -151,6 +155,8 @@ Vectorf Model::apply(const Matrixf &mels_in)
 {
     std::vector<int> rnn_shape_1 = rnn1.shape();
     std::vector<int> rnn_shape_2 = rnn2.shape();
+    std::vector<int> rnn_shape_3 = rnn3.shape();
+    std::vector<int> rnn_shape_4 = rnn4.shape();
 
     Matrixf mel_padded = pad(mels_in, header.nPad);
     Matrixf mels = upsample.apply(mel_padded);
@@ -176,6 +182,8 @@ Vectorf Model::apply(const Matrixf &mels_in)
 
     Vectorf h1 = Vectorf::Zero(rnn_shape_1[0]);
     Vectorf h2 = Vectorf::Zero(rnn_shape_2[0]);
+    Vectorf h3 = Vectorf::Zero(rnn_shape_3[0]);
+    Vectorf h4 = Vectorf::Zero(rnn_shape_4[0]);
 
     for(int i=0; i<seq_len; ++i){
         Vectorf y = vstack( x, mels.col(i), a1_I.col(i) );
@@ -183,18 +191,24 @@ Vectorf Model::apply(const Matrixf &mels_in)
 
         h1 = rnn1( y, h1 );
         y += h1;
-
-        Vectorf inp = vstack( y, a2.col(i) );
-        h2 = rnn2(inp, h2);
+        h2 = rnn2(y, h2);
         y += h2;
 
+        Vectorf inp = vstack( y, a2.col(i) );
+        h3 = rnn3( inp, h3 );
+        y += h3;
+        h4 = rnn4(y, h4);
+        y += h4;
+
         y = vstack( y, a3.col(i) );
-        y = relu( fc1( y ) );
+        y = fc1(y);
+        y = relu( fc2( y ) );
 
         y = vstack( y, a4.col(i) );
-        y = relu(fc2( y ));
+        y = fc3(y);
+        y = relu(fc4( y ));
 
-        Vectorf logits = fc3( y );
+        Vectorf logits = fc5( y );
 
         Vectorf posterior = softmax( logits );
 

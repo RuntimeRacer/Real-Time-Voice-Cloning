@@ -57,9 +57,13 @@ class Model{
     TorchLayer I;
     TorchLayer rnn1;
     TorchLayer rnn2;
+    TorchLayer rnn3;
+    TorchLayer rnn4;
     TorchLayer fc1;
     TorchLayer fc2;
     TorchLayer fc3;
+    TorchLayer fc4;
+    TorchLayer fc5;
 
 public:
     Model() = default;
