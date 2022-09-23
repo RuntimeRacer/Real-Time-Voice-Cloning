@@ -1,4 +1,3 @@
-import json
 import math
 import time
 from pathlib import Path
@@ -11,7 +10,6 @@ from accelerate import Accelerator
 from torch import optim
 from torch.utils.data import DataLoader
 
-import torch_pruning as tp
 from config.hparams import sp, wavernn_fatchord, wavernn_geneing, wavernn_runtimeracer
 from vocoder.display import simple_table, stream
 from vocoder.distribution import discretized_mix_logistic_loss
@@ -21,13 +19,10 @@ from vocoder.visualizations import Visualizations
 from vocoder.vocoder_dataset import VocoderDataset, collate_vocoder
 from vocoder.utils import ValueWindow
 
-# global vars
-blacklist_lock = Lock()
-blacklisted_indices = []
 
 def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_truth: bool,
           save_every: int, backup_every: int, force_restart: bool,
-          vis_every: int, visdom_server: str, no_visdom: bool, testset_every: int, threads: int, pruned: bool):
+          vis_every: int, visdom_server: str, no_visdom: bool, testset_every: int, threads: int):
 
     model_dir = models_dir.joinpath(run_id)
     model_dir.mkdir(exist_ok=True)
@@ -50,15 +45,11 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
     device = accelerator.device
 
     # Init the model
-    pruner = None
-    if pruned:
-        model = torch.load(weights_fpath).to(device)
-    else:
-        try:
-            model, pruner = base.init_voc_model(model_type, device)
-        except NotImplementedError as e:
-            print(str(e))
-            return
+    try:
+        model, pruner = base.init_voc_model(model_type, device)
+    except NotImplementedError as e:
+        print(str(e))
+        return
 
     # Initialize the optimizer
     optimizer = optim.Adam(model.parameters())
@@ -72,11 +63,8 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                 save(accelerator, model, weights_fpath)
 
     # Model has been initialized - Load the weights
-    if not pruned:
-        print("{0} - Loading weights at {1}".format(device, weights_fpath))
-        global blacklisted_indices
-        blacklisted_indices = load(model, device, weights_fpath, optimizer)
-    print("{0} - WaveRNN weights loaded from step {1}".format(device, model.get_step()))
+    print("{0} - Loading weights at {1}".format(device, weights_fpath))
+    load(model, device, weights_fpath, optimizer)
 
     # Determine a couple of params based on model type
     if model_type == base.MODEL_TYPE_FATCHORD:
@@ -90,7 +78,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
     metadata_fpath = syn_dir.joinpath("train.json") if ground_truth else voc_dir.joinpath("synthesized.json")
     mel_dir = syn_dir.joinpath("mels") if ground_truth else voc_dir.joinpath("mels_gta")
     wav_dir = syn_dir.joinpath("wav")
-    dataset = VocoderDataset(metadata_fpath, mel_dir, wav_dir, vocoder_hparams, blacklisted_indices)
+    dataset = VocoderDataset(metadata_fpath, mel_dir, wav_dir, vocoder_hparams)
     test_loader = DataLoader(dataset,
                              batch_size=1,
                              shuffle=True,
@@ -243,17 +231,6 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                          or math.isnan(loss.item())):  # Give it a few steps to normalize, then do the check
                         print("WARNING - Anomaly detected! (Step {}, Thread {}) - Avg Loss Diff: {}, Current Loss Diff: {}".format(step, accelerator.process_index, avgLossDiff, currentLossDiff))
 
-                        if vocoder_hparams.anomaly_blacklist_batches:
-                            # blacklist indices and update dataset
-                            global blacklist_lock
-                            with blacklist_lock:
-                                blacklisted_indices.extend(indices)
-                                print("Blacklisting {} indices from dataset. Total blacklisted: {}.".format(len(indices), len(blacklisted_indices)))
-
-                    # Comparison to ensure all threads have the same blacklisting
-                    if len(dataset.get_blacklisted_indices()) != len(blacklisted_indices):
-                        dataset.blacklisted_indices(blacklisted_indices)
-
                     # Kill process if NaN
                     if math.isnan(loss.item()):
                         currentLossDiff /= 0
@@ -277,7 +254,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                         if accelerator.is_local_main_process:
                             print("Making a backup (step %d)" % step)
                             backup_fpath = Path("{}/{}_{}.pt".format(str(weights_fpath.parent), run_id, step))
-                            save(accelerator, model, backup_fpath, optimizer, blacklisted_indices)
+                            save(accelerator, model, backup_fpath, optimizer)
 
                 if save_every != 0 and step % save_every == 0 :
                     # Accelerator: Save in main process after sync
@@ -285,7 +262,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                     with accelerator.local_main_process_first():
                         if accelerator.is_local_main_process:
                             print("Saving the model (step %d)" % step)
-                            save(accelerator, model, weights_fpath, optimizer, blacklisted_indices)
+                            save(accelerator, model, weights_fpath, optimizer)
 
                 # Evaluate model to generate samples
                 # Accelerator: Only in main process
@@ -304,9 +281,9 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                     if pruner is not None:
                         if torch.is_tensor(z):
                             z = z.item()
-                        msg = f"| Epoch: {epoch} ({epoch_step}/{epoch_max_step}) | LR: {lr:#.6} | Loss: {loss_window.average:#.6} | {1. / time_window.average:#.2}steps/s | Step: {step} | Pruned: {num_pruned} ({(round(z * 100, 2))}%) | Currently blacklisted: {len(blacklisted_indices)} |"
+                        msg = f"| Epoch: {epoch} ({epoch_step}/{epoch_max_step}) | LR: {lr:#.6} | Loss: {loss_window.average:#.6} | {1. / time_window.average:#.2}steps/s | Step: {step} | Pruned: {num_pruned} ({(round(z * 100, 2))}%) |"
                     else:
-                        msg = f"| Epoch: {epoch} ({epoch_step}/{epoch_max_step}) | LR: {lr:#.6} | Loss: {loss_window.average:#.6} | {1. / time_window.average:#.2}steps/s | Step: {step} | Currently blacklisted: {len(blacklisted_indices)} |"
+                        msg = f"| Epoch: {epoch} ({epoch_step}/{epoch_max_step}) | LR: {lr:#.6} | Loss: {loss_window.average:#.6} | {1. / time_window.average:#.2}steps/s | Step: {step} |"
                     stream(msg)
 
                 # Break out of loop to update training schedule
@@ -321,14 +298,14 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                 print("")
                 print("Making a backup (step %d)" % current_step)
                 backup_fpath = Path("{}/{}_{}.pt".format(str(weights_fpath.parent), run_id, current_step))
-                save(accelerator, model, backup_fpath, optimizer, blacklisted_indices)
+                save(accelerator, model, backup_fpath, optimizer)
 
                 # Generate a testset after each epoch
                 eval_model = accelerator.unwrap_model(model)
                 gen_testset(eval_model, test_loader, model_dir, vocoder_hparams)
 
 
-def save(accelerator, model, path, optimizer=None, blacklisted_indices=[]):
+def save(accelerator, model, path, optimizer=None):
     # Unwrap Model
     model = accelerator.unwrap_model(model)
 
@@ -342,9 +319,6 @@ def save(accelerator, model, path, optimizer=None, blacklisted_indices=[]):
     }
     if optimizer is not None:
         state["optimizer_state"] = optimizer.state_dict()
-    if len(blacklisted_indices) > 0:
-        print("Current amount of blacklisted dataset indices: %d" % len(blacklisted_indices))
-        state["blacklisted_indices"] = blacklisted_indices
 
     # Save
     torch.save(state, str(path))
@@ -367,82 +341,4 @@ def load(model, device, path, optimizer=None):
     # Load optimizer state
     if "optimizer_state" in checkpoint and optimizer is not None:
         optimizer.load_state_dict(checkpoint["optimizer_state"])
-
-    # Load training meta information
-    blacklisted_indices = []
-    if "blacklisted_indices" in checkpoint and len(checkpoint["blacklisted_indices"]) > 0:
-        blacklisted_indices = checkpoint["blacklisted_indices"]
-    return blacklisted_indices
-
-
-def runtime_prune(model, hparams_sp, hparams_vocoder):
-    # TODO: Test if this also works at runtime when model is on GPU, or we rather need to move to CPU first
-    # Apply the pruning using the simplify
-    mel_win = hparams_vocoder.seq_len // hparams_sp.hop_size + 2 * hparams_vocoder.pad
-
-    if torch.cuda.is_available():
-        dummy_input = (torch.randn(1, hparams_vocoder.seq_len).cuda(), torch.randn(1, hparams_sp.num_mels,mel_win).cuda())  # Tensor shape is that of a standard input for the given model
-    else:
-        dummy_input = (torch.randn(1, hparams_vocoder.seq_len), torch.randn(1, hparams_sp.num_mels, mel_win))  # Tensor shape is that of a standard input for the given model
-
-    # 1. setup strategy (L1 Norm)
-    strategy = tp.strategy.L1Strategy()
-
-    # 2. build dependency graph for resnet18
-    DG = tp.DependencyGraph()
-    DG.build_dependency(model, example_inputs=dummy_input, verbose=True)
-
-    # 3. get a pruning plan from the dependency graph.
-    pruning_idxs = strategy(model.I.weight, amount=0.9)  # or pruning_idxs=[2, 6, 9, ...]
-    pruning_plan = DG.get_pruning_plan(model.I, tp.prune_linear_out_channel, idxs=pruning_idxs)
-    print(pruning_plan)
-
-    # 4. execute this plan after checking (prune the model)
-    #    if the plan prunes some channels to zero,
-    #    DG.check_pruning plan will return False.
-    if DG.check_pruning_plan(pruning_plan):
-        pruning_plan.exec()
-
-    return model
-
-
-def apply_prune(model_fpath: str, default_model_type: str, out_dir: Path):
-    # Do all of this on CPU
-    device = torch.device("cpu")
-    if torch.cuda.is_available():
-        device = torch.device("cuda")
-
-    # Load model weights from provided model path
-    checkpoint = torch.load(model_fpath, map_location=device)
-    model_type = default_model_type
-    if "model_type" in checkpoint:
-        model_type = checkpoint["model_type"]
-
-    # Init the model
-    try:
-        model, _ = base.init_voc_model(model_type, device)
-        model = model.eval()
-    except NotImplementedError as e:
-        print(str(e))
-        return
-
-    # Load model state
-    model.load_state_dict(checkpoint["model_state"])
-
-    # Define hparams
-    if model_type == base.MODEL_TYPE_FATCHORD:
-        hparams = wavernn_fatchord
-    elif model_type == base.MODEL_TYPE_GENEING:
-        hparams = wavernn_geneing
-    elif model_type == base.MODEL_TYPE_RUNTIMERACER:
-        hparams = wavernn_runtimeracer
-    else:
-        raise NotImplementedError("Invalid model of type '%s' provided. Aborting..." % model_type)
-
-    # Apply the pruning
-    simplified_model = runtime_prune(model, hparams_sp=sp, hparams_vocoder=hparams)
-
-    # Save the pruned model
-    out_filename = out_dir.joinpath(Path(model_fpath).stem + '_pruned').with_suffix(".pt")
-    torch.save(simplified_model, str(out_filename))
 

@@ -1,16 +1,15 @@
 import argparse
 import numpy as np
 import WaveRNNVocoder
-import torch
 
 import synthesizer.audio as syn_audio
 import vocoder.audio as voc_audio
 
-from config.hparams import wavernn_runtimeracer
+from config.hparams import wavernn_fatchord, wavernn_geneing, wavernn_runtimeracer
 
-from scipy.io.wavfile import write
 
 from config.hparams import sp
+from vocoder.models import base
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -24,7 +23,18 @@ if __name__ == "__main__":
         "Path of the input mel spectogram file")
     parser.add_argument("wav_out", type=str, help= \
         "Path of the out wav file")
+    parser.add_argument("--default_model_type", type=str, default=base.MODEL_TYPE_FATCHORD, help="default model type")
     args = parser.parse_args()
+
+    # Define hparams
+    if args.default_model_type == base.MODEL_TYPE_FATCHORD:
+        hparams = wavernn_fatchord
+    elif args.default_model_type == base.MODEL_TYPE_GENEING:
+        hparams = wavernn_geneing
+    elif args.default_model_type == base.MODEL_TYPE_RUNTIMERACER:
+        hparams = wavernn_runtimeracer
+    else:
+        raise NotImplementedError("Invalid model of type '%s' provided. Aborting..." % args.default_model_type)
 
     # Setup Vocoder
     vocoder = WaveRNNVocoder.Vocoder()
@@ -33,17 +43,12 @@ if __name__ == "__main__":
     # Load the mel spectrogram and adjust its range to [-1, 1]
     mel = np.load(args.mel_path).T.astype(np.float32) / sp.max_abs_value
 
-
-    # mel = np.load(args.mel_path).T.astype(np.float32) / sp.max_abs_value
-    # mel = torch.as_tensor([mel])
-    #
-    # mel = np.concatenate(mel.numpy(), axis=1)
-
-
+    # Encode it using LibWaveRNN
     wav = vocoder.melToWav(mel)
-    wav = voc_audio.decode_mu_law(wav, 2 ** wavernn_runtimeracer.bits, False)
-    #wav = wav.T
+
+    if hparams.mu_law:
+        # Do MuLaw decode over the whole generated audio for optimal normalization
+        wav = voc_audio.decode_mu_law(wav, 2 ** hparams.bits, False)
 
     syn_audio.save_wav(wav, args.wav_out, sr=sp.sample_rate)
-    #write(args.wav_out, 16000, wav)
     

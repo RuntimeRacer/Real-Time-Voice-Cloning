@@ -11,7 +11,7 @@ from vocoder import audio
 
 
 class VocoderDataset(Dataset):
-    def __init__(self, metadata_fpath: Path, mel_dir: Path, wav_dir: Path, vocoder_hparams, blacklisted_indices):
+    def __init__(self, metadata_fpath: Path, mel_dir: Path, wav_dir: Path, vocoder_hparams):
         self.metadata_fpath = metadata_fpath
         print("Using inputs from:\n\t%s\n\t%s\n\t%s" % (self.metadata_fpath, mel_dir, wav_dir))
 
@@ -28,7 +28,6 @@ class VocoderDataset(Dataset):
         self.vocoder_hparams = vocoder_hparams
         self.samples_fpaths = list(zip(gta_fpaths, wav_fpaths))
         self.metadata = metadata
-        self.blacklisted_indices = blacklisted_indices
 
         print("Found %d samples" % len(self.samples_fpaths))
     

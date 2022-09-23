@@ -262,18 +262,20 @@ wavernn_fatchord = HParams(
     ],
 
     # sparsification
-    use_sparsification=True,
-    start_prune=1605500,
-    prune_steps=10000,
-    sparsity_target=0.05,
-    sparsity_target_rnn=0.05,
+    use_sparsification=False,
+    start_prune=100000,
+    prune_steps=100000,
+    sparsity_target=0.90,
+    sparsity_target_rnn=0.90,
     sparse_group=4,
 
     # Anomaly detection in Training
-    anomaly_detection=False,
-    # Enables Loss anomaly detection. Dataloader will collect more metadata. Reduces training Performance by ~20%.
-    anomaly_trigger_multiplier=6,
-    # Threshold for raising anomaly detection. It is a Multiplier of average loss change
+    anomaly_detection=False,  # Enables Loss anomaly detection. TODO: If anamaly is detected, continue training from previous backup
+    anomaly_trigger_multiplier=6,  # Threshold for raising anomaly detection. It is a Multiplier of average loss change.
+    # Remark: Loss explosion can be caused either by bad training data, or by too high learning rate.
+    # Explosion due to high learning rate will happen usually early on.
+    # Explosion due to bad data randomly happens even at a high training step.
+    # If anomalies occur frequently, try to reduce deviation / bad quality data in your dataset.
 
     # Generating / Synthesizing
     gen_at_checkpoint=5,  # number of samples to generate at each checkpoint
@@ -336,15 +338,12 @@ wavernn_geneing = HParams(
     sparse_group=4,
 
     # Anomaly / Loss explosion detection in Training
-    anomaly_detection=False,  # Enables Loss anomaly detection.
+    anomaly_detection=False,  # Enables Loss anomaly detection. TODO: If anamaly is detected, continue training from previous backup
     anomaly_trigger_multiplier=6,  # Threshold for raising anomaly detection. It is a Multiplier of average loss change.
-    anomaly_blacklist_batches=False,  # Experimental: whether the batch triggering the anomaly should be blacklisted.
-    # Remark: Loss explosion can be caused either by bad data in the training set, or by too high learning rate.
+    # Remark: Loss explosion can be caused either by bad training data, or by too high learning rate.
     # Explosion due to high learning rate will happen usually early on.
     # Explosion due to bad data randomly happens even at a high training step.
-    # If blacklisting enabled, it will blacklist the batch trained at the moment when the loss explosion occurs
-    # However, there is a chance that the bad batch was already being trained a few steps earlier and thus blacklisting
-    # here might only blacklist a completely valid batch
+    # If anomalies occur frequently, try to reduce deviation / bad quality data in your dataset.
 
     # Generating / Synthesizing
     gen_at_checkpoint=5,  # number of samples to generate at each checkpoint
@@ -391,11 +390,11 @@ wavernn_runtimeracer = HParams(
         (16, 1e-4, 1e-4, 80),
         (32, 1e-4, 1e-4, 90),
         (64, 1e-4, 1e-4, 100),
-        (128, 1e-4, 1e-4, 110),
-        (256, 1e-4, 1e-4, 120),
-        (256, 1e-4, 1e-4, 120),
-        (256, 1e-4, 1e-4, 120),
-        (256, 1e-4, 1e-4, 120),
+        (128, 1e-4, 5e-5, 110),
+        (256, 5e-5, 5e-5, 120),
+        (256, 5e-5, 5e-5, 120),
+        (256, 5e-5, 5e-5, 120),
+        (256, 5e-5, 5e-5, 120),
     ],
 
     # sparsification
@@ -407,19 +406,16 @@ wavernn_runtimeracer = HParams(
     sparse_group=4,
 
     # Anomaly / Loss explosion detection in Training
-    anomaly_detection=False,  # Enables Loss anomaly detection.
+    anomaly_detection=False,  # Enables Loss anomaly detection. TODO: If anamaly is detected, continue training from previous backup
     anomaly_trigger_multiplier=6,  # Threshold for raising anomaly detection. It is a Multiplier of average loss change.
-    anomaly_blacklist_batches=False,  # Experimental: whether the batch triggering the anomaly should be blacklisted.
-    # Remark: Loss explosion can be caused either by bad data in the training set, or by too high learning rate.
+    # Remark: Loss explosion can be caused either by bad training data, or by too high learning rate.
     # Explosion due to high learning rate will happen usually early on.
     # Explosion due to bad data randomly happens even at a high training step.
-    # If blacklisting enabled, it will blacklist the batch trained at the moment when the loss explosion occurs
-    # However, there is a chance that the bad batch was already being trained a few steps earlier and thus blacklisting
-    # here might only blacklist a completely valid batch
+    # If anomalies occur frequently, try to reduce deviation / bad quality data in your dataset.
 
     # Generating / Synthesizing
     gen_at_checkpoint=5,  # number of samples to generate at each checkpoint
     gen_batched=True,  # very fast (realtime+) single utterance batched generation
-    gen_target=3000,  # target number of samples to be generated in each batch entry
-    gen_overlap=1500,  # number of samples for crossfading between batches
+    gen_target=6000,  # target number of samples to be generated in each batch entry
+    gen_overlap=1000,  # number of samples for crossfading between batches
 )
