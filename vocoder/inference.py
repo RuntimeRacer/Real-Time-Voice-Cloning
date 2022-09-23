@@ -1,4 +1,3 @@
-
 from config.hparams import sp, wavernn_fatchord, wavernn_geneing, wavernn_runtimeracer
 from vocoder.models import base
 import torch

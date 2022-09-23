@@ -214,8 +214,8 @@ Vectorf Model::apply(const Matrixf &mels_in)
 
         float newAmplitude = sampleCategorical( posterior );
         // TODO: Make this nice / Parameterized based on model type to be provided on Read to the lib
-        newAmplitude = (2.*newAmplitude) / (posterior.size()-1.) - 1.; //for bits output; but also when doing MuLaw
-        //newAmplitude = invMulawQuantize( newAmplitude );   //mulaw output
+        newAmplitude = (2.*newAmplitude) / (posterior.size()-1.) - 1.; //for bits output; for Mulaw see below
+        //newAmplitude = invMulawQuantize( newAmplitude );   //mulaw output -> Works different if used per frame; normalization on whole wav using numpy is a lot smoother; see python implementation.
         wav_out(i) = x(0) = newAmplitude;
 
     }

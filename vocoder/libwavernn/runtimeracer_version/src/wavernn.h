@@ -8,6 +8,7 @@
 
 using namespace Eigen;
 
+const bool VERBOSE = false; //Disable console output when using the wrapper
 const int SPARSE_GROUP_SIZE = 4; //When pruning we use groups of 4 to reduce index
 const int MULAW_QUANTIZE_CHANNELS = 1024; //512 (2^9);  //same as hparams.mulaw_quantize_channels (2 ^ BITS)
 const uint8_t ROW_END_MARKER = 255;

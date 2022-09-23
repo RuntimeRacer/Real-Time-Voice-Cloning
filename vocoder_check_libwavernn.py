@@ -1,13 +1,7 @@
 import argparse
 import numpy as np
-import WaveRNNVocoder
-
+from vocoder.libwavernn.inference import Vocoder
 import synthesizer.audio as syn_audio
-import vocoder.audio as voc_audio
-
-from config.hparams import wavernn_fatchord, wavernn_geneing, wavernn_runtimeracer
-
-
 from config.hparams import sp
 from vocoder.models import base
 
@@ -26,29 +20,13 @@ if __name__ == "__main__":
     parser.add_argument("--default_model_type", type=str, default=base.MODEL_TYPE_FATCHORD, help="default model type")
     args = parser.parse_args()
 
-    # Define hparams
-    if args.default_model_type == base.MODEL_TYPE_FATCHORD:
-        hparams = wavernn_fatchord
-    elif args.default_model_type == base.MODEL_TYPE_GENEING:
-        hparams = wavernn_geneing
-    elif args.default_model_type == base.MODEL_TYPE_RUNTIMERACER:
-        hparams = wavernn_runtimeracer
-    else:
-        raise NotImplementedError("Invalid model of type '%s' provided. Aborting..." % args.default_model_type)
-
     # Setup Vocoder
-    vocoder = WaveRNNVocoder.Vocoder()
-    vocoder.loadWeights(args.model_fpath)
-
-    # Load the mel spectrogram and adjust its range to [-1, 1]
-    mel = np.load(args.mel_path).T.astype(np.float32) / sp.max_abs_value
+    voc = Vocoder(model_fpath=args.model_fpath, model_type=args.default_model_type, verbose=True)
+    voc.load(max_threads=1)  # Set to None to use all available cores
 
     # Encode it using LibWaveRNN
-    wav = vocoder.melToWav(mel)
-
-    if hparams.mu_law:
-        # Do MuLaw decode over the whole generated audio for optimal normalization
-        wav = voc_audio.decode_mu_law(wav, 2 ** hparams.bits, False)
+    mel = np.load(args.mel_path)
+    wav = voc.vocode_mel(mel=mel)
 
     syn_audio.save_wav(wav, args.wav_out, sr=sp.sample_rate)
     
