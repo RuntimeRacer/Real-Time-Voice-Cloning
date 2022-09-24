@@ -24,7 +24,9 @@ public:
         if( not fd ){
             throw std::runtime_error("Cannot open file.");
         }
+        py::gil_scoped_release release;
         model.loadNext(fd);
+        py::gil_scoped_acquire acquire;
         isLoaded = true;
     }
 
@@ -33,7 +35,11 @@ public:
         if( not isLoaded ){
             throw std::runtime_error("Model hasn't been loaded. Call loadWeights first.");
         }
-        return model.apply(mels);
+
+        py::gil_scoped_release release;
+        Vectorf wav = model.apply(mels);
+        py::gil_scoped_acquire acquire;
+        return wav;
     }
 
 };
