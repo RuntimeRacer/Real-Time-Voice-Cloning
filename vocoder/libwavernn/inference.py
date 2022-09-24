@@ -1,7 +1,5 @@
 import math
-import time
 
-from concurrent import futures
 from concurrent.futures import ThreadPoolExecutor
 
 from config.hparams import sp, wavernn_fatchord, wavernn_geneing, wavernn_runtimeracer
@@ -9,7 +7,6 @@ from vocoder.models import base
 from vocoder.audio import decode_mu_law, de_emphasis
 from pathlib import Path
 import numpy as np
-import torch
 import psutil
 import WaveRNNVocoder
 
@@ -35,7 +32,7 @@ class Vocoder:
             print("Instantiated C++ WaveRNN Vocoder wrapper for model: ", self.model_fpath)
 
         # For high speed inference we need to make best utilization of CPU resources and threads.
-        self._processing_thread_wrappers = None
+        self._processing_thread_wrappers = []
 
     def load(self, max_threads=None):
         """
@@ -52,11 +49,11 @@ class Vocoder:
         for tID in range(cpus):
             # Init vocoder wrapper for the model file
             vocoder = WaveRNNVocoder.Vocoder()
-            vocoder.loadWeights(self.model_fpath)
+            vocoder.loadWeights(str(self.model_fpath))
             # Append it tot the wrapper list
             self._processing_thread_wrappers.append(vocoder)
 
-    def vocode_mel(self, mel, progress_callback=None):
+    def vocode_mel(self, mel, normalize=True, progress_callback=None):
         """
         Infers the waveform of a mel spectrogram output by the synthesizer.
 
@@ -74,8 +71,10 @@ class Vocoder:
         else:
             raise NotImplementedError("Invalid model of type '%s' provided. Aborting..." % self.model_type)
 
-        # Adjust mel range range to [-1, 1] (normalization)
-        mel = mel.T.astype(np.float32) / sp.max_abs_value
+        if normalize:
+            # Adjust mel range range to [-1, 1] (normalization)
+            mel = mel / sp.max_abs_value
+
         wave_len = mel.shape[1] * sp.hop_size
 
         output = None
@@ -129,6 +128,8 @@ class Vocoder:
         return output
 
     def vocode_thread(self, tID, chunk):
+        if self.verbose:
+            print("Starting libwavernn processing thread ", tID)
         return self._processing_thread_wrappers[tID].melToWav(chunk)
 
     def fold_mel_with_overlap(self, mel, target, overlap):
@@ -195,3 +196,9 @@ class Vocoder:
             unfolded[start:end] += wav[i]
 
         return unfolded
+
+    def setRandomSeed(self, seed):
+        if len(self._processing_thread_wrappers) == 0:
+            return
+        for w in self._processing_thread_wrappers:
+            w.setRandomSeed(seed)

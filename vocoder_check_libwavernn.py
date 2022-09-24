@@ -25,7 +25,7 @@ if __name__ == "__main__":
     voc.load(max_threads=1)  # Set to None to use all available cores
 
     # Encode it using LibWaveRNN
-    mel = np.load(args.mel_path)
+    mel = np.load(args.mel_path).T.astype(np.float32)
     wav = voc.vocode_mel(mel=mel)
 
     syn_audio.save_wav(wav, args.wav_out, sr=sp.sample_rate)

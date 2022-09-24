@@ -30,6 +30,10 @@ public:
         isLoaded = true;
     }
 
+    void setRandomSeed( const uint seed ){
+        std::srand(seed);
+    }
+
     Vectorf melToWav( Eigen::Ref<const MatrixPy> mels ){
 
         if( not isLoaded ){
@@ -74,6 +78,7 @@ PYBIND11_MODULE(WaveRNNVocoder, m){
     py::class_<Vocoder>( m, "Vocoder")
             .def(py::init())
             .def("loadWeights", &Vocoder::loadWeights )
+            .def("setRandomSeed", &Vocoder::setRandomSeed )
             .def("melToWav", &Vocoder::melToWav )
             ;
 }

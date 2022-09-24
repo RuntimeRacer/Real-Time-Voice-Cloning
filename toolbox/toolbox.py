@@ -4,6 +4,7 @@ from encoder import inference as encoder
 from synthesizer.models import base
 from synthesizer.inference import Synthesizer
 from vocoder import inference as vocoder
+import vocoder.libwavernn.inference as libwavernn
 from pathlib import Path
 from time import perf_counter as timer
 from toolbox.utterance import Utterance
@@ -43,7 +44,7 @@ MAX_WAVES = 15
 
 
 class Toolbox:
-    def __init__(self, datasets_root, enc_models_dir, syn_models_dir, voc_models_dir, seed, no_mp3_support):
+    def __init__(self, datasets_root, enc_models_dir, syn_models_dir, voc_models_dir, voc_binary_models_dir, seed, no_mp3_support):
         if not no_mp3_support:
             try:
                 librosa.load("samples/6829_00000.mp3")
@@ -59,10 +60,17 @@ class Toolbox:
         self.current_voc_embed = None
 
         self.synthesizer = None  # type: Synthesizer
+        self.cpu_vocoder = None
         self.current_wav = None
         self.waves_list = []
         self.waves_count = 0
         self.waves_namelist = []
+
+        # Store model dirs
+        self.enc_models_dir = enc_models_dir
+        self.syn_models_dir = syn_models_dir
+        self.voc_models_dir = voc_models_dir
+        self.voc_binary_models_dir = voc_binary_models_dir
 
         # Autotune
         self.autotune_active = False
@@ -81,7 +89,7 @@ class Toolbox:
 
         # Initialize the events and the interface
         self.ui = UI()
-        self.reset_ui(enc_models_dir, syn_models_dir, voc_models_dir, seed)
+        self.reset_ui(seed)
         self.setup_events()
         self.ui.start()
 
@@ -109,6 +117,7 @@ class Toolbox:
 
         self.ui.synthesizer_box.currentIndexChanged.connect(func)
         self.ui.vocoder_box.currentIndexChanged.connect(self.init_vocoder)
+        self.ui.vocoder_libwavernn_toggle.clicked.connect(self.toggle_libwavernn_vocoders)
 
         # Utterance selection
         func = lambda: self.load_from_browser(self.ui.browse_file())
@@ -151,9 +160,9 @@ class Toolbox:
     def replay_last_wav(self):
         self.ui.play(self.current_wav, sp.sample_rate)
 
-    def reset_ui(self, encoder_models_dir, synthesizer_models_dir, vocoder_models_dir, seed):
+    def reset_ui(self, seed):
         self.ui.populate_browser(self.datasets_root, recognized_datasets, 0, True)
-        self.ui.populate_models(encoder_models_dir, synthesizer_models_dir, vocoder_models_dir)
+        self.ui.populate_models(self.enc_models_dir, self.syn_models_dir, self.voc_models_dir, self.voc_binary_models_dir)
         self.ui.populate_gen_options(seed, self.trim_silences)
 
     def load_from_browser(self, fpath=None):
@@ -284,8 +293,14 @@ class Toolbox:
             torch.manual_seed(seed)
 
         # Synthesize the waveform
-        if not vocoder.is_loaded() or seed is not None:
-            self.init_vocoder()
+        if self.ui.vocoder_libwavernn_toggle.isChecked():
+            if self.cpu_vocoder is None:
+                self.init_vocoder()
+            if seed is not None:
+                self.cpu_vocoder.setRandomSeed(seed)
+        else:
+            if not vocoder.is_loaded() or seed is not None:
+                self.init_vocoder()
 
         def vocoder_progress(i, seq_len, b_size, gen_rate):
             real_time_factor = (gen_rate / sp.sample_rate) * 1000
@@ -296,7 +311,10 @@ class Toolbox:
 
         if self.ui.current_vocoder_fpath is not None:
             self.ui.log("")
-            wav = vocoder.infer_waveform(spec, progress_callback=vocoder_progress)
+            if self.ui.vocoder_libwavernn_toggle.isChecked():
+                wav = self.cpu_vocoder.vocode_mel(spec, progress_callback=vocoder_progress)
+            else:
+                wav = vocoder.infer_waveform(spec, progress_callback=vocoder_progress)
         else:
             self.ui.log("Waveform generation with Griffin-Lim... ")
             wav = Synthesizer.griffin_lim(spec)
@@ -392,12 +410,23 @@ class Toolbox:
         self.ui.log("Loading the vocoder %s... " % model_fpath)
         self.ui.set_loading(1)
         start = timer()
-        vocoder.load_model(model_fpath)
+
+        if self.ui.vocoder_libwavernn_toggle.isChecked():
+            # FIXME: Vocoder type is hacky
+            self.cpu_vocoder = libwavernn.Vocoder(model_fpath, 'runtimeracer-wavernn', True)
+            self.cpu_vocoder.load()
+        else:
+            self.cpu_vocoder = None
+            vocoder.load_model(model_fpath)
+
         self.ui.log("Done (%dms)." % int(1000 * (timer() - start)), "append")
         self.ui.set_loading(0)
 
     def update_seed_features(self):
         self.ui.update_seed_features()
+
+    def toggle_libwavernn_vocoders(self):
+        self.ui.toggle_libwavernn_vocoders(self.voc_models_dir, self.voc_binary_models_dir)
 
     def autotune(self):
         # Abort if too few chars provided

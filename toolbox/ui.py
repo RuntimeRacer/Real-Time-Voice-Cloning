@@ -336,7 +336,7 @@ class UI(QDialog):
         return self.vocoder_box.itemData(self.vocoder_box.currentIndex())
 
     def populate_models(self, encoder_models_dir: Path, synthesizer_models_dir: Path, 
-                        vocoder_models_dir: Path):
+                        vocoder_models_dir: Path, vocoder_binary_models_dir: Path):
         # Encoder
         encoder_fpaths = list(encoder_models_dir.glob("*.pt"))
         if len(encoder_fpaths) == 0:
@@ -356,13 +356,28 @@ class UI(QDialog):
             self.repopulate_box(self.synthesizer_box, [(f.stem, f) for f in synthesizer_fpaths])
 
         # Vocoder
-        vocoder_fpaths = list(vocoder_models_dir.glob("**/*.pt"))
-        if len(vocoder_fpaths) == 0:
-            model_files_missing("Vocoder")
+        if self.vocoder_libwavernn_toggle.isChecked():
+            self.populate_vocoder_models(vocoder_binary_models_dir, "binary")
         else:
-            vocoder_fpaths.sort()
-        vocoder_items = [("Griffin-Lim", None)] + [(f.stem, f) for f in vocoder_fpaths]
-        self.repopulate_box(self.vocoder_box, vocoder_items)
+            self.populate_vocoder_models(vocoder_models_dir, "pytorch")
+
+    def populate_vocoder_models(self, dir: Path, type):
+        if type == "binary":
+            vocoder_fpaths = list(dir.glob("**/*.bin"))
+            if len(vocoder_fpaths) == 0:
+                model_files_missing("Vocoder")
+            else:
+                vocoder_fpaths.sort()
+            vocoder_items = [(f.stem, f) for f in vocoder_fpaths]
+            self.repopulate_box(self.vocoder_box, vocoder_items)
+        else:
+            vocoder_fpaths = list(dir.glob("**/*.pt"))
+            if len(vocoder_fpaths) == 0:
+                model_files_missing("Vocoder")
+            else:
+                vocoder_fpaths.sort()
+            vocoder_items = [("Griffin-Lim", None)] + [(f.stem, f) for f in vocoder_fpaths]
+            self.repopulate_box(self.vocoder_box, vocoder_items)
         
     @property
     def selected_utterance(self):
@@ -424,6 +439,12 @@ class UI(QDialog):
         else:
             self.seed_textbox.setEnabled(False)
             self.autotune_button.setEnabled(False)
+
+    def toggle_libwavernn_vocoders(self, voc_models_dir, voc_binary_models_dir):
+        if self.vocoder_libwavernn_toggle.isChecked():
+            self.populate_vocoder_models(voc_binary_models_dir, "binary")
+        else:
+            self.populate_vocoder_models(voc_models_dir, "pytorch")
 
     def autotune_switch(self, set_active=True):
         if set_active:
@@ -539,13 +560,16 @@ class UI(QDialog):
         browser_layout.addWidget(QLabel("<b>Synthesizer</b>"), i, 1)
         browser_layout.addWidget(self.synthesizer_box, i + 1, 1)
         self.vocoder_box = QComboBox()
+        self.vocoder_libwavernn_toggle = QCheckBox("Toggle LibWaveRNN")
+        self.vocoder_libwavernn_toggle.setToolTip("When checked, makes the synthesizer and vocoder deterministic.")
         browser_layout.addWidget(QLabel("<b>Vocoder</b>"), i, 2)
         browser_layout.addWidget(self.vocoder_box, i + 1, 2)
+        browser_layout.addWidget(self.vocoder_libwavernn_toggle, i + 2, 2)
         
         self.audio_out_devices_cb=QComboBox()
         browser_layout.addWidget(QLabel("<b>Audio Output</b>"), i, 3)
         browser_layout.addWidget(self.audio_out_devices_cb, i + 1, 3)
-        i += 2
+        i += 3
 
         #Replay & Save Audio
         browser_layout.addWidget(QLabel("<b>Toolbox Output:</b>"), i, 0)
