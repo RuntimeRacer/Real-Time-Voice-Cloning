@@ -1,7 +1,7 @@
-import json
 import math
 import time
 from pathlib import Path
+from multiprocessing import Lock
 
 import numpy as np
 import torch
@@ -10,28 +10,32 @@ from accelerate import Accelerator
 from torch import optim
 from torch.utils.data import DataLoader
 
-from config.hparams import wavernn as hp_wavernn, sp
-from vocoder.batch import analyse_and_export_batch
+from config.hparams import sp, wavernn_fatchord, wavernn_geneing, wavernn_runtimeracer
 from vocoder.display import simple_table, stream
 from vocoder.distribution import discretized_mix_logistic_loss
 from vocoder.gen_wavernn import gen_testset
-from vocoder.models.fatchord_version import WaveRNN
+from vocoder.models import base
 from vocoder.visualizations import Visualizations
 from vocoder.vocoder_dataset import VocoderDataset, collate_vocoder
 from vocoder.utils import ValueWindow
 
 
-def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_truth: bool,
+def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_truth: bool,
           save_every: int, backup_every: int, force_restart: bool,
           vis_every: int, visdom_server: str, no_visdom: bool, testset_every: int, threads: int):
-    # Check to make sure the hop length is correctly factorised
-    assert np.cumprod(hp_wavernn.upsample_factors)[-1] == sp.hop_size
+
+    model_dir = models_dir.joinpath(run_id)
+    model_dir.mkdir(exist_ok=True)
+    weights_fpath = model_dir.joinpath(run_id + ".pt")
 
     # Initialize Accelerator
     accelerator = Accelerator()
 
     if accelerator.is_local_main_process:
         print("Accelerator process count: {0}".format(accelerator.num_processes))
+        print("Checkpoint path: {}".format(weights_fpath))
+        print("Loading training data from: {0} and {1}".format(syn_dir, voc_dir))
+        print("Using model: {}".format(model_type))
 
     # Book keeping
     time_window = ValueWindow(100)
@@ -40,31 +44,15 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
     # Let accelerator handle device
     device = accelerator.device
 
-    # Instantiate the model
-    print("{} - Initializing the model...".format(device))
-    model = WaveRNN(
-        rnn_dims=hp_wavernn.rnn_dims,
-        fc_dims=hp_wavernn.fc_dims,
-        bits=hp_wavernn.bits,
-        pad=hp_wavernn.pad,
-        upsample_factors=hp_wavernn.upsample_factors,
-        feat_dims=sp.num_mels,
-        compute_dims=hp_wavernn.compute_dims,
-        res_out_dims=hp_wavernn.res_out_dims,
-        res_blocks=hp_wavernn.res_blocks,
-        hop_length=sp.hop_size,
-        sample_rate=sp.sample_rate,
-        mode=hp_wavernn.mode
-    )
-
-    loss_func = F.cross_entropy if model.mode == "RAW" else discretized_mix_logistic_loss
+    # Init the model
+    try:
+        model, pruner = base.init_voc_model(model_type, device)
+    except NotImplementedError as e:
+        print(str(e))
+        return
 
     # Initialize the optimizer
     optimizer = optim.Adam(model.parameters())
-
-    model_dir = models_dir.joinpath(run_id)
-    model_dir.mkdir(exist_ok=True)
-    weights_fpath = model_dir.joinpath(run_id + ".pt")
 
     # Initialize the model if not initialized yet
     if force_restart or not weights_fpath.exists():
@@ -77,13 +65,20 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
     # Model has been initialized - Load the weights
     print("{0} - Loading weights at {1}".format(device, weights_fpath))
     load(model, device, weights_fpath, optimizer)
-    print("{0} - WaveRNN weights loaded from step {1}".format(device, model.get_step()))
-    
+
+    # Determine a couple of params based on model type
+    if model_type == base.MODEL_TYPE_FATCHORD:
+        vocoder_hparams = wavernn_fatchord
+    elif model_type == base.MODEL_TYPE_GENEING:
+        vocoder_hparams = wavernn_geneing
+    elif model_type == base.MODEL_TYPE_RUNTIMERACER:
+        vocoder_hparams = wavernn_runtimeracer
+
     # Initialize the dataset
     metadata_fpath = syn_dir.joinpath("train.json") if ground_truth else voc_dir.joinpath("synthesized.json")
     mel_dir = syn_dir.joinpath("mels") if ground_truth else voc_dir.joinpath("mels_gta")
     wav_dir = syn_dir.joinpath("wav")
-    dataset = VocoderDataset(metadata_fpath, mel_dir, wav_dir)
+    dataset = VocoderDataset(metadata_fpath, mel_dir, wav_dir, vocoder_hparams)
     test_loader = DataLoader(dataset,
                              batch_size=1,
                              shuffle=True,
@@ -93,7 +88,7 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
     vis = Visualizations(run_id, vis_every, server=visdom_server, disabled=no_visdom)
     if accelerator.is_local_main_process:
         vis.log_dataset(dataset)
-        vis.log_params()
+        vis.log_params(vocoder_hparams)
         # FIXME: Print all device names in case we got multiple GPUs or CPUs
         if accelerator.state.num_processes > 1:
             vis.log_implementation({"Devices": str(accelerator.state.num_processes)})
@@ -105,7 +100,7 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
     epoch = 0
     max_step = 0
 
-    for i, session in enumerate(hp_wavernn.voc_tts_schedule):
+    for i, session in enumerate(vocoder_hparams.voc_tts_schedule):
         # Update epoch information
         epoch += 1
         epoch_steps = max_step
@@ -121,7 +116,7 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
 
         # Init dataloader
         data_loader = DataLoader(dataset,
-                                 collate_fn=collate_vocoder,
+                                 collate_fn=lambda batch: collate_vocoder(batch, vocoder_hparams),
                                  batch_size=batch_size,
                                  num_workers=threads,
                                  shuffle=True,
@@ -135,18 +130,18 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
 
         # Iterate over whole dataset for X loops according to schedule
         total_samples = len(dataset)
-        overall_batch_size = batch_size * accelerator.state.num_processes  # Split training steps by amount of overall batch
-        max_step = np.ceil((total_samples * loops) / overall_batch_size).astype(np.int32) + epoch_steps
+        # overall_batch_size = batch_size * accelerator.state.num_processes  # Split training steps by amount of overall batch
+        max_step = np.ceil((total_samples * loops) / batch_size).astype(np.int32) + epoch_steps
         training_steps = np.ceil(max_step - current_step).astype(np.int32)
 
         # Calc SGDR values
-        sgdr_lr_stepping = (sgdr_init_lr - sgdr_final_lr) / np.ceil((total_samples * loops) / overall_batch_size).astype(np.int32)
+        sgdr_lr_stepping = (sgdr_init_lr - sgdr_final_lr) / np.ceil((total_samples * loops) / batch_size).astype(np.int32)
         lr = sgdr_init_lr - (sgdr_lr_stepping * ((current_step-1) - epoch_steps))
 
         # Do we need to change to the next session?
         if current_step >= max_step:
             # Are there no further sessions than the current one?
-            if i == len(hp_wavernn.voc_tts_schedule) - 1:
+            if i == len(vocoder_hparams.voc_tts_schedule) - 1:
                 # We have completed training. Save the model and exit
                 with accelerator.local_main_process_first():
                     if accelerator.is_local_main_process:
@@ -163,7 +158,7 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
                           ('Batch size', batch_size),
                           ("Current init LR", lr),
                           ("LR Stepping", sgdr_lr_stepping),
-                          ('Sequence Len', hp_wavernn.seq_len)])
+                          ('Sequence Len', vocoder_hparams.seq_len)])
 
         for p in optimizer.param_groups:
             p["lr"] = lr
@@ -176,7 +171,7 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
 
         # Training loop
         while current_step < max_step:
-            for step, (x, y, m, src_data) in enumerate(data_loader, current_step):
+            for step, (x, y, m, indices) in enumerate(data_loader, current_step):
                 current_step = step
                 start_time = time.time()
 
@@ -192,59 +187,58 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
 
                 # Forward pass
                 y_hat = model(x, m)
-                if processing_mode == 'RAW':
-                    y_hat = y_hat.transpose(1, 2).unsqueeze(-1)
-                elif processing_mode == 'MOL':
+                if processing_mode == 'MOL':
                     y = y.float()
+                else:
+                    y_hat = y_hat.transpose(1, 2).unsqueeze(-1)
                 y = y.unsqueeze(-1)
 
-                # Copy results of forward pass for analysis of needed
-                if hp_wavernn.anomaly_detection:
-                    cp_y_hat = torch.clone(y_hat)
-                    cp_y = torch.clone(y)
-
                 # Backward pass
-                loss = loss_func(y_hat, y)
+                if processing_mode == "MOL":
+                    loss = discretized_mix_logistic_loss(y_hat,
+                                                         y,
+                                                         num_classes=vocoder_hparams.num_classes,
+                                                         log_scale_min=vocoder_hparams.log_scale_min)
+                else:
+                    # Compared to (N)LL, Cross Entropy is more efficient; see:
+                    # https://discuss.pytorch.org/t/difference-between-cross-entropy-loss-or-log-likelihood-loss/38816
+                    loss = F.cross_entropy(y_hat, y)
+
                 optimizer.zero_grad()
                 accelerator.backward(loss)
                 optimizer.step()
 
-                time_window.append(time.time() - start_time)
-                loss_window.append(loss.item())
+                # Model Pruning
+                if pruner is not None and step >= vocoder_hparams.start_prune:
+                    accelerator.wait_for_everyone()
+                    with accelerator.local_main_process_first():
+                        base_model = accelerator.unwrap_model(model)
+                        pruner.update_layers(base_model.prune_layers)
+                        num_pruned, z = pruner.prune(base_model.step)
+                else:
+                    num_pruned, z = 0, torch.FloatTensor([0.0])
 
                 # anomaly detection
-                if avgLossCount == 0:
-                    currentLossDiff = 0
-                    avgLossDiff = 0
-                else:
-                    currentLossDiff = abs(lastLoss - loss.item())
+                if vocoder_hparams.anomaly_detection:
+                    if avgLossCount == 0:
+                        currentLossDiff = 0
+                        avgLossDiff = 0
+                    else:
+                        currentLossDiff = abs(lastLoss - loss.item())
 
-                if hp_wavernn.anomaly_detection and \
-                        (step > 5000 and \
-                        avgLossCount > 50 and \
-                        currentLossDiff > (avgLossDiff * hp_wavernn.anomaly_trigger_multiplier) \
-                        or math.isnan(currentLossDiff) \
-                        or math.isnan(loss.item())): # Give it a few steps to normalize, then do the check
-                    print("WARNING - Anomaly detected! (Step {}, Thread {}) - Avg Loss Diff: {}, Current Loss Diff: {}".format(step, accelerator.process_index, avgLossDiff, currentLossDiff))
-                    individual_loss = loss_func(cp_y_hat, cp_y, reduce=False)
-                    individual_loss = torch.mean(individual_loss, 1, True).tolist()
-                    analyse_and_export_batch(src_data, dataset, individual_loss, model_dir.joinpath("anomalies/step_" + str(current_step) + "_thread_" + str(accelerator.process_index)))
+                    if (step > 5000 and avgLossCount > 50 and currentLossDiff > (avgLossDiff * vocoder_hparams.anomaly_trigger_multiplier) \
+                         or math.isnan(currentLossDiff) \
+                         or math.isnan(loss.item())):  # Give it a few steps to normalize, then do the check
+                        print("WARNING - Anomaly detected! (Step {}, Thread {}) - Avg Loss Diff: {}, Current Loss Diff: {}".format(step, accelerator.process_index, avgLossDiff, currentLossDiff))
 
-                # Kill process if NaN
-                if math.isnan(loss.item()):
-                    currentLossDiff /= 0
+                    # Kill process if NaN
+                    if math.isnan(loss.item()):
+                        currentLossDiff /= 0
 
-                # Update avg loss count
-                avgLossDiff = (avgLossDiff * avgLossCount + currentLossDiff) / (avgLossCount + 1)
-                avgLossCount += 1
-
-                if accelerator.is_local_main_process:
-                    epoch_step = step - epoch_steps
-                    epoch_max_step = max_step - epoch_steps
-                    msg = f"| Epoch: {epoch} ({epoch_step}/{epoch_max_step}) | LR: {lr:#.6} | Loss: {loss_window.average:#.6} | {1./time_window.average:#.2}steps/s | Step: {step} | "
-                    stream(msg)
-
-                lastLoss = loss.item()
+                    # Update avg loss count & last loss
+                    avgLossDiff = (avgLossDiff * avgLossCount + currentLossDiff) / (avgLossCount + 1)
+                    avgLossCount += 1
+                    lastLoss = loss.item()
 
                 # Update visualizations
                 vis.update(loss.item(), step)
@@ -274,8 +268,23 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
                 # Accelerator: Only in main process
                 if accelerator.is_local_main_process and testset_every != 0 and step % testset_every == 0:
                     eval_model = accelerator.unwrap_model(model)
-                    gen_testset(eval_model, test_loader, hp_wavernn.gen_at_checkpoint, hp_wavernn.gen_batched,
-                                hp_wavernn.gen_target, hp_wavernn.gen_overlap, model_dir)
+                    gen_testset(eval_model, test_loader, model_dir, vocoder_hparams)
+
+                # Update Metrics
+                time_window.append(time.time() - start_time)
+                loss_window.append(loss.item())
+
+                if accelerator.is_local_main_process:
+                    epoch_step = step - epoch_steps
+                    epoch_max_step = max_step - epoch_steps
+
+                    if pruner is not None:
+                        if torch.is_tensor(z):
+                            z = z.item()
+                        msg = f"| Epoch: {epoch} ({epoch_step}/{epoch_max_step}) | LR: {lr:#.6} | Loss: {loss_window.average:#.6} | {1. / time_window.average:#.2}steps/s | Step: {step} | Pruned: {num_pruned} ({(round(z * 100, 2))}%) |"
+                    else:
+                        msg = f"| Epoch: {epoch} ({epoch_step}/{epoch_max_step}) | LR: {lr:#.6} | Loss: {loss_window.average:#.6} | {1. / time_window.average:#.2}steps/s | Step: {step} |"
+                    stream(msg)
 
                 # Break out of loop to update training schedule
                 if step >= max_step:
@@ -290,30 +299,41 @@ def train(run_id: str, syn_dir: Path, voc_dir: Path, models_dir: Path, ground_tr
                 print("Making a backup (step %d)" % current_step)
                 backup_fpath = Path("{}/{}_{}.pt".format(str(weights_fpath.parent), run_id, current_step))
                 save(accelerator, model, backup_fpath, optimizer)
-                
+
                 # Generate a testset after each epoch
                 eval_model = accelerator.unwrap_model(model)
-                gen_testset(eval_model, test_loader, hp_wavernn.gen_at_checkpoint, hp_wavernn.gen_batched,
-                            hp_wavernn.gen_target, hp_wavernn.gen_overlap, model_dir)
+                gen_testset(eval_model, test_loader, model_dir, vocoder_hparams)
+
 
 def save(accelerator, model, path, optimizer=None):
     # Unwrap Model
     model = accelerator.unwrap_model(model)
 
-    # Save
+    # Get model type
+    model_type = base.get_model_type(model)
+
+    # Build state to be saved
+    state = {
+        "model_state": model.state_dict(),
+        "model_type": model_type,
+    }
     if optimizer is not None:
-        torch.save({
-            "model_state": model.state_dict(),
-            "optimizer_state": optimizer.state_dict(),
-        }, str(path))
-    else:
-        torch.save({
-            "model_state": model.state_dict(),
-        }, str(path))
+        state["optimizer_state"] = optimizer.state_dict()
+
+    # Save
+    torch.save(state, str(path))
+
 
 def load(model, device, path, optimizer=None):
     # Use device of model params as location for loaded state
     checkpoint = torch.load(str(path), map_location=device)
+
+    # Load and print model type if detected.
+    # Here this is mainly for debug reasons; when training you'll need to provide
+    # the correct model type anyway, esp. when training initially.
+    if "model_type" in checkpoint:
+        model_type = checkpoint["model_type"]
+        print("Detected model type: %s" % model_type)
 
     # Load model state
     model.load_state_dict(checkpoint["model_state"])
@@ -321,3 +341,4 @@ def load(model, device, path, optimizer=None):
     # Load optimizer state
     if "optimizer_state" in checkpoint and optimizer is not None:
         optimizer.load_state_dict(checkpoint["optimizer_state"])
+

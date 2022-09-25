@@ -19,8 +19,10 @@ if __name__ == '__main__':
                         help="Directory containing saved encoder models")
     parser.add_argument("-s", "--syn_models_dir", type=Path, default="synthesizer/saved_models", 
                         help="Directory containing saved synthesizer models")
-    parser.add_argument("-v", "--voc_models_dir", type=Path, default="vocoder/saved_models", 
+    parser.add_argument("-v", "--voc_models_dir", type=Path, default="vocoder/saved_models",
                         help="Directory containing saved vocoder models")
+    parser.add_argument("-vb", "--voc_binary_models_dir", type=Path, default="vocoder/libwavernn/models",
+                        help="Directory containing saved vocoder binary models")
     parser.add_argument("--cpu", action="store_true", help=\
         "If True, processing is done on CPU, even when a GPU is available.")
     parser.add_argument("--seed", type=int, default=None, help=\
