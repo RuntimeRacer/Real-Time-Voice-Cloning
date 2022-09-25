@@ -7,7 +7,7 @@ from vocoder.models import base
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Quick runner to test mel spectogram representation in Griffin-lim",
+        description="Quick runner to test whether the libwavernn CPU vocoder works on an arbitrary mel spectogram",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
 
