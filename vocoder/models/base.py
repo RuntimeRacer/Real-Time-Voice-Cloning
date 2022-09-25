@@ -5,6 +5,10 @@ from vocoder.models.geneing_version import WaveRNN as WaveRNNGeneing
 from vocoder.models.runtimeracer_version import WaveRNN as WaveRNNRuntimeRacer
 from vocoder.pruner import Pruner
 
+# Vocoder Types
+VOC_TYPE_CPP = 'libwavernn'
+VOC_TYPE_PYTORCH = 'pytorch'
+
 # Vocoder Models
 MODEL_TYPE_FATCHORD = 'fatchord-wavernn'
 MODEL_TYPE_GENEING = 'geneing-wavernn'

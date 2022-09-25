@@ -1,10 +1,10 @@
 from toolbox.ui import UI
 from config.hparams import sp
 from encoder import inference as encoder
-from synthesizer.models import base
+from synthesizer.models import base as syn_base
 from synthesizer import inference as synthesizer
+from vocoder.models import base as voc_base
 from vocoder import inference as vocoder
-import vocoder.libwavernn.inference as libwavernn
 from pathlib import Path
 from time import perf_counter as timer
 from toolbox.utterance import Utterance
@@ -59,7 +59,6 @@ class Toolbox:
         self.current_generated = (None, None, None, None)  # speaker_name, spec, breaks, wav
         self.current_voc_embed = None
 
-        self.cpu_vocoder = None
         self.current_wav = None
         self.waves_list = []
         self.waves_count = 0
@@ -256,7 +255,7 @@ class Toolbox:
         speed_modifier = 1.0
         pitch_function = lambda x: x
         energy_function = lambda x: x
-        if synthesizer.get_model_type() == base.MODEL_TYPE_FORWARD_TACOTRON:
+        if synthesizer.get_model_type() == syn_base.MODEL_TYPE_FORWARD_TACOTRON:
             speed_modifier = float(self.ui.duration_function_textbox.text())
             pitch_function = eval(self.ui.pitch_function_textbox.text())
             energy_function = eval(self.ui.energy_function_textbox.text())
@@ -287,14 +286,9 @@ class Toolbox:
             torch.manual_seed(seed)
 
         # Vocode the waveform
-        if self.ui.vocoder_libwavernn_toggle.isChecked():
-            if self.cpu_vocoder is None:
-                self.init_vocoder()
-            if seed is not None:
-                self.cpu_vocoder.setRandomSeed(seed)
-        else:
-            if not vocoder.is_loaded() or seed is not None:
-                self.init_vocoder()
+        if not vocoder.is_loaded() or seed is not None:
+            self.init_vocoder()
+            vocoder.set_seed(seed) # Fixme: This is Hacky and we don't have evidence seed even works for CPP variant...
 
         def vocoder_progress(i, seq_len, b_size, gen_rate):
             real_time_factor = (gen_rate / sp.sample_rate) * 1000
@@ -305,10 +299,7 @@ class Toolbox:
 
         if self.ui.current_vocoder_fpath is not None:
             self.ui.log("")
-            if self.ui.vocoder_libwavernn_toggle.isChecked():
-                wav = self.cpu_vocoder.vocode_mel(spec, progress_callback=vocoder_progress)
-            else:
-                wav = vocoder.infer_waveform(spec, progress_callback=vocoder_progress)
+            wav = vocoder.infer_waveform(spec, progress_callback=vocoder_progress)
         else:
             self.ui.log("Waveform generation with Griffin-Lim... ")
             wav = synthesizer.griffin_lim(spec)
@@ -406,12 +397,9 @@ class Toolbox:
         start = timer()
 
         if self.ui.vocoder_libwavernn_toggle.isChecked():
-            # FIXME: Vocoder type is hacky
-            self.cpu_vocoder = libwavernn.Vocoder(model_fpath, 'runtimeracer-wavernn', True)
-            self.cpu_vocoder.load()
+            vocoder.load_model(model_fpath, voc_type=voc_base.VOC_TYPE_CPP)
         else:
-            self.cpu_vocoder = None
-            vocoder.load_model(model_fpath)
+            vocoder.load_model(model_fpath, voc_type=voc_base.VOC_TYPE_PYTORCH)
 
         self.ui.log("Done (%dms)." % int(1000 * (timer() - start)), "append")
         self.ui.set_loading(0)
