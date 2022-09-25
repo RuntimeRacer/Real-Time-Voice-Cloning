@@ -66,14 +66,16 @@ def wav_to_mel_spectrogram(wav):
     Note: this not a log-mel spectrogram.
     """
     frames = librosa.feature.melspectrogram(
-        wav,
-        sampling_rate,
+        y=wav,
+        sr=sampling_rate,
         n_fft=int(sampling_rate * mel_window_length / 1000),
         hop_length=int(sampling_rate * mel_window_step / 1000),
         n_mels=mel_n_channels
     )
     return frames.astype(np.float32).T
 
+def trim_silence(wav, top_db=60):
+    return librosa.effects.trim(wav, top_db=top_db, frame_length=2048, hop_length=512)[0]
 
 def trim_long_silences(wav):
     """

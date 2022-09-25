@@ -5,11 +5,10 @@ from time import perf_counter as timer
 import matplotlib
 matplotlib.use("Agg")
 
-import matplotlib.pyplot as plt
 import numpy as np
 # import webbrowser
 import visdom
-import umap
+
 
 class Visualizations:
     def __init__(self, env_name=None, update_every=10, server="http://localhost", disabled=False):
@@ -49,10 +48,10 @@ class Visualizations:
     def log_params(self):
         if self.disabled:
             return
-        from synthesizer import hparams
+        from config.hparams import tacotron as hp_tacotron
         param_string = "<b>Training parameters</b>:<br>"
-        for param_name in (p for p in dir(hparams) if not p.startswith("__")):
-            value = getattr(hparams, param_name)
+        for param_name in (p for p in dir(hp_tacotron) if not p.startswith("__")):
+            value = getattr(hp_tacotron, param_name)
             param_string += "\t%s: %s<br>" % (param_name, value)
         self.vis.text(param_string, opts={"title": "Parameters"})
 
@@ -60,7 +59,7 @@ class Visualizations:
         if self.disabled:
             return
         dataset_string = ""
-        dataset_string += "<b>Samples</b>: %s\n" % len(dataset.samples_fpaths)
+        dataset_string += "<b>Samples</b>: %s\n" % len(dataset.samples_fnames)
         dataset_string += "\n" + dataset.get_logs()
         dataset_string = dataset_string.replace("\n", "<br>")
         self.vis.text(dataset_string, opts={"title": "Dataset"})

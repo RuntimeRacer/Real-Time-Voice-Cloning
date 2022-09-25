@@ -1,5 +1,5 @@
 from pathlib import Path
-from toolbox import Toolbox
+from toolbox.toolbox import Toolbox
 from utils.argutils import print_args
 from utils.modelutils import check_model_paths
 import argparse
@@ -36,8 +36,8 @@ if __name__ == '__main__':
     del args.cpu
 
     ## Remind the user to download pretrained models if needed
-    check_model_paths(encoder_path=args.enc_models_dir, synthesizer_path=args.syn_models_dir,
-                      vocoder_path=args.voc_models_dir)
+    # check_model_paths(encoder_path=args.enc_models_dir, synthesizer_path=args.syn_models_dir,
+    #                   vocoder_path=args.voc_models_dir)
 
     # Launch the toolbox
     Toolbox(**vars(args))    

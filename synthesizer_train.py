@@ -1,4 +1,3 @@
-from synthesizer.hparams import hparams
 from synthesizer.train import train
 from utils.argutils import print_args
 import argparse
@@ -10,6 +9,9 @@ if __name__ == "__main__":
         "Name for this model instance. If a model state from the same run ID was previously "
         "saved, the training will restart from there. Pass -f to overwrite saved states and "
         "restart from scratch.")
+    parser.add_argument("model_type", type=str, help= \
+        "Model type to be trained. Required. Needs to be either of 'tacotron', "
+        "'forward-tacotron' or 'fastpitch'.")
     parser.add_argument("syn_dir", type=str, default=argparse.SUPPRESS, help= \
         "Path to the synthesizer directory that contains the ground truth mel spectrograms, "
         "the wavs and the embeds.")
@@ -29,13 +31,9 @@ if __name__ == "__main__":
     parser.add_argument("--no_visdom", action="store_true", help= \
         "Disable visdom.")
     parser.add_argument("-t", "--threads", type=int, default=1)
-    parser.add_argument("--hparams", default="",
-                        help="Hyperparameter overrides as a comma-separated list of name=value "
-							 "pairs")
+
     args = parser.parse_args()
     print_args(args, parser)
-
-    args.hparams = hparams.parse(args.hparams)
 
     # Run the training
     train(**vars(args))

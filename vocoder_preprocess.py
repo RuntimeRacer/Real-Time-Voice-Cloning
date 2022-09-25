@@ -1,7 +1,6 @@
 import argparse
 import os
 
-from synthesizer.hparams import hparams
 from synthesizer.synthesize import run_synthesis
 from utils.argutils import print_args
 
@@ -25,21 +24,15 @@ if __name__ == "__main__":
     parser.add_argument("-o", "--out_dir", type=str, default=argparse.SUPPRESS, help= \
         "Path to the output vocoder directory that will contain the ground truth aligned mel "
         "spectrograms. Defaults to <datasets_root>/SV2TTS/vocoder/.")
-    parser.add_argument("--hparams", default="",
-                        help="Hyperparameter overrides as a comma-separated list of name=value "
-                             "pairs")
-    parser.add_argument("--no_trim", action="store_true", help=\
-        "Preprocess audio without trimming silences (not recommended).")
     parser.add_argument("--cpu", action="store_true", help=\
         "If True, processing is done on CPU, even when a GPU is available.")
-    parser.add_argument("-t","--threads", type=int, default=2, help=\
-        "Amount of threads to be used during preprocessing")
+    parser.add_argument("-t", "--threads", type=int, default=2, help=\
+        "Amount of threads to be used per accelerator instance during preprocessing")
     parser.add_argument("-s", "--skip_existing", action="store_true", help=\
         "Whether to overwrite existing files with the same name. Useful if the preprocessing was "
         "interrupted.")
     args = parser.parse_args()
     print_args(args, parser)
-    modified_hp = hparams.parse(args.hparams)
     
     if not hasattr(args, "in_dir"):
         args.in_dir = os.path.join(args.datasets_root, "SV2TTS", "synthesizer")
@@ -51,14 +44,15 @@ if __name__ == "__main__":
         os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
     
     # Verify webrtcvad is available
-    if not args.no_trim:
-        try:
-            import webrtcvad
-        except:
-            raise ModuleNotFoundError("Package 'webrtcvad' not found. This package enables "
-                "noise removal and is recommended. Please install and try again. If installation fails, "
-                "use --no_trim to disable this error message.")
-    del args.no_trim
+    try:
+        import webrtcvad
+    except:
+        raise ModuleNotFoundError("Package 'webrtcvad' not found. This package enables "
+            "noise removal and is recommended. Please install and try again. If installation fails, "
+            "use --no_trim to disable this error message.")
 
-    run_synthesis(args.in_dir, args.out_dir, args.model_dir, modified_hp, args.skip_existing, args.threads)
+    # TODO: There are faster ways to do this, by using multiple tacotrons per GPU instead of
+    # TODO: using Accelerator. Just leaving it like that for now to test if performance is
+    # TODO: yet acceptable with one tacotron per GPU.
+    run_synthesis(args.in_dir, args.out_dir, args.model_dir, args.skip_existing, args.threads)
 
