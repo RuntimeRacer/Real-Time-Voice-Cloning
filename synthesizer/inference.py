@@ -11,19 +11,17 @@ import librosa
 
 
 class Synthesizer:
-    
-    def __init__(
-            self,
-            model_fpath: Path,
-            verbose=True):
+
+    def __init__(self, model_fpath: Path, verbose=True):
         """
         The model isn't instantiated and loaded in memory until needed or until load() is called.
+
         :param model_fpath: path to the trained model file
         :param verbose: if False, prints less information when using the model
         """
         self.model_fpath = model_fpath
         self.verbose = verbose
- 
+
         # Check for GPU
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
@@ -31,7 +29,7 @@ class Synthesizer:
             self.device = torch.device("cpu")
         if self.verbose:
             print("Synthesizer using device:", self.device)
-        
+
         # Synthesizer model and type will be instantiated later on first use.
         self._model = None
         self._model_type = None
@@ -46,8 +44,11 @@ class Synthesizer:
         """
         Get the model type
         """
+        # Load the model on the first request.
+        if not self.is_loaded():
+            self.load()
         return self._model_type
-    
+
     def load(self):
         """
         Instantiates and loads the model given the weights file that was passed in the constructor.
@@ -85,14 +86,14 @@ class Synthesizer:
         Synthesizes mel spectrograms from texts and speaker embeddings.
 
         :param texts: a list of N text prompts to be synthesized
-        :param embeddings: a numpy array or list of speaker embeddings of shape (N, 256) 
-        :param return_alignments: if True, a matrix representing the alignments between the 
+        :param embeddings: a numpy array or list of speaker embeddings of shape (N, 256)
+        :param return_alignments: if True, a matrix representing the alignments between the
         characters
         and each decoder output step will be returned for each spectrogram
         :param speed_modifier: For advanced models; modifies speed of speech.
         :param pitch_function: For advanced models; modifies pitch of speech.
         :param energy_function: For advanced models; modifies energy of speech.
-        :return: a list of N melspectrograms as numpy arrays of shape (80, Mi), where Mi is the 
+        :return: a list of N melspectrograms as numpy arrays of shape (80, Mi), where Mi is the
         sequence length of spectrogram i, and possibly the alignments.
         """
         # Load the model on the first request.
@@ -134,7 +135,7 @@ class Synthesizer:
             chars = np.stack(chars)
 
             # Stack speaker embeddings into 2D array for batch processing
-            speaker_embeds = np.stack(batched_embeds[i-1])
+            speaker_embeds = np.stack(batched_embeds[i - 1])
 
             # Convert to tensor
             chars = torch.tensor(chars).long().to(self.device)
@@ -150,7 +151,8 @@ class Synthesizer:
                         m = m[:, :-1]
                     specs.append(m)
             elif self._model_type == base.MODEL_TYPE_FORWARD_TACOTRON:
-                _, mels, _, _, _ = self._model.generate(chars, speaker_embeddings, speed_modifier, pitch_function, energy_function)
+                _, mels, _, _, _ = self._model.generate(chars, speaker_embeddings, speed_modifier, pitch_function,
+                                                        energy_function)
                 mels = mels.detach().cpu().numpy()
                 for m in mels:
                     specs.append(m)
@@ -159,38 +161,74 @@ class Synthesizer:
             print("\n\nDone.\n")
         return (specs, alignments) if return_alignments else specs
 
-    @staticmethod
-    def load_preprocess_wav(fpath):
-        """
-        Loads and preprocesses an audio file under the same conditions the audio files were used to
-        train the synthesizer. 
-        """
-        wav = librosa.load(str(fpath), sp.sample_rate)[0]
-        if preprocessing.rescale:
-            wav = wav / np.abs(wav).max() * preprocessing.rescaling_max
-        return wav
 
-    @staticmethod
-    def make_spectrogram(fpath_or_wav: Union[str, Path, np.ndarray]):
-        """
-        Creates a mel spectrogram from an audio file in the same manner as the mel spectrograms that 
-        were fed to the synthesizer when training.
-        """
-        if isinstance(fpath_or_wav, str) or isinstance(fpath_or_wav, Path):
-            wav = Synthesizer.load_preprocess_wav(fpath_or_wav)
-        else:
-            wav = fpath_or_wav
-        
-        mel_spectrogram = audio.melspectrogram(wav).astype(np.float32)
-        return mel_spectrogram
-    
-    @staticmethod
-    def griffin_lim(mel):
-        """
-        Inverts a mel spectrogram using Griffin-Lim. The mel spectrogram is expected to have been built
-        with the same parameters present in hparams.py.
-        """
-        return audio.inv_mel_spectrogram(mel)
+_model = None  # type: Synthesizer
+
+
+def load_model(weights_fpath, verbose=True):
+    global _model, _device, _model_type
+
+    if torch.cuda.is_available():
+        _device = torch.device('cuda')
+    else:
+        _device = torch.device('cpu')
+
+    # Load model weights from provided model path
+    _model = Synthesizer(weights_fpath, verbose)
+    _model.load()
+
+
+def is_loaded():
+    return _model is not None and _model.is_loaded()
+
+
+def get_model_type():
+    if not is_loaded():
+        raise Exception("Please load Synthesizer in memory before using it")
+    else:
+        return _model.get_model_type()
+
+
+def synthesize_spectrograms(texts: List[str], embeddings: Union[np.ndarray, List[np.ndarray]], return_alignments=False,
+                            speed_modifier=1.0, pitch_function=None, energy_function=None):
+    if not is_loaded():
+        raise Exception("Please load Synthesizer in memory before using it")
+    return _model.synthesize_spectrograms(texts=texts, embeddings=embeddings, return_alignments=return_alignments,
+                                          speed_modifier=speed_modifier, pitch_function=pitch_function,
+                                          energy_function=energy_function)
+
+
+def load_preprocess_wav(fpath):
+    """
+    Loads and preprocesses an audio file under the same conditions the audio files were used to
+    train the synthesizer.
+    """
+    wav = librosa.load(str(fpath), sr=sp.sample_rate)[0]
+    if preprocessing.rescale:
+        wav = wav / np.abs(wav).max() * preprocessing.rescaling_max
+    return wav
+
+
+def make_spectrogram(fpath_or_wav: Union[str, Path, np.ndarray]):
+    """
+    Creates a mel spectrogram from an audio file in the same manner as the mel spectrograms that
+    were fed to the synthesizer when training.
+    """
+    if isinstance(fpath_or_wav, str) or isinstance(fpath_or_wav, Path):
+        wav = Synthesizer.load_preprocess_wav(fpath_or_wav)
+    else:
+        wav = fpath_or_wav
+
+    mel_spectrogram = audio.melspectrogram(wav).astype(np.float32)
+    return mel_spectrogram
+
+
+def griffin_lim(mel):
+    """
+    Inverts a mel spectrogram using Griffin-Lim. The mel spectrogram is expected to have been built
+    with the same parameters present in hparams.py.
+    """
+    return audio.inv_mel_spectrogram(mel)
 
 
 def pad1d(x, max_len, pad_value=0):

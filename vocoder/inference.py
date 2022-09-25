@@ -33,7 +33,7 @@ def load_model(weights_fpath, verbose=True):
     _model.load_state_dict(checkpoint["model_state"])
     
     if verbose:
-        print("Loaded synthesizer of model '%s' at path '%s'." % (_model_type, weights_fpath))
+        print("Loaded vocoder of model '%s' at path '%s'." % (_model_type, weights_fpath))
         print("Model has been trained to step %d." % (_model.state_dict()["step"]))
 
 

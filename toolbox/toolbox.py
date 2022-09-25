@@ -2,7 +2,7 @@ from toolbox.ui import UI
 from config.hparams import sp
 from encoder import inference as encoder
 from synthesizer.models import base
-from synthesizer.inference import Synthesizer
+from synthesizer import inference as synthesizer
 from vocoder import inference as vocoder
 import vocoder.libwavernn.inference as libwavernn
 from pathlib import Path
@@ -59,7 +59,6 @@ class Toolbox:
         self.current_generated = (None, None, None, None)  # speaker_name, spec, breaks, wav
         self.current_voc_embed = None
 
-        self.synthesizer = None  # type: Synthesizer
         self.cpu_vocoder = None
         self.current_wav = None
         self.waves_list = []
@@ -111,11 +110,7 @@ class Toolbox:
 
         # Model selection
         self.ui.encoder_box.currentIndexChanged.connect(self.init_encoder)
-
-        def func():
-            self.synthesizer = None
-
-        self.ui.synthesizer_box.currentIndexChanged.connect(func)
+        self.ui.synthesizer_box.currentIndexChanged.connect(self.init_synthesizer)
         self.ui.vocoder_box.currentIndexChanged.connect(self.init_vocoder)
         self.ui.vocoder_libwavernn_toggle.clicked.connect(self.toggle_libwavernn_vocoders)
 
@@ -189,7 +184,7 @@ class Toolbox:
 
         # Get the wav from the disk. We take the wav with the vocoder/synthesizer format for
         # playback, so as to have a fair comparison with the generated audio
-        wav = Synthesizer.load_preprocess_wav(fpath)
+        wav = synthesizer.load_preprocess_wav(fpath)
         self.ui.log("Loaded %s" % name)
 
         self.add_real_utterance(wav, name, speaker_name)
@@ -206,7 +201,7 @@ class Toolbox:
 
     def add_real_utterance(self, wav, name, speaker_name):
         # Compute the mel spectrogram
-        spec = Synthesizer.make_spectrogram(wav)
+        spec = synthesizer.make_spectrogram(wav)
         self.ui.draw_spec(spec, "current")
 
         # Compute the embedding
@@ -249,9 +244,8 @@ class Toolbox:
             torch.manual_seed(seed)
 
         # Init Synthesizer
-        if self.synthesizer is None or seed is not None:
+        if not synthesizer.is_loaded() or seed is not None:
             self.init_synthesizer()
-        self.synthesizer.load()
 
         # Synthesize the spectrogram
         texts = self.ui.text_prompt.toPlainText().split("\n")
@@ -262,12 +256,12 @@ class Toolbox:
         speed_modifier = 1.0
         pitch_function = lambda x: x
         energy_function = lambda x: x
-        if self.synthesizer.get_model_type() == base.MODEL_TYPE_FORWARD_TACOTRON:
+        if synthesizer.get_model_type() == base.MODEL_TYPE_FORWARD_TACOTRON:
             speed_modifier = float(self.ui.duration_function_textbox.text())
             pitch_function = eval(self.ui.pitch_function_textbox.text())
             energy_function = eval(self.ui.energy_function_textbox.text())
 
-        specs = self.synthesizer.synthesize_spectrograms(texts=texts, embeddings=embeds, speed_modifier=speed_modifier, pitch_function=pitch_function, energy_function=energy_function)
+        specs = synthesizer.synthesize_spectrograms(texts=texts, embeddings=embeds, speed_modifier=speed_modifier, pitch_function=pitch_function, energy_function=energy_function)
         breaks = [spec.shape[1] for spec in specs]
         spec = np.concatenate(specs, axis=1)
 
@@ -292,7 +286,7 @@ class Toolbox:
         if seed is not None:
             torch.manual_seed(seed)
 
-        # Synthesize the waveform
+        # Vocode the waveform
         if self.ui.vocoder_libwavernn_toggle.isChecked():
             if self.cpu_vocoder is None:
                 self.init_vocoder()
@@ -317,7 +311,7 @@ class Toolbox:
                 wav = vocoder.infer_waveform(spec, progress_callback=vocoder_progress)
         else:
             self.ui.log("Waveform generation with Griffin-Lim... ")
-            wav = Synthesizer.griffin_lim(spec)
+            wav = synthesizer.griffin_lim(spec)
         self.ui.set_loading(0)
         self.ui.log(" Done!", "append")
 
@@ -397,7 +391,7 @@ class Toolbox:
         self.ui.log("Loading the synthesizer %s... " % model_fpath)
         self.ui.set_loading(1)
         start = timer()
-        self.synthesizer = Synthesizer(model_fpath=model_fpath)
+        synthesizer.load_model(model_fpath)
         self.ui.log("Done (%dms)." % int(1000 * (timer() - start)), "append")
         self.ui.set_loading(0)
 

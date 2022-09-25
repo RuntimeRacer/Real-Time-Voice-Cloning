@@ -1,8 +1,8 @@
 from encoder.params_model import model_embedding_size as speaker_embedding_size
 from utils.argutils import print_args
 from utils.modelutils import check_model_paths
-from synthesizer.inference import Synthesizer
 from encoder import inference as encoder
+from synthesizer import inference as synthesizer
 from vocoder import inference as vocoder
 from pathlib import Path
 import numpy as np
@@ -78,7 +78,7 @@ if __name__ == '__main__':
     ## Load the models one by one.
     print("Preparing the encoder, the synthesizer and the vocoder...")
     encoder.load_model(args.enc_model_fpath)
-    synthesizer = Synthesizer(args.syn_model_fpath)
+    synthesizer.load_model(args.syn_model_fpath)
     vocoder.load_model(args.voc_model_fpath)
     
     
@@ -165,10 +165,9 @@ if __name__ == '__main__':
             ## Generating the spectrogram
             text = input("Write a sentence (+-20 words) to be synthesized:\n")
             
-            # If seed is specified, reset torch seed and force synthesizer reload
+            # If seed is specified, reset torch seed
             if args.seed is not None:
                 torch.manual_seed(args.seed)
-                synthesizer = Synthesizer(args.syn_model_fpath)
 
             # The synthesizer works in batch, so you need to put your data in a list or numpy array
             texts = [text]
