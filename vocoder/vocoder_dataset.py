@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
 
-import random
 import numpy as np
 import torch
 from torch.utils.data import Dataset
@@ -32,11 +31,6 @@ class VocoderDataset(Dataset):
         print("Found %d samples" % len(self.samples_fpaths))
     
     def __getitem__(self, index):
-        # Get random idx if in blacklist
-        samples = len(self.samples_fpaths)
-        while index in self.blacklisted_indices:
-            index = random.randint(0, (samples-1))
-
         # Get paths from samples list
         mel_path, wav_path = self.samples_fpaths[index]
         
@@ -74,12 +68,6 @@ class VocoderDataset(Dataset):
         samples = len(self.samples_fpaths)
         log_string = "Samples: {0}\n".format(samples)
         return log_string
-
-    def blacklist_indices(self, blacklisted_indices):
-        self.blacklisted_indices = blacklisted_indices
-
-    def get_blacklisted_indices(self):
-        return self.blacklisted_indices
 
         
 def collate_vocoder(batch, vocoder_hparams):
