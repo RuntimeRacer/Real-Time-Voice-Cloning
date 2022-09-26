@@ -122,6 +122,12 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
     load(model, device, weights_fpath, optimizer)
     print("{0} - Model weights loaded from step {1}".format(device, model.get_step()))
 
+    # Determine a couple of params based on model type
+    if model_type == base.MODEL_TYPE_TACOTRON:
+        synthesizer_hparams = hp_tacotron
+    elif model_type == base.MODEL_TYPE_FORWARD_TACOTRON:
+        synthesizer_hparams = hp_forward_tacotron
+
     # Initialize the dataset
     dataset = SynthesizerDataset(syn_dir, base.get_model_train_elements(model_type))
 
@@ -129,7 +135,7 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
     vis = Visualizations(run_id, vis_every, server=visdom_server, disabled=no_visdom)
     if accelerator.is_local_main_process:
         vis.log_dataset(dataset)
-        vis.log_params()
+        vis.log_params(synthesizer_hparams)
         # FIXME: Print all device names in case we got multiple GPUs or CPUs
         if accelerator.state.num_processes > 1:
             vis.log_implementation({"Devices": str(accelerator.state.num_processes)})
@@ -141,14 +147,8 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
     epoch = 0
     max_step = 0
 
-    # Determine which TTS schedule to use
-    if model_type == base.MODEL_TYPE_TACOTRON:
-        tts_schedule = hp_tacotron.tts_schedule
-    elif model_type == base.MODEL_TYPE_FORWARD_TACOTRON:
-        tts_schedule = hp_forward_tacotron.tts_schedule
-
     # Iterate over training schedule
-    for i, session in enumerate(tts_schedule):
+    for i, session in enumerate(synthesizer_hparams.tts_schedule):
         # Update epoch information
         epoch += 1
         epoch_steps = max_step
@@ -193,7 +193,7 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
         # Do we need to change to the next session?
         if current_step >= max_step:
             # Are there no further sessions than the current one?
-            if i == len(tts_schedule) - 1:
+            if i == len(synthesizer_hparams.tts_schedule) - 1:
                 # We have completed training. Save the model and exit
                 with accelerator.local_main_process_first():
                     if accelerator.is_local_main_process:
@@ -259,10 +259,8 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
                 optimizer.zero_grad()
                 accelerator.backward(loss)
 
-                if model_type == base.MODEL_TYPE_TACOTRON and hp_tacotron.tts_clip_grad_norm is not None:
-                    accelerator.clip_grad_norm_(model.parameters(), hp_tacotron.tts_clip_grad_norm)
-                elif model_type == base.MODEL_TYPE_FORWARD_TACOTRON and hp_forward_tacotron.clip_grad_norm is not None:
-                    accelerator.clip_grad_norm_(model.parameters(), hp_forward_tacotron.clip_grad_norm)
+                if synthesizer_hparams.tts_clip_grad_norm is not None:
+                    accelerator.clip_grad_norm_(model.parameters(), synthesizer_hparams.tts_clip_grad_norm)
 
                 optimizer.step()
 
@@ -305,18 +303,9 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
                 # Accelerator: Only in main process
                 if accelerator.is_local_main_process:
 
-                    epoch_eval = 0
-                    step_eval = 0
-                    num_samples = 0
-
-                    if model_type == base.MODEL_TYPE_TACOTRON:
-                        epoch_eval = hp_tacotron.tts_eval_interval == -1 and step == max_step  # If epoch is done
-                        step_eval = hp_tacotron.tts_eval_interval > 0 and step % hp_tacotron.tts_eval_interval == 0  # Every N steps
-                        num_samples = hp_tacotron.tts_eval_num_samples
-                    elif model_type == base.MODEL_TYPE_FORWARD_TACOTRON:
-                        epoch_eval = hp_forward_tacotron.eval_interval == -1 and step == max_step  # If epoch is done
-                        step_eval = hp_forward_tacotron.eval_interval > 0 and step % hp_forward_tacotron.eval_interval == 0  # Every N steps
-                        num_samples = hp_forward_tacotron.eval_num_samples
+                    epoch_eval = synthesizer_hparams.eval_interval == -1 and step == max_step  # If epoch is done
+                    step_eval = synthesizer_hparams.eval_interval > 0 and step % synthesizer_hparams.eval_interval == 0  # Every N steps
+                    num_samples = synthesizer_hparams.eval_num_samples
 
                     if epoch_eval or step_eval:
                         for sample_idx in range(num_samples):

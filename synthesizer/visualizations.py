@@ -45,13 +45,12 @@ class Visualizations:
         self.implementation_win = None
         self.implementation_string = ""
 
-    def log_params(self):
+    def log_params(self, synthesizer_hparams):
         if self.disabled:
             return
-        from config.hparams import tacotron as hp_tacotron
         param_string = "<b>Training parameters</b>:<br>"
-        for param_name in (p for p in dir(hp_tacotron) if not p.startswith("__")):
-            value = getattr(hp_tacotron, param_name)
+        for param_name in (p for p in dir(synthesizer_hparams) if not p.startswith("__")):
+            value = getattr(synthesizer_hparams, param_name)
             param_string += "\t%s: %s<br>" % (param_name, value)
         self.vis.text(param_string, opts={"title": "Parameters"})
 
