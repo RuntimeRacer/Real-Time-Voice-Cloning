@@ -220,7 +220,7 @@ fast_pitch = HParams(
 wavernn_fatchord = HParams(
     # Model
     mode='RAW',  # either 'RAW' (softmax on raw bits) or 'MOL' (sample from mixture of logistics)
-    bits=9,  # bit depth of signal
+    bits=10,  # bit depth of signal
     mu_law=True,  # Recommended to suppress noise if using raw bits in hp.voc_mode
     upsample_factors=(5, 5, 8),  # NB - this needs to correctly factorise hop_length
 
