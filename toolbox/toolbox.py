@@ -3,8 +3,7 @@ from config.hparams import sp
 from encoder import inference as encoder
 from synthesizer.models import base as syn_base
 from synthesizer import inference as synthesizer
-from vocoder.models import base as voc_base
-from vocoder import inference as vocoder
+from vocoder import inference as vocoder, base as voc_base
 from pathlib import Path
 from time import perf_counter as timer
 from toolbox.utterance import Utterance

@@ -1,9 +1,9 @@
 import argparse
 import numpy as np
-from vocoder.libwavernn.inference import Vocoder
+from vocoder.wavernn.libwavernn.inference import Vocoder
 import synthesizer.audio as syn_audio
 from config.hparams import sp
-from vocoder.models import base
+from vocoder import base
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

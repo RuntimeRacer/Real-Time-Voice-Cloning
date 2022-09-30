@@ -1,7 +1,6 @@
 import math
 import time
 from pathlib import Path
-from multiprocessing import Lock
 
 import numpy as np
 import torch
@@ -10,11 +9,11 @@ from accelerate import Accelerator
 from torch import optim
 from torch.utils.data import DataLoader
 
-from config.hparams import sp, wavernn_fatchord, wavernn_geneing, wavernn_runtimeracer
+from config.hparams import wavernn_fatchord, wavernn_geneing, wavernn_runtimeracer
 from vocoder.display import simple_table, stream
 from vocoder.distribution import discretized_mix_logistic_loss
-from vocoder.gen_wavernn import gen_testset
-from vocoder.models import base
+from vocoder.wavernn.testset import gen_testset
+from vocoder import base
 from vocoder.visualizations import Visualizations
 from vocoder.vocoder_dataset import VocoderDataset, collate_vocoder
 from vocoder.utils import ValueWindow

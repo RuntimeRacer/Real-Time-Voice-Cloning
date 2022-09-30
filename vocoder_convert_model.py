@@ -1,7 +1,7 @@
 import argparse
 
 from utils.argutils import print_args
-from vocoder.libwavernn.convert import *
+from vocoder.wavernn.libwavernn.convert import *
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

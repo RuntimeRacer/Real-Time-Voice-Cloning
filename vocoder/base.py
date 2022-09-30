@@ -1,9 +1,9 @@
 import numpy as np
 from config.hparams import sp, wavernn_fatchord, wavernn_geneing, wavernn_runtimeracer
-from vocoder.models.fatchord_version import WaveRNN as WaveRNNFatchord
-from vocoder.models.geneing_version import WaveRNN as WaveRNNGeneing
-from vocoder.models.runtimeracer_version import WaveRNN as WaveRNNRuntimeRacer
-from vocoder.pruner import Pruner
+from vocoder.wavernn.models.fatchord_version import WaveRNN as WaveRNNFatchord
+from vocoder.wavernn.models.geneing_version import WaveRNN as WaveRNNGeneing
+from vocoder.wavernn.models.runtimeracer_version import WaveRNN as WaveRNNRuntimeRacer
+from vocoder.wavernn.pruner import Pruner
 
 # Vocoder Types
 VOC_TYPE_CPP = 'libwavernn'
