@@ -1,8 +1,6 @@
 import ast
 import pprint
 
-import numpy as np
-
 
 class HParams(object):
     def __init__(self, **kwargs):
@@ -81,11 +79,11 @@ preprocessing = HParams(
     extract_durations_with_dijkstra=True,
 
     # Silence tweaks for Prediction models
-    silence_prob_shift=0.25,    # Increase probability for silent characters in periods of silence
-                                # for better durations during non voiced periods
-    silence_threshold=-11,      # normalized mel value below which the voice is considered silent
-                                # minimum mel value = -11.512925465 for zeros in the wav array (=log(1e-5),
-                                # where 1e-5 is a cutoff value)
+    silence_prob_shift=0.25,  # Increase probability for silent characters in periods of silence
+    # for better durations during non voiced periods
+    silence_threshold=-11,  # normalized mel value below which the voice is considered silent
+    # minimum mel value = -11.512925465 for zeros in the wav array (=log(1e-5),
+    # where 1e-5 is a cutoff value)
 
     # Attention Scoring during dataset loading
     filter_attention=True,
@@ -213,7 +211,7 @@ forward_tacotron = HParams(
 
 # Parameters for FastPitch model
 fast_pitch = HParams(
-    
+
 )
 
 # Parameters for fatchord's WaveRNN Vocoder
@@ -227,7 +225,7 @@ wavernn_fatchord = HParams(
     rnn_dims=512,
     fc_dims=512,
     compute_dims=128,
-    res_out_dims=32*4, #aux output is fed into 2 downstream nets
+    res_out_dims=32 * 4,  # aux output is fed into 2 downstream nets
     res_blocks=10,
 
     # WaveRNN Training
@@ -270,7 +268,8 @@ wavernn_fatchord = HParams(
     sparse_group=4,
 
     # Anomaly detection in Training
-    anomaly_detection=False,  # Enables Loss anomaly detection. TODO: If anamaly is detected, continue training from previous backup
+    anomaly_detection=False,
+    # Enables Loss anomaly detection. TODO: If anamaly is detected, continue training from previous backup
     anomaly_trigger_multiplier=6,  # Threshold for raising anomaly detection. It is a Multiplier of average loss change.
     # Remark: Loss explosion can be caused either by bad training data, or by too high learning rate.
     # Explosion due to high learning rate will happen usually early on.
@@ -295,7 +294,7 @@ wavernn_geneing = HParams(
     rnn_dims=256,
     fc_dims=128,
     compute_dims=64,
-    res_out_dims=32*2, #aux output is fed into 2 downstream nets
+    res_out_dims=32 * 2,  # aux output is fed into 2 downstream nets
     res_blocks=3,
 
     # WaveRNN Training
@@ -306,7 +305,7 @@ wavernn_geneing = HParams(
     # MOL Training params
     num_classes=256,
     log_scale_min=-32.23619130191664,  # = float(np.log(1e-14))
-    #log_scale_min=-16.11809565095831,  # = float(np.log(1e-7))
+    # log_scale_min=-16.11809565095831,  # = float(np.log(1e-7))
 
     # Progressive training schedule
     # (loops, init_lr, final_lr, batch_size)
@@ -338,7 +337,8 @@ wavernn_geneing = HParams(
     sparse_group=4,
 
     # Anomaly / Loss explosion detection in Training
-    anomaly_detection=False,  # Enables Loss anomaly detection. TODO: If anamaly is detected, continue training from previous backup
+    anomaly_detection=False,
+    # Enables Loss anomaly detection. TODO: If anamaly is detected, continue training from previous backup
     anomaly_trigger_multiplier=6,  # Threshold for raising anomaly detection. It is a Multiplier of average loss change.
     # Remark: Loss explosion can be caused either by bad training data, or by too high learning rate.
     # Explosion due to high learning rate will happen usually early on.
@@ -363,7 +363,7 @@ wavernn_runtimeracer = HParams(
     rnn_dims=256,
     fc_dims=256,
     compute_dims=128,
-    res_out_dims=64*2, #aux output is fed into 2 downstream nets
+    res_out_dims=64 * 2,  # aux output is fed into 2 downstream nets
     res_blocks=10,
 
     # WaveRNN Training
@@ -374,7 +374,7 @@ wavernn_runtimeracer = HParams(
     # MOL Training params
     num_classes=65536,
     log_scale_min=-32.23619130191664,  # = float(np.log(1e-14))
-    #log_scale_min=-16.11809565095831,  # = float(np.log(1e-7))
+    # log_scale_min=-16.11809565095831,  # = float(np.log(1e-7))
 
     # Progressive training schedule
     # (loops, init_lr, final_lr, batch_size)
@@ -406,7 +406,8 @@ wavernn_runtimeracer = HParams(
     sparse_group=4,
 
     # Anomaly / Loss explosion detection in Training
-    anomaly_detection=False,  # Enables Loss anomaly detection. TODO: If anamaly is detected, continue training from previous backup
+    anomaly_detection=False,
+    # Enables Loss anomaly detection. TODO: If anamaly is detected, continue training from previous backup
     anomaly_trigger_multiplier=6,  # Threshold for raising anomaly detection. It is a Multiplier of average loss change.
     # Remark: Loss explosion can be caused either by bad training data, or by too high learning rate.
     # Explosion due to high learning rate will happen usually early on.
@@ -418,4 +419,111 @@ wavernn_runtimeracer = HParams(
     gen_batched=True,  # very fast (realtime+) single utterance batched generation
     gen_target=6000,  # target number of samples to be generated in each batch entry
     gen_overlap=1000,  # number of samples for crossfading between batches
+)
+
+# Parameters for Multiband MelGAN
+multiband_melgan = HParams(
+    # Generator
+    generator_type="MelGANGenerator",
+    generator_in_channels=80,  # Number of input channels.
+    generator_out_channels=4,  # Number of output channels.
+    generator_kernel_size=7,  # Kernel size of initial and final conv layers.
+    generator_channels=384,  # Initial number of channels for conv layers.
+    generator_upsample_scales=[5, 5, 3],  # List of Upsampling scales.
+    generator_stack_kernel_size=3,  # Kernel size of dilated conv layers in residual stack.
+    generator_stacks=4,  # Number of stacks in a single residual stack module.
+    generator_use_weight_norm=True,  # Whether to use weight normalization.
+    generator_use_causal_conv=False,  # Whether to use causal convolution.
+
+    # Discriminator
+    discriminator_type="MelGANMultiScaleDiscriminator",
+    discriminator_in_channels=1,  # Number of input channels.
+    discriminator_out_channels=1,  # Number of output channels.
+    discriminator_scales=3,  # Number of multi-scales.
+    discriminator_downsample_pooling="AvgPool1d",  # Pooling type for the input downsampling.
+    discriminator_downsample_pooling_kernel_size=4,  # Parameters of the above pooling function.
+    discriminator_downsample_pooling_stride=2,  # Parameters of the above pooling function.
+    discriminator_downsample_pooling_padding=1,  # Parameters of the above pooling function.
+    discriminator_downsample_pooling_count_include_pad=False,
+    discriminator_kernel_sizes=[5, 3],  # List of kernel size.
+    discriminator_channels=16,  # Number of channels of the initial conv layer.
+    discriminator_max_downsample_channels=512,  # Maximum number of channels of downsampling layers.
+    discriminator_downsample_scales=[4, 4, 4],  # List of downsampling scales.
+    discriminator_nonlinear_activation="LeakyReLU",  # Nonlinear activation function.
+    discriminator_nonlinear_activation_negative_slope=0.2,  # Parameters of nonlinear activation function.
+    discriminator_use_weight_norm=True,  # Whether to use weight norm.
+
+    # STFT Loss settings
+    use_subband_stft_loss=True,  # Whether to use default or Subband STFT Loss
+    stft_loss_fft_sizes=[384, 683, 171],  # List of FFT size for STFT-based loss.
+    stft_loss_hop_sizes=[30, 60, 10],  # List of hop size for STFT-based loss
+    stft_loss_win_lengths=[150, 300, 60],  # List of window length for STFT-based loss.
+    stft_loss_window="hann_window", # Window function for STFT-based loss TODO: Figure out whether this works with RTVC Preprocessing
+    # Commented out settings for default STFT Loss
+    # stft_loss_fft_sizes=[1024, 2048, 512],  # List of FFT size for STFT-based loss.
+    # stft_loss_hop_sizes=[120, 240, 50],  # List of hop size for STFT-based loss
+    # stft_loss_win_lengths=[600, 1200, 240],  # List of window length for STFT-based loss.
+    # stft_loss_window="hann_window",  # Window function for STFT-based loss
+
+    # Adversarial Loss Setting
+    use_feat_match_loss=False,  # Whether to use feature matching loss.
+    lambda_adv=2.5,  # Loss balancing coefficient for adversarial loss.
+
+    # Training Settings
+    seq_len=sp.hop_size * 40,  # Batch max steps (8000) - must be a multiple of hop_length
+    # seq_len can be adjusted to increase training sequence length (will increase GPU usage)
+    remove_short_samples=True,  # Whether to remove samples the length of which are less than batch_max_steps.
+
+    ##################################################
+    # Progressive training schedules
+    ##################################################
+    # (loops, init_lr, final_lr, batch_size)
+    # loops = amount of loops through the dataset per epoch
+    # init_lr = inital sgdr learning rate
+    # final_lr = amount of loops through the dataset per epoch
+    # batch_size = Size of the batches used for inference.
+    ##################################################
+
+    # Generator Training Settings
+    generator_optimizer_type="Adam",
+    generator_grad_norm=-1,
+    generator_scheduler_type="MultiStepLR",
+    generator_tts_schedule=[
+        (1, 1e-3, 1e-3, 40),
+        (2, 1e-3, 5e-4, 50),
+        (4, 5e-4, 5e-4, 60),
+        (8, 5e-4, 1e-4, 70),
+        (16, 1e-4, 1e-4, 80),
+        (32, 1e-4, 5e-5, 90),
+        (64, 5e-5, 5e-5, 100),
+        (128, 5e-5, 5e-5, 110),
+        (256, 5e-5, 5e-5, 120),
+        (256, 5e-5, 5e-5, 120),
+        (256, 5e-5, 5e-5, 120),
+        (256, 5e-5, 5e-5, 120),
+    ],
+
+    # Discriminator Training Settings
+    discriminator_train_start_after_epoch=4,  # Discriminator Training will start once generator completed defined epoch
+    discriminator_optimizer_type="Adam",
+    discriminator_grad_norm=-1,
+    discriminator_scheduler_type="MultiStepLR",
+    discriminator_tts_schedule=[
+        (1, 1e-3, 1e-3, 40),
+        (2, 1e-3, 5e-4, 50),
+        (4, 5e-4, 5e-4, 60),
+        (8, 5e-4, 1e-4, 70),
+        (16, 1e-4, 1e-4, 80),
+        (32, 1e-4, 5e-5, 90),
+        (64, 5e-5, 5e-5, 100),
+        (128, 5e-5, 5e-5, 110),
+        (256, 5e-5, 5e-5, 120),
+        (256, 5e-5, 5e-5, 120),
+        (256, 5e-5, 5e-5, 120),
+        (256, 5e-5, 5e-5, 120),
+    ],
+
+
+    # Generating / Synthesizing
+    gen_at_checkpoint=5,  # number of samples to generate at each checkpoint
 )
