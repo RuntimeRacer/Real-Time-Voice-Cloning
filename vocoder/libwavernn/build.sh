@@ -25,7 +25,12 @@ if [[ ! -z $CONDA_PREFIX ]]
 then
   cmake ../$BUILD_VARIANT/src -DPYTHON_EXECUTABLE=$CONDA_PREFIX/bin/python
 else
-  cmake ../$BUILD_VARIANT/src -DPYTHON_EXECUTABLE=$CONDA_PYTHON_EXE
+  if [[ ! -z $CONDA_PYTHON_EXE ]]
+  then
+    cmake ../$BUILD_VARIANT/src -DPYTHON_EXECUTABLE=$CONDA_PYTHON_EXE
+  else # Fallback to system python if conda not detected (https://github.com/RuntimeRacer/Real-Time-Voice-Cloning/issues/9)
+    cmake ../$BUILD_VARIANT/src -DPYTHON_INCLUDE_DIR=$(python -c "from distutils.sysconfig import get_python_inc; print(get_python_inc())") -DPYTHON_LIBRARY=$(python -c "import distutils.sysconfig as sysconfig; print(sysconfig.get_config_var('LIBDIR'))")
+  fi
 fi
 
 make
