@@ -2,7 +2,7 @@ import argparse
 from pathlib import Path
 
 from utils.argutils import print_args
-from vocoder.train import train
+from vocoder.train_wavernn import train
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

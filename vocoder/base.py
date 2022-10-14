@@ -1,5 +1,6 @@
 import numpy as np
-from config.hparams import sp, wavernn_fatchord, wavernn_geneing, wavernn_runtimeracer
+from config.hparams import sp, wavernn_fatchord, wavernn_geneing, wavernn_runtimeracer, multiband_melgan
+from vocoder.parallel_wavegan.models.melgan import MelGANGenerator, MelGANMultiScaleDiscriminator
 from vocoder.wavernn.models.fatchord_version import WaveRNN as WaveRNNFatchord
 from vocoder.wavernn.models.geneing_version import WaveRNN as WaveRNNGeneing
 from vocoder.wavernn.models.runtimeracer_version import WaveRNN as WaveRNNRuntimeRacer
@@ -13,6 +14,7 @@ VOC_TYPE_PYTORCH = 'pytorch'
 MODEL_TYPE_FATCHORD = 'fatchord-wavernn'
 MODEL_TYPE_GENEING = 'geneing-wavernn'
 MODEL_TYPE_RUNTIMERACER = 'runtimeracer-wavernn'
+MODEL_TYPE_MULTIBAND_MELGAN = 'multiband-melgan'
 
 
 def init_voc_model(model_type, device, override_hp_fatchord=None, override_hp_geneing=None, override_hp_runtimeracer=None):
@@ -103,6 +105,48 @@ def init_voc_model(model_type, device, override_hp_fatchord=None, override_hp_ge
             pruner = Pruner(hparams.start_prune, hparams.prune_steps, hparams.sparsity_target, hparams.sparse_group)
             pruner.update_layers(model.prune_layers, True)
 
+    elif model_type == MODEL_TYPE_MULTIBAND_MELGAN:
+        # Determine which Generator to use
+        if multiband_melgan.generator_type == "MelGANGenerator":
+            generator = MelGANGenerator(
+                in_channels=multiband_melgan.generator_in_channels,
+                out_channels=multiband_melgan.generator_out_channels,
+                kernel_size=multiband_melgan.generator_kernel_size,
+                channels=multiband_melgan.generator_channels,
+                upsample_scales=multiband_melgan.generator_upsample_scales,
+                stack_kernel_size=multiband_melgan.generator_stack_kernel_size,
+                stacks=multiband_melgan.generator_stacks,
+                use_weight_norm=multiband_melgan.generator_use_weight_norm,
+                use_causal_conv=multiband_melgan.generator_use_causal_conv,
+            ).to(device)
+        else:
+            raise NotImplementedError("Invalid generator of type '%s' provided. Aborting..." % multiband_melgan.generator_type)
+
+        # Determine which Discriminator to use
+        if multiband_melgan.discriminator_type == "MelGANMultiScaleDiscriminator":
+            discriminator = MelGANMultiScaleDiscriminator(
+                in_channels=multiband_melgan.discriminator_in_channels,
+                out_channels=multiband_melgan.discriminator_out_channels,
+                scales=multiband_melgan.discriminator_scales,
+                downsample_pooling=multiband_melgan.discriminator_downsample_pooling,
+                downsample_pooling_params=multiband_melgan.dicriminator_downsample_pooling_params,
+                kernel_sizes=multiband_melgan.dicriminator_kernel_sizes,
+                channels=multiband_melgan.dicriminator_channels,
+                max_downsample_channels=multiband_melgan.dicriminator_max_downsample_channels,
+                downsample_scales=multiband_melgan.dicriminator_downsample_scales,
+                nonlinear_activation=multiband_melgan.dicriminator_nonlinear_activation,
+                nonlinear_activation_params=multiband_melgan.dicriminator_nonlinear_activation_params,
+                use_weight_norm=multiband_melgan.dicriminator_use_weight_norm,
+            ).to(device)
+        else:
+            raise NotImplementedError("Invalid discriminator of type '%s' provided. Aborting..." % multiband_melgan.discriminator_type)
+
+        # GAN Models consist of 2 models actually, so we use a dict mapping here instead.
+        model = {
+            "type": model_type,
+            "generator": generator,
+            "discriminator": discriminator
+        }
     else:
         raise NotImplementedError("Invalid model of type '%s' provided. Aborting..." % model_type)
 
@@ -116,5 +160,8 @@ def get_model_type(model):
         return MODEL_TYPE_GENEING
     elif isinstance(model, WaveRNNRuntimeRacer):
         return MODEL_TYPE_RUNTIMERACER
+    elif isinstance(model, dict) and "type" in model:
+        # For composite models
+        return model["type"]
     else:
         raise NotImplementedError("Provided object is not a valid vocoder model.")

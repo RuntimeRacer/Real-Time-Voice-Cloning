@@ -441,16 +441,18 @@ multiband_melgan = HParams(
     discriminator_out_channels=1,  # Number of output channels.
     discriminator_scales=3,  # Number of multi-scales.
     discriminator_downsample_pooling="AvgPool1d",  # Pooling type for the input downsampling.
-    discriminator_downsample_pooling_kernel_size=4,  # Parameters of the above pooling function.
-    discriminator_downsample_pooling_stride=2,  # Parameters of the above pooling function.
-    discriminator_downsample_pooling_padding=1,  # Parameters of the above pooling function.
-    discriminator_downsample_pooling_count_include_pad=False,
+    dicriminator_downsample_pooling_params={  # Parameters of the above pooling function.
+        "kernel_size": 4,
+        "stride": 2,
+        "padding": 1,
+        "count_include_pad": False,
+    },
     discriminator_kernel_sizes=[5, 3],  # List of kernel size.
     discriminator_channels=16,  # Number of channels of the initial conv layer.
     discriminator_max_downsample_channels=512,  # Maximum number of channels of downsampling layers.
     discriminator_downsample_scales=[4, 4, 4],  # List of downsampling scales.
     discriminator_nonlinear_activation="LeakyReLU",  # Nonlinear activation function.
-    discriminator_nonlinear_activation_negative_slope=0.2,  # Parameters of nonlinear activation function.
+    discriminator_nonlinear_activation_params={"negative_slope": 0.2},  # Parameters of nonlinear activation function.
     discriminator_use_weight_norm=True,  # Whether to use weight norm.
 
     # STFT Loss settings
