@@ -9,7 +9,7 @@ from accelerate import Accelerator
 from torch import optim
 from torch.utils.data import DataLoader
 
-from config.hparams import wavernn_fatchord, wavernn_geneing, wavernn_runtimeracer
+from config.hparams import multiband_melgan
 from vocoder.display import simple_table, stream
 from vocoder.distribution import discretized_mix_logistic_loss
 from vocoder.wavernn.testset import gen_testset
@@ -38,40 +38,36 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
 
     # Book keeping
     time_window = ValueWindow(100)
-    loss_window = ValueWindow(100)
+    generator_loss_window = ValueWindow(100)
+    discriminator_loss_window = ValueWindow(100)
 
     # Let accelerator handle device
     device = accelerator.device
 
-    # Init the model
+    # Init the model, criterion and optimizers
     try:
         model, pruner = base.init_voc_model(model_type, device)
+        criterion = base.init_criterion(model_type, device)
+        optimizer = base.init_optimizers(model, model_type, device)
     except NotImplementedError as e:
         print(str(e))
         return
-
-    # Initialize the optimizer
-    optimizer = optim.Adam(model.parameters())
 
     # Initialize the model if not initialized yet
     if force_restart or not weights_fpath.exists():
         accelerator.wait_for_everyone()
         with accelerator.local_main_process_first():
             if accelerator.is_local_main_process:
-                print("\nStarting the training of WaveRNN from scratch\n")
-                save(accelerator, model, weights_fpath)
+                print("\nStarting the training of {0} from scratch\n".format(model_type))
+                save(accelerator, model, weights_fpath, optimizer)
 
     # Model has been initialized - Load the weights
     print("{0} - Loading weights at {1}".format(device, weights_fpath))
     load(model, device, weights_fpath, optimizer)
 
     # Determine a couple of params based on model type
-    if model_type == base.MODEL_TYPE_FATCHORD:
-        vocoder_hparams = wavernn_fatchord
-    elif model_type == base.MODEL_TYPE_GENEING:
-        vocoder_hparams = wavernn_geneing
-    elif model_type == base.MODEL_TYPE_RUNTIMERACER:
-        vocoder_hparams = wavernn_runtimeracer
+    if model_type == base.MODEL_TYPE_MULTIBAND_MELGAN:
+        vocoder_hparams = multiband_melgan
 
     # Initialize the dataset
     metadata_fpath = syn_dir.joinpath("train.json") if ground_truth else voc_dir.joinpath("synthesized.json")
@@ -124,8 +120,13 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
         # Processing mode
         processing_mode = model.mode
 
-        # Accelerator code - optimize and prepare model
-        model, optimizer, data_loader = accelerator.prepare(model, optimizer, data_loader)
+        # Accelerator code - optimize and prepare dataloader, model and optimizer
+        # TODO: Check whether this whole training code structure makes sense
+        data_loader = accelerator.prepare(data_loader)
+        model["generator"] = accelerator.prepare(model["generator"])
+        model["discriminator"] = accelerator.prepare(model["discriminator"])
+        optimizer["generator"] = accelerator.prepare(optimizer["generator"])
+        optimizer["discriminator"] = accelerator.prepare(optimizer["discriminator"])
 
         # Iterate over whole dataset for X loops according to schedule
         total_samples = len(dataset)
@@ -305,19 +306,27 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
 
 
 def save(accelerator, model, path, optimizer=None):
-    # Unwrap Model
-    model = accelerator.unwrap_model(model)
-
     # Get model type
     model_type = base.get_model_type(model)
 
+    # Unwrap Models
+    generator = accelerator.unwrap_model(model["generator"])
+    discriminator = accelerator.unwrap_model(model["discriminator"])
+
     # Build state to be saved
     state = {
-        "model_state": model.state_dict(),
         "model_type": model_type,
+        "model": {
+            "generator": generator.state_dict(),
+            "discriminator": discriminator.state_dict()
+        }
     }
+
     if optimizer is not None:
-        state["optimizer_state"] = optimizer.state_dict()
+        state["optimizer"] = {
+            "generator": optimizer["generator"].state_dict(),
+            "discriminator": optimizer["discriminator"].state_dict(),
+        }
 
     # Save
     torch.save(state, str(path))
@@ -334,10 +343,12 @@ def load(model, device, path, optimizer=None):
         model_type = checkpoint["model_type"]
         print("Detected model type: %s" % model_type)
 
-    # Load model state
-    model.load_state_dict(checkpoint["model_state"])
+    # Load model states
+    model["generator"].load_state_dict(checkpoint["model"]["generator"])
+    model["discriminator"].load_state_dict(checkpoint["model"]["discriminator"])
 
     # Load optimizer state
-    if "optimizer_state" in checkpoint and optimizer is not None:
-        optimizer.load_state_dict(checkpoint["optimizer_state"])
+    if "optimizer" in checkpoint and optimizer is not None:
+        optimizer["generator"].load_state_dict(checkpoint["optimizer"]["generator"])
+        optimizer["discriminator"].load_state_dict(checkpoint["optimizer"]["discriminator"])
 

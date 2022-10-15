@@ -167,6 +167,9 @@ class MelGANGenerator(torch.nn.Module):
         # initialize pqmf for inference
         self.pqmf = None
 
+        # Register Training Step parameter
+        self.register_buffer("step", torch.zeros(1, dtype=torch.long))
+
     def forward(self, c):
         """Calculate forward propagation.
 
@@ -177,6 +180,8 @@ class MelGANGenerator(torch.nn.Module):
             Tensor: Output tensor (B, 1, T ** prod(upsample_scales)).
 
         """
+        if self.training:
+            self.step += 1
         return self.melgan(c)
 
     def remove_weight_norm(self):
@@ -257,6 +262,13 @@ class MelGANGenerator(torch.nn.Module):
         if self.pqmf is not None:
             c = self.pqmf.synthesis(c)
         return c.squeeze(0).transpose(1, 0)
+
+    def num_params(self, print_out=True):
+        parameters = filter(lambda p: p.requires_grad, self.parameters())
+        parameters = sum([np.prod(p.size()) for p in parameters]) / 1_000_000
+        if print_out:
+            print("Trainable Parameters: %.3fM" % parameters)
+        return parameters
 
 
 class MelGANDiscriminator(torch.nn.Module):
@@ -360,6 +372,9 @@ class MelGANDiscriminator(torch.nn.Module):
             ),
         ]
 
+        # Register Training Step parameter
+        self.register_buffer("step", torch.zeros(1, dtype=torch.long))
+
     def forward(self, x):
         """Calculate forward propagation.
 
@@ -370,12 +385,22 @@ class MelGANDiscriminator(torch.nn.Module):
             List: List of output tensors of each layer.
 
         """
+        if self.training:
+            self.step += 1
+
         outs = []
         for f in self.layers:
             x = f(x)
             outs += [x]
 
         return outs
+
+    def num_params(self, print_out=True):
+        parameters = filter(lambda p: p.requires_grad, self.parameters())
+        parameters = sum([np.prod(p.size()) for p in parameters]) / 1_000_000
+        if print_out:
+            print("Trainable Parameters: %.3fM" % parameters)
+        return parameters
 
 
 class MelGANMultiScaleDiscriminator(torch.nn.Module):
@@ -457,6 +482,9 @@ class MelGANMultiScaleDiscriminator(torch.nn.Module):
         # reset parameters
         self.reset_parameters()
 
+        # Register Training Step parameter
+        self.register_buffer("step", torch.zeros(1, dtype=torch.long))
+
     def forward(self, x):
         """Calculate forward propagation.
 
@@ -467,6 +495,9 @@ class MelGANMultiScaleDiscriminator(torch.nn.Module):
             List: List of list of each discriminator outputs, which consists of each layer output tensors.
 
         """
+        if self.training:
+            self.step += 1
+
         outs = []
         for f in self.discriminators:
             outs += [f(x)]
@@ -514,3 +545,10 @@ class MelGANMultiScaleDiscriminator(torch.nn.Module):
                 logging.debug(f"Reset parameters in {m}.")
 
         self.apply(_reset_parameters)
+
+    def num_params(self, print_out=True):
+        parameters = filter(lambda p: p.requires_grad, self.parameters())
+        parameters = sum([np.prod(p.size()) for p in parameters]) / 1_000_000
+        if print_out:
+            print("Trainable Parameters: %.3fM" % parameters)
+        return parameters

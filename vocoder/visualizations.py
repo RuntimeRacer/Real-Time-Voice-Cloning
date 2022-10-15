@@ -35,8 +35,7 @@ class Visualizations:
         try:
             self.vis = visdom.Visdom(server, env=self.env_name, raise_exceptions=True)
         except ConnectionError:
-            raise Exception("No visdom server detected. Run the command \"visdom\" in your CLI to "
-                            "start it.")
+            raise Exception("No visdom server detected. Run the command \"visdom\" in your CLI to start it.")
         # webbrowser.open("http://localhost:8097/env/" + self.env_name)
 
         # Create the windows

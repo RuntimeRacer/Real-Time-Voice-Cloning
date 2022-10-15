@@ -1,6 +1,11 @@
 import numpy as np
 from config.hparams import sp, wavernn_fatchord, wavernn_geneing, wavernn_runtimeracer, multiband_melgan
 from vocoder.parallel_wavegan.models.melgan import MelGANGenerator, MelGANMultiScaleDiscriminator
+from vocoder.parallel_wavegan.layers.pqmf import PQMF
+from vocoder.parallel_wavegan.losses.adversarial_loss import GeneratorAdversarialLoss, DiscriminatorAdversarialLoss
+from vocoder.parallel_wavegan.losses.feat_match_loss import FeatureMatchLoss
+from vocoder.parallel_wavegan.losses.stft_loss import MultiResolutionSTFTLoss
+from vocoder.parallel_wavegan import optimizers
 from vocoder.wavernn.models.fatchord_version import WaveRNN as WaveRNNFatchord
 from vocoder.wavernn.models.geneing_version import WaveRNN as WaveRNNGeneing
 from vocoder.wavernn.models.runtimeracer_version import WaveRNN as WaveRNNRuntimeRacer
@@ -17,7 +22,15 @@ MODEL_TYPE_RUNTIMERACER = 'runtimeracer-wavernn'
 MODEL_TYPE_MULTIBAND_MELGAN = 'multiband-melgan'
 
 
-def init_voc_model(model_type, device, override_hp_fatchord=None, override_hp_geneing=None, override_hp_runtimeracer=None):
+# init_voc_model creates a model object and a pruner object (if applicable) for given hyperparameters
+def init_voc_model(
+        model_type,
+        device,
+        override_hp_fatchord=None,
+        override_hp_geneing=None,
+        override_hp_runtimeracer=None,
+        override_hp_melgan=None
+):
     model = None
     pruner = None
     if model_type == MODEL_TYPE_FATCHORD:
@@ -106,44 +119,48 @@ def init_voc_model(model_type, device, override_hp_fatchord=None, override_hp_ge
             pruner.update_layers(model.prune_layers, True)
 
     elif model_type == MODEL_TYPE_MULTIBAND_MELGAN:
+        hparams = multiband_melgan
+        if override_hp_melgan is not None:
+            hparams = override_hp_melgan
+
         # Determine which Generator to use
-        if multiband_melgan.generator_type == "MelGANGenerator":
+        if hparams.generator_type == "MelGANGenerator":
             generator = MelGANGenerator(
-                in_channels=multiband_melgan.generator_in_channels,
-                out_channels=multiband_melgan.generator_out_channels,
-                kernel_size=multiband_melgan.generator_kernel_size,
-                channels=multiband_melgan.generator_channels,
-                upsample_scales=multiband_melgan.generator_upsample_scales,
-                stack_kernel_size=multiband_melgan.generator_stack_kernel_size,
-                stacks=multiband_melgan.generator_stacks,
-                use_weight_norm=multiband_melgan.generator_use_weight_norm,
-                use_causal_conv=multiband_melgan.generator_use_causal_conv,
+                in_channels=hparams.generator_in_channels,
+                out_channels=hparams.generator_out_channels,
+                kernel_size=hparams.generator_kernel_size,
+                channels=hparams.generator_channels,
+                upsample_scales=hparams.generator_upsample_scales,
+                stack_kernel_size=hparams.generator_stack_kernel_size,
+                stacks=hparams.generator_stacks,
+                use_weight_norm=hparams.generator_use_weight_norm,
+                use_causal_conv=hparams.generator_use_causal_conv,
             ).to(device)
         else:
-            raise NotImplementedError("Invalid generator of type '%s' provided. Aborting..." % multiband_melgan.generator_type)
+            raise NotImplementedError("Invalid generator of type '%s' provided. Aborting..." % hparams.generator_type)
 
         # Determine which Discriminator to use
-        if multiband_melgan.discriminator_type == "MelGANMultiScaleDiscriminator":
+        if hparams.discriminator_type == "MelGANMultiScaleDiscriminator":
             discriminator = MelGANMultiScaleDiscriminator(
-                in_channels=multiband_melgan.discriminator_in_channels,
-                out_channels=multiband_melgan.discriminator_out_channels,
-                scales=multiband_melgan.discriminator_scales,
-                downsample_pooling=multiband_melgan.discriminator_downsample_pooling,
-                downsample_pooling_params=multiband_melgan.dicriminator_downsample_pooling_params,
-                kernel_sizes=multiband_melgan.dicriminator_kernel_sizes,
-                channels=multiband_melgan.dicriminator_channels,
-                max_downsample_channels=multiband_melgan.dicriminator_max_downsample_channels,
-                downsample_scales=multiband_melgan.dicriminator_downsample_scales,
-                nonlinear_activation=multiband_melgan.dicriminator_nonlinear_activation,
-                nonlinear_activation_params=multiband_melgan.dicriminator_nonlinear_activation_params,
-                use_weight_norm=multiband_melgan.dicriminator_use_weight_norm,
+                in_channels=hparams.discriminator_in_channels,
+                out_channels=hparams.discriminator_out_channels,
+                scales=hparams.discriminator_scales,
+                downsample_pooling=hparams.discriminator_downsample_pooling,
+                downsample_pooling_params=hparams.dicriminator_downsample_pooling_params,
+                kernel_sizes=hparams.dicriminator_kernel_sizes,
+                channels=hparams.dicriminator_channels,
+                max_downsample_channels=hparams.dicriminator_max_downsample_channels,
+                downsample_scales=hparams.dicriminator_downsample_scales,
+                nonlinear_activation=hparams.dicriminator_nonlinear_activation,
+                nonlinear_activation_params=hparams.dicriminator_nonlinear_activation_params,
+                use_weight_norm=hparams.dicriminator_use_weight_norm,
             ).to(device)
         else:
-            raise NotImplementedError("Invalid discriminator of type '%s' provided. Aborting..." % multiband_melgan.discriminator_type)
+            raise NotImplementedError("Invalid discriminator of type '%s' provided. Aborting..." % hparams.discriminator_type)
 
         # GAN Models consist of 2 models actually, so we use a dict mapping here instead.
         model = {
-            "type": model_type,
+            "model_type": model_type,
             "generator": generator,
             "discriminator": discriminator
         }
@@ -153,6 +170,93 @@ def init_voc_model(model_type, device, override_hp_fatchord=None, override_hp_ge
     return model, pruner
 
 
+# init_criterion creates a criterion object for given model and hyperparameters
+def init_criterion(
+        model_type,
+        device,
+        override_hp_melgan=None
+):
+    criterion = None
+
+    if model_type == MODEL_TYPE_MULTIBAND_MELGAN:
+        hparams = multiband_melgan
+        if override_hp_melgan is not None:
+            hparams = override_hp_melgan
+
+        # Adversarial losses - These just use their default setup with MB-MelGAN
+        criterion = {
+            "gen_adv": GeneratorAdversarialLoss().to(device),
+            "dis_adv": DiscriminatorAdversarialLoss().to(device)
+        }
+
+        # STFT Losses
+        if hparams.use_stft_loss:
+            criterion["stft"] = MultiResolutionSTFTLoss(
+                **hparams.stft_loss_params,
+            ).to(device)
+        if hparams.use_subband_stft_loss:
+            assert hparams.generator_out_channels > 1
+            criterion["sub_stft"] = MultiResolutionSTFTLoss(
+                **hparams.stft_loss_params,
+            ).to(device)
+        if hparams.use_feat_match_loss:
+            # Not used for MB-MelGAN, and seems to rely on default values
+            criterion["feat_match"] = FeatureMatchLoss().to(device)
+
+        # define special module for subband processing
+        if hparams.generator_out_channels > 1:
+            criterion["pqmf"] = PQMF(
+                subbands=hparams.generator_out_channels,
+            ).to(device)
+
+    else:
+        raise NotImplementedError("Invalid model of type '%s' provided. Aborting..." % model_type)
+
+    return criterion
+
+
+# init_optimizers creates an optimizer object for given model and hyperparameters
+def init_optimizers(
+        model,
+        model_type,
+        device,
+        override_hp_melgan=None
+):
+    optimizer = None
+
+    if model_type == MODEL_TYPE_MULTIBAND_MELGAN:
+        hparams = multiband_melgan
+        if override_hp_melgan is not None:
+            hparams = override_hp_melgan
+
+        generator_optimizer_class = getattr(
+            optimizers,
+            # keep compatibility
+            hparams.generator_optimizer_type
+        )
+        discriminator_optimizer_class = getattr(
+            optimizers,
+            # keep compatibility
+            hparams.discriminator_optimizer_type
+        )
+
+        optimizer = {
+            "generator": generator_optimizer_class(
+                model["generator"].parameters(),
+                **hparams.generator_optimizer_params,
+            ),
+            "discriminator": discriminator_optimizer_class(
+                model["discriminator"].parameters(),
+                **hparams.discriminator_optimizer_params,
+            ),
+        }
+
+    else:
+        raise NotImplementedError("Invalid model of type '%s' provided. Aborting..." % model_type)
+
+    return optimizer
+
+
 def get_model_type(model):
     if isinstance(model, WaveRNNFatchord):
         return MODEL_TYPE_FATCHORD
@@ -160,8 +264,8 @@ def get_model_type(model):
         return MODEL_TYPE_GENEING
     elif isinstance(model, WaveRNNRuntimeRacer):
         return MODEL_TYPE_RUNTIMERACER
-    elif isinstance(model, dict) and "type" in model:
+    elif isinstance(model, dict) and "model_type" in model:
         # For composite models
-        return model["type"]
+        return model["model_type"]
     else:
         raise NotImplementedError("Provided object is not a valid vocoder model.")

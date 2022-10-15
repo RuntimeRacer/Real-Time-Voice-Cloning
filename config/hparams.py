@@ -456,16 +456,20 @@ multiband_melgan = HParams(
     discriminator_use_weight_norm=True,  # Whether to use weight norm.
 
     # STFT Loss settings
-    use_subband_stft_loss=True,  # Whether to use default or Subband STFT Loss
-    stft_loss_fft_sizes=[384, 683, 171],  # List of FFT size for STFT-based loss.
-    stft_loss_hop_sizes=[30, 60, 10],  # List of hop size for STFT-based loss
-    stft_loss_win_lengths=[150, 300, 60],  # List of window length for STFT-based loss.
-    stft_loss_window="hann_window", # Window function for STFT-based loss TODO: Figure out whether this works with RTVC Preprocessing
-    # Commented out settings for default STFT Loss
-    # stft_loss_fft_sizes=[1024, 2048, 512],  # List of FFT size for STFT-based loss.
-    # stft_loss_hop_sizes=[120, 240, 50],  # List of hop size for STFT-based loss
-    # stft_loss_win_lengths=[600, 1200, 240],  # List of window length for STFT-based loss.
-    # stft_loss_window="hann_window",  # Window function for STFT-based loss
+    use_stft_loss=True,
+    stft_loss_params={
+        "fft_sizes": [1024, 2048, 512],  # List of FFT size for STFT-based loss.
+        "hop_sizes": [120, 240, 50],  # List of hop size for STFT-based loss
+        "win_lengths": [600, 1200, 240],  # List of window length for STFT-based loss.
+        "window": "hann_window",  # Window function for STFT-based loss TODO: Figure out whether this works with RTVC Preprocessing
+    },
+    use_subband_stft_loss=True,
+    subband_stft_loss_params={
+        "fft_sizes": [384, 683, 171],  # List of FFT size for STFT-based loss.
+        "hop_sizes": [30, 60, 10],  # List of hop size for STFT-based loss
+        "win_lengths": [150, 300, 60],  # List of window length for STFT-based loss.
+        "window": "hann_window",  # Window function for STFT-based loss TODO: Figure out whether this works with RTVC Preprocessing
+    },
 
     # Adversarial Loss Setting
     use_feat_match_loss=False,  # Whether to use feature matching loss.
@@ -488,6 +492,11 @@ multiband_melgan = HParams(
 
     # Generator Training Settings
     generator_optimizer_type="Adam",
+    generator_optimizer_params={
+        "eps": 1e-7,
+        "weight_decay": 0.0,
+        "amsgrad": True
+    },
     generator_grad_norm=-1,
     generator_scheduler_type="MultiStepLR",
     generator_tts_schedule=[
@@ -508,6 +517,11 @@ multiband_melgan = HParams(
     # Discriminator Training Settings
     discriminator_train_start_after_epoch=4,  # Discriminator Training will start once generator completed defined epoch
     discriminator_optimizer_type="Adam",
+    discriminator_optimizer_params={
+        "eps": 1e-7,
+        "weight_decay": 0.0,
+        "amsgrad": True
+    },
     discriminator_grad_norm=-1,
     discriminator_scheduler_type="MultiStepLR",
     discriminator_tts_schedule=[
@@ -524,7 +538,6 @@ multiband_melgan = HParams(
         (256, 5e-5, 5e-5, 120),
         (256, 5e-5, 5e-5, 120),
     ],
-
 
     # Generating / Synthesizing
     gen_at_checkpoint=5,  # number of samples to generate at each checkpoint
