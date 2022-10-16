@@ -15,7 +15,7 @@ from vocoder.distribution import discretized_mix_logistic_loss
 from vocoder.wavernn.testset import gen_testset
 from vocoder import base
 from vocoder.visualizations import Visualizations
-from vocoder.vocoder_dataset import VocoderDataset, collate_vocoder
+from vocoder.vocoder_dataset import VocoderDataset, collate_wavernn
 from vocoder.utils import ValueWindow
 
 
@@ -115,7 +115,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
 
         # Init dataloader
         data_loader = DataLoader(dataset,
-                                 collate_fn=lambda batch: collate_vocoder(batch, vocoder_hparams),
+                                 collate_fn=lambda batch: collate_wavernn(batch, vocoder_hparams),
                                  batch_size=batch_size,
                                  num_workers=threads,
                                  shuffle=True,

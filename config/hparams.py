@@ -476,6 +476,8 @@ multiband_melgan = HParams(
     lambda_adv=2.5,  # Loss balancing coefficient for adversarial loss.
 
     # Training Settings
+    batch_size=64, # Size of the batches used for training.
+    aux_context_window=2,  # this will pad the input so that the resnet can 'see' wider than input length
     seq_len=sp.hop_size * 40,  # Batch max steps (8000) - must be a multiple of hop_length
     # seq_len can be adjusted to increase training sequence length (will increase GPU usage)
     remove_short_samples=True,  # Whether to remove samples the length of which are less than batch_max_steps.
@@ -487,10 +489,10 @@ multiband_melgan = HParams(
     # loops = amount of loops through the dataset per epoch
     # init_lr = inital sgdr learning rate
     # final_lr = amount of loops through the dataset per epoch
-    # batch_size = Size of the batches used for inference.
     ##################################################
 
     # Generator Training Settings
+    generator_train_start_after_steps=0,  # Generator Training will start once generator reached this step
     generator_optimizer_type="Adam",
     generator_optimizer_params={
         "eps": 1e-7,
@@ -500,22 +502,22 @@ multiband_melgan = HParams(
     generator_grad_norm=-1,
     generator_scheduler_type="MultiStepLR",
     generator_tts_schedule=[
-        (1, 1e-3, 1e-3, 40),
-        (2, 1e-3, 5e-4, 50),
-        (4, 5e-4, 5e-4, 60),
-        (8, 5e-4, 1e-4, 70),
-        (16, 1e-4, 1e-4, 80),
-        (32, 1e-4, 5e-5, 90),
-        (64, 5e-5, 5e-5, 100),
-        (128, 5e-5, 5e-5, 110),
-        (256, 5e-5, 5e-5, 120),
-        (256, 5e-5, 5e-5, 120),
-        (256, 5e-5, 5e-5, 120),
-        (256, 5e-5, 5e-5, 120),
+        (1, 1e-3, 1e-3),
+        (2, 1e-3, 5e-4),
+        (4, 5e-4, 5e-4),
+        (8, 5e-4, 1e-4),
+        (16, 1e-4, 1e-4),
+        (32, 1e-4, 5e-5),
+        (64, 5e-5, 5e-5),
+        (128, 5e-5, 5e-5),
+        (256, 5e-5, 5e-5),
+        (256, 5e-5, 5e-5),
+        (256, 5e-5, 5e-5),
+        (256, 5e-5, 5e-5),
     ],
 
     # Discriminator Training Settings
-    discriminator_train_start_after_epoch=4,  # Discriminator Training will start once generator completed defined epoch
+    discriminator_train_start_after_steps=200000,  # Discriminator Training will start once generator reached this step
     discriminator_optimizer_type="Adam",
     discriminator_optimizer_params={
         "eps": 1e-7,
@@ -525,18 +527,18 @@ multiband_melgan = HParams(
     discriminator_grad_norm=-1,
     discriminator_scheduler_type="MultiStepLR",
     discriminator_tts_schedule=[
-        (1, 1e-3, 1e-3, 40),
-        (2, 1e-3, 5e-4, 50),
-        (4, 5e-4, 5e-4, 60),
-        (8, 5e-4, 1e-4, 70),
-        (16, 1e-4, 1e-4, 80),
-        (32, 1e-4, 5e-5, 90),
-        (64, 5e-5, 5e-5, 100),
-        (128, 5e-5, 5e-5, 110),
-        (256, 5e-5, 5e-5, 120),
-        (256, 5e-5, 5e-5, 120),
-        (256, 5e-5, 5e-5, 120),
-        (256, 5e-5, 5e-5, 120),
+        (1, 1e-3, 1e-3),
+        (2, 1e-3, 5e-4),
+        (4, 5e-4, 5e-4),
+        (8, 5e-4, 1e-4),
+        (16, 1e-4, 1e-4),
+        (32, 1e-4, 5e-5),
+        (64, 5e-5, 5e-5),
+        (128, 5e-5, 5e-5),
+        (256, 5e-5, 5e-5),
+        (256, 5e-5, 5e-5),
+        (256, 5e-5, 5e-5),
+        (256, 5e-5, 5e-5),
     ],
 
     # Generating / Synthesizing

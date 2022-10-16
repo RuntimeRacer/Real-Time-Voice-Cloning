@@ -167,9 +167,6 @@ class MelGANGenerator(torch.nn.Module):
         # initialize pqmf for inference
         self.pqmf = None
 
-        # Register Training Step parameter
-        self.register_buffer("step", torch.zeros(1, dtype=torch.long))
-
     def forward(self, c):
         """Calculate forward propagation.
 
@@ -180,8 +177,6 @@ class MelGANGenerator(torch.nn.Module):
             Tensor: Output tensor (B, 1, T ** prod(upsample_scales)).
 
         """
-        if self.training:
-            self.step += 1
         return self.melgan(c)
 
     def remove_weight_norm(self):
@@ -372,9 +367,6 @@ class MelGANDiscriminator(torch.nn.Module):
             ),
         ]
 
-        # Register Training Step parameter
-        self.register_buffer("step", torch.zeros(1, dtype=torch.long))
-
     def forward(self, x):
         """Calculate forward propagation.
 
@@ -385,9 +377,6 @@ class MelGANDiscriminator(torch.nn.Module):
             List: List of output tensors of each layer.
 
         """
-        if self.training:
-            self.step += 1
-
         outs = []
         for f in self.layers:
             x = f(x)
@@ -482,9 +471,6 @@ class MelGANMultiScaleDiscriminator(torch.nn.Module):
         # reset parameters
         self.reset_parameters()
 
-        # Register Training Step parameter
-        self.register_buffer("step", torch.zeros(1, dtype=torch.long))
-
     def forward(self, x):
         """Calculate forward propagation.
 
@@ -495,9 +481,6 @@ class MelGANMultiScaleDiscriminator(torch.nn.Module):
             List: List of list of each discriminator outputs, which consists of each layer output tensors.
 
         """
-        if self.training:
-            self.step += 1
-
         outs = []
         for f in self.discriminators:
             outs += [f(x)]

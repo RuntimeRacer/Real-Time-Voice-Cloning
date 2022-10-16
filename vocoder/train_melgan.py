@@ -15,7 +15,7 @@ from vocoder.distribution import discretized_mix_logistic_loss
 from vocoder.wavernn.testset import gen_testset
 from vocoder import base
 from vocoder.visualizations import Visualizations
-from vocoder.vocoder_dataset import VocoderDataset, collate_vocoder
+from vocoder.vocoder_dataset import VocoderDataset, collate_melgan
 from vocoder.utils import ValueWindow
 
 
@@ -59,11 +59,11 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
         with accelerator.local_main_process_first():
             if accelerator.is_local_main_process:
                 print("\nStarting the training of {0} from scratch\n".format(model_type))
-                save(accelerator, model, weights_fpath, optimizer)
+                save(accelerator, model, weights_fpath, 0, optimizer)
 
     # Model has been initialized - Load the weights
     print("{0} - Loading weights at {1}".format(device, weights_fpath))
-    load(model, device, weights_fpath, optimizer)
+    current_step = load(model, device, weights_fpath, optimizer)
 
     # Determine a couple of params based on model type
     if model_type == base.MODEL_TYPE_MULTIBAND_MELGAN:
@@ -74,6 +74,14 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
     mel_dir = syn_dir.joinpath("mels") if ground_truth else voc_dir.joinpath("mels_gta")
     wav_dir = syn_dir.joinpath("wav")
     dataset = VocoderDataset(metadata_fpath, mel_dir, wav_dir, vocoder_hparams)
+
+    # Init dataloaders
+    data_loader = DataLoader(dataset,
+                             collate_fn=lambda batch: collate_melgan(batch, vocoder_hparams),
+                             batch_size=vocoder_hparams.batch_size,
+                             num_workers=threads,
+                             shuffle=True,
+                             pin_memory=True)
     test_loader = DataLoader(dataset,
                              batch_size=1,
                              shuffle=True,
@@ -91,83 +99,57 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
             device_name = str(torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU")
             vis.log_implementation({"Device": device_name})
 
+    # Accelerator code - optimize and prepare dataloader, model and optimizer
+    data_loader = accelerator.prepare(data_loader)
+    model["generator"] = accelerator.prepare(model["generator"])
+    model["discriminator"] = accelerator.prepare(model["discriminator"])
+    optimizer["generator"] = accelerator.prepare(optimizer["generator"])
+    optimizer["discriminator"] = accelerator.prepare(optimizer["discriminator"])
+
     # Init epoch information
-    epoch = 0
-    max_step = 0
+    total_samples = len(dataset)
+    gen_finished = False
+    dis_finished = False
 
-    for i, session in enumerate(vocoder_hparams.voc_tts_schedule):
-        # Update epoch information
-        epoch += 1
-        epoch_steps = max_step
+    # Train until end of
+    while not gen_finished and not dis_finished:
+        # Get Generator Epoch State
+        gen_finished, gen_epoch, gen_epoch_steps, gen_max_step, gen_remaining, gen_loops, gen_init_lr, gen_final_lr = get_epoch_boundaries(
+            schedule=vocoder_hparams.generator_tts_schedule,
+            model_step=(current_step - vocoder_hparams.generator_train_start_after_steps),
+            total_samples=total_samples,
+            batch_size=vocoder_hparams.batch_size
+        )
+        # Get Discriminator Epoch State
+        dis_finished, dis_epoch, dis_epoch_steps, dis_max_step, dis_remaining, dis_loops, dis_init_lr, dis_final_lr = get_epoch_boundaries(
+            schedule=vocoder_hparams.generator_tts_schedule,
+            model_step=(current_step - vocoder_hparams.discriminator_train_start_after_steps),
+            total_samples=total_samples,
+            batch_size=vocoder_hparams.batch_size
+        )
 
-        # Unwrap model after each epoch (if necessary) for re-calibration
-        model = accelerator.unwrap_model(model)
+        # Check if finished for early exit of the loop
+        if gen_finished or dis_finished:
+            # We have completed training. Save the model and exit
+            with accelerator.local_main_process_first():
+                if accelerator.is_local_main_process:
+                    save(accelerator, model, weights_fpath, current_step, optimizer)
+            break
 
-        # Get the current step being processed
-        current_step = model.get_step() + 1
-
-        # Get session info
-        loops, sgdr_init_lr, sgdr_final_lr, batch_size = session
-
-        # Init dataloader
-        data_loader = DataLoader(dataset,
-                                 collate_fn=lambda batch: collate_vocoder(batch, vocoder_hparams),
-                                 batch_size=batch_size,
-                                 num_workers=threads,
-                                 shuffle=True,
-                                 pin_memory=True)
-
-        # Processing mode
-        processing_mode = model.mode
-
-        # Accelerator code - optimize and prepare dataloader, model and optimizer
-        # TODO: Check whether this whole training code structure makes sense
-        data_loader = accelerator.prepare(data_loader)
-        model["generator"] = accelerator.prepare(model["generator"])
-        model["discriminator"] = accelerator.prepare(model["discriminator"])
-        optimizer["generator"] = accelerator.prepare(optimizer["generator"])
-        optimizer["discriminator"] = accelerator.prepare(optimizer["discriminator"])
-
-        # Iterate over whole dataset for X loops according to schedule
-        total_samples = len(dataset)
-        # overall_batch_size = batch_size * accelerator.state.num_processes  # Split training steps by amount of overall batch
-        max_step = np.ceil((total_samples * loops) / batch_size).astype(np.int32) + epoch_steps
-        training_steps = np.ceil(max_step - current_step).astype(np.int32)
-
-        # Calc SGDR values
-        sgdr_lr_stepping = (sgdr_init_lr - sgdr_final_lr) / np.ceil((total_samples * loops) / batch_size).astype(np.int32)
-        lr = sgdr_init_lr - (sgdr_lr_stepping * ((current_step-1) - epoch_steps))
-
-        # Do we need to change to the next session?
-        if current_step >= max_step:
-            # Are there no further sessions than the current one?
-            if i == len(vocoder_hparams.voc_tts_schedule) - 1:
-                # We have completed training. Save the model and exit
-                with accelerator.local_main_process_first():
-                    if accelerator.is_local_main_process:
-                        save(accelerator, model, weights_fpath, optimizer)
-                break
-            else:
-                # There is a following session, go to it and inc epoch
-                continue
+        # Determine which Model will finish it's current epoch earlier.
+        # This is the boundary for our loop here.
+        max_step = min(gen_max_step, dis_max_step)
 
         # Begin the training
         if accelerator.is_local_main_process:
-            simple_table([("Epoch", epoch),
-                          (f"Remaining Steps in current epoch", str(training_steps) + " Steps"),
-                          ('Batch size', batch_size),
-                          ("Current init LR", lr),
-                          ("LR Stepping", sgdr_lr_stepping),
+            simple_table([("Epochs (Generator | Discriminator)", "({0} | {1})".format(gen_epoch, dis_epoch)),
+                          (f"Remaining Steps in current epoch (Generator | Discriminator)", "({0} | {1}) Steps".format(gen_remaining, dis_remaining)),
+                          ('Batch size', vocoder_hparams.batch_size),
                           ('Sequence Len', vocoder_hparams.seq_len)])
 
-        for p in optimizer.param_groups:
-            p["lr"] = lr
-
-        # Loss anomaly detection
-        # If loss change after a step differs by > 50%, this will print info which training data was in the last batch
-        avgLossDiff = 0
-        avgLossCount = 0
-        lastLoss = 0
+        # Calc LR Stepping values
+        gen_lr_stepping = (gen_init_lr - gen_final_lr) / np.ceil((total_samples * gen_loops) / vocoder_hparams.batch_size).astype(np.int32)
+        dis_lr_stepping = (dis_init_lr - dis_final_lr) / np.ceil((total_samples * dis_loops) / vocoder_hparams.batch_size).astype(np.int32)
 
         # Training loop
         while current_step < max_step:
@@ -181,64 +163,25 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                     break
 
                 # Update lr
-                lr = sgdr_init_lr - (sgdr_lr_stepping * ((current_step-1) - epoch_steps))
-                for p in optimizer.param_groups:
-                    p["lr"] = lr
+                gen_lr = gen_init_lr - (gen_lr_stepping * ((current_step-1) - gen_epoch_steps))
+                dis_lr = dis_init_lr - (dis_lr_stepping * ((current_step - 1) - dis_epoch_steps))
+                for p in optimizer["generator"].param_groups:
+                    p["lr"] = gen_lr
+                for p in optimizer["discriminator"].param_groups:
+                    p["lr"] = dis_lr
 
-                # Forward pass
-                y_hat = model(x, m)
-                if processing_mode == 'MOL':
-                    y = y.float()
-                else:
-                    y_hat = y_hat.transpose(1, 2).unsqueeze(-1)
-                y = y.unsqueeze(-1)
+                # Perform the Training Step
+                #######################
+                #      Generator      #
+                #######################
+                if current_step > vocoder_hparams.generator_train_start_after_steps:
 
-                # Backward pass
-                if processing_mode == "MOL":
-                    loss = discretized_mix_logistic_loss(y_hat,
-                                                         y,
-                                                         num_classes=vocoder_hparams.num_classes,
-                                                         log_scale_min=vocoder_hparams.log_scale_min)
-                else:
-                    # Compared to (N)LL, Cross Entropy is more efficient; see:
-                    # https://discuss.pytorch.org/t/difference-between-cross-entropy-loss-or-log-likelihood-loss/38816
-                    loss = F.cross_entropy(y_hat, y)
 
-                optimizer.zero_grad()
-                accelerator.backward(loss)
-                optimizer.step()
+                #######################
+                #    Discriminator    #
+                #######################
+                if current_step > vocoder_hparams.generator_train_start_after_steps:
 
-                # Model Pruning
-                if pruner is not None and step >= vocoder_hparams.start_prune:
-                    accelerator.wait_for_everyone()
-                    with accelerator.local_main_process_first():
-                        base_model = accelerator.unwrap_model(model)
-                        pruner.update_layers(base_model.prune_layers)
-                        num_pruned, z = pruner.prune(base_model.step)
-                else:
-                    num_pruned, z = 0, torch.FloatTensor([0.0])
-
-                # anomaly detection
-                if vocoder_hparams.anomaly_detection:
-                    if avgLossCount == 0:
-                        currentLossDiff = 0
-                        avgLossDiff = 0
-                    else:
-                        currentLossDiff = abs(lastLoss - loss.item())
-
-                    if (step > 5000 and avgLossCount > 50 and currentLossDiff > (avgLossDiff * vocoder_hparams.anomaly_trigger_multiplier) \
-                         or math.isnan(currentLossDiff) \
-                         or math.isnan(loss.item())):  # Give it a few steps to normalize, then do the check
-                        print("WARNING - Anomaly detected! (Step {}, Thread {}) - Avg Loss Diff: {}, Current Loss Diff: {}".format(step, accelerator.process_index, avgLossDiff, currentLossDiff))
-
-                    # Kill process if NaN
-                    if math.isnan(loss.item()):
-                        currentLossDiff /= 0
-
-                    # Update avg loss count & last loss
-                    avgLossDiff = (avgLossDiff * avgLossCount + currentLossDiff) / (avgLossCount + 1)
-                    avgLossCount += 1
-                    lastLoss = loss.item()
 
                 # Update visualizations
                 vis.update(loss.item(), step)
@@ -254,7 +197,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                         if accelerator.is_local_main_process:
                             print("Making a backup (step %d)" % step)
                             backup_fpath = Path("{}/{}_{}.pt".format(str(weights_fpath.parent), run_id, step))
-                            save(accelerator, model, backup_fpath, optimizer)
+                            save(accelerator, model, backup_fpath, current_step, optimizer)
 
                 if save_every != 0 and step % save_every == 0 :
                     # Accelerator: Save in main process after sync
@@ -262,7 +205,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                     with accelerator.local_main_process_first():
                         if accelerator.is_local_main_process:
                             print("Saving the model (step %d)" % step)
-                            save(accelerator, model, weights_fpath, optimizer)
+                            save(accelerator, model, weights_fpath, current_step, optimizer)
 
                 # Evaluate model to generate samples
                 # Accelerator: Only in main process
@@ -298,14 +241,14 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                 print("")
                 print("Making a backup (step %d)" % current_step)
                 backup_fpath = Path("{}/{}_{}.pt".format(str(weights_fpath.parent), run_id, current_step))
-                save(accelerator, model, backup_fpath, optimizer)
+                save(accelerator, model, backup_fpath, current_step, optimizer)
 
                 # Generate a testset after each epoch
                 eval_model = accelerator.unwrap_model(model)
                 gen_testset(eval_model, test_loader, model_dir, vocoder_hparams)
 
 
-def save(accelerator, model, path, optimizer=None):
+def save(accelerator, model, path, steps, optimizer=None):
     # Get model type
     model_type = base.get_model_type(model)
 
@@ -319,7 +262,8 @@ def save(accelerator, model, path, optimizer=None):
         "model": {
             "generator": generator.state_dict(),
             "discriminator": discriminator.state_dict()
-        }
+        },
+        "steps": steps
     }
 
     if optimizer is not None:
@@ -352,3 +296,47 @@ def load(model, device, path, optimizer=None):
         optimizer["generator"].load_state_dict(checkpoint["optimizer"]["generator"])
         optimizer["discriminator"].load_state_dict(checkpoint["optimizer"]["discriminator"])
 
+    return checkpoint["steps"] if "steps" in checkpoint else 0
+
+
+def get_epoch_boundaries(schedule, model_step, total_samples, batch_size):
+    epoch = 0
+    epoch_steps = 0
+    max_epoch = len(schedule)
+    max_step = 0
+    remaining_training_steps = 0
+    loops = 0
+    init_lr = 1e-3
+    final_lr = 1e-3
+
+    for i, session in enumerate(schedule):
+        # Schedule not valid yet if model step below 0
+        if model_step < 0:
+            return False, epoch, epoch_steps, max_step, remaining_training_steps, loops, init_lr, final_lr
+
+        # Update epoch information
+        epoch += 1
+        epoch_steps = max_step
+
+        # Get session info
+        loops, init_lr, final_lr = session
+
+        # Figure out in which Epoch we are
+        max_step = np.ceil((total_samples * loops) / batch_size).astype(np.int32) + epoch_steps
+        remaining_training_steps = np.ceil(max_step - model_step).astype(np.int32)
+
+        # Do we need to change to the next session?
+        if model_step >= max_step:
+            # Are there no further sessions than the current one?
+            if i == max_epoch - 1:
+                # We have completed training.
+                return True, epoch, epoch_steps, max_step, remaining_training_steps, loops, init_lr, final_lr
+            else:
+                # There is a following session, go to it and inc epoch
+                continue
+
+        # Schedule not finished
+        return False, epoch, epoch_steps, max_step, remaining_training_steps, loops, init_lr, final_lr
+
+    # No Schedule? We have completed training, kinda.
+    return True, epoch, epoch_steps, max_step, remaining_training_steps, loops, init_lr, final_lr
