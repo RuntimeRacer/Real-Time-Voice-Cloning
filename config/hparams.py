@@ -461,14 +461,14 @@ multiband_melgan = HParams(
         "fft_sizes": [1024, 2048, 512],  # List of FFT size for STFT-based loss.
         "hop_sizes": [120, 240, 50],  # List of hop size for STFT-based loss
         "win_lengths": [600, 1200, 240],  # List of window length for STFT-based loss.
-        "window": "hann_window",  # Window function for STFT-based loss TODO: Figure out whether this works with RTVC Preprocessing
+        "window": "hann_window",  # Window function for STFT-based loss
     },
     use_subband_stft_loss=True,
     subband_stft_loss_params={
         "fft_sizes": [384, 683, 171],  # List of FFT size for STFT-based loss.
         "hop_sizes": [30, 60, 10],  # List of hop size for STFT-based loss
         "win_lengths": [150, 300, 60],  # List of window length for STFT-based loss.
-        "window": "hann_window",  # Window function for STFT-based loss TODO: Figure out whether this works with RTVC Preprocessing
+        "window": "hann_window",  # Window function for STFT-based loss
     },
 
     # Adversarial Loss Setting

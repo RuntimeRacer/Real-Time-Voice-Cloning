@@ -1,20 +1,18 @@
-import math
 import time
 from pathlib import Path
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 from accelerate import Accelerator
-from torch import optim
 from torch.utils.data import DataLoader
+
+from collections import defaultdict
 
 from config.hparams import multiband_melgan
 from vocoder.display import simple_table, stream
-from vocoder.distribution import discretized_mix_logistic_loss
 from vocoder.wavernn.testset import gen_testset
 from vocoder import base
-from vocoder.visualizations import Visualizations
+from vocoder.visualizations_melgan import Visualizations
 from vocoder.vocoder_dataset import VocoderDataset, collate_melgan
 from vocoder.utils import ValueWindow
 
@@ -46,7 +44,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
 
     # Init the model, criterion and optimizers
     try:
-        model, pruner = base.init_voc_model(model_type, device)
+        model, _ = base.init_voc_model(model_type, device)
         criterion = base.init_criterion(model_type, device)
         optimizer = base.init_optimizers(model, model_type, device)
     except NotImplementedError as e:
@@ -153,9 +151,10 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
 
         # Training loop
         while current_step < max_step:
-            for step, (x, y, m, indices) in enumerate(data_loader, current_step):
+            for step, x, y in enumerate(data_loader, current_step):
                 current_step = step
                 start_time = time.time()
+                total_train_loss = defaultdict(float)
 
                 # Break out of loop to update training schedule
                 if current_step > max_step:
@@ -170,21 +169,121 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                 for p in optimizer["discriminator"].param_groups:
                     p["lr"] = dis_lr
 
+                # Parse batch
+                x = tuple([x_.to(device) for x_ in x])
+                y = y.to(device)
+
                 # Perform the Training Step
                 #######################
                 #      Generator      #
                 #######################
                 if current_step > vocoder_hparams.generator_train_start_after_steps:
+                    y_ = model["generator"](*x)
 
+                    # reconstruct the signal from multi-band signal
+                    if vocoder_hparams.generator_out_channels > 1:
+                        y_mb_ = y_
+                        y_ = criterion["pqmf"].synthesis(y_mb_)
+
+                    # initialize
+                    gen_loss = 0.0
+
+                    # multi-resolution sfft loss
+                    if vocoder_hparams.use_stft_loss:
+                        sc_loss, mag_loss = criterion["stft"](y_, y)
+                        gen_loss += sc_loss + mag_loss
+                        total_train_loss[
+                            "train/spectral_convergence_loss"
+                        ] += sc_loss.item()
+                        total_train_loss[
+                            "train/log_stft_magnitude_loss"
+                        ] += mag_loss.item()
+
+                    # subband multi-resolution stft loss
+                    if vocoder_hparams.use_subband_stft_loss:
+                        gen_loss *= 0.5  # for balancing with subband stft loss
+                        y_mb = criterion["pqmf"].analysis(y)
+                        sub_sc_loss, sub_mag_loss = criterion["sub_stft"](y_mb_, y_mb)
+                        gen_loss += 0.5 * (sub_sc_loss + sub_mag_loss)
+                        total_train_loss[
+                            "train/sub_spectral_convergence_loss"
+                        ] += sub_sc_loss.item()
+                        total_train_loss[
+                            "train/sub_log_stft_magnitude_loss"
+                        ] += sub_mag_loss.item()
+
+                    # mel spectrogram loss
+                    # if self.config["use_mel_loss"]:
+                    #     mel_loss = self.criterion["mel"](y_, y)
+                    #     gen_loss += mel_loss
+                    #     self.total_train_loss["train/mel_loss"] += mel_loss.item()
+
+                    # weighting aux loss
+                    # gen_loss *= self.config.get("lambda_aux", 1.0)
+
+                    # adversarial loss
+                    if current_step > vocoder_hparams.discriminator_train_start_after_steps:
+                        p_ = model["discriminator"](y_)
+                        adv_loss = criterion["gen_adv"](p_)
+                        total_train_loss["train/adversarial_loss"] += adv_loss.item()
+
+                        # feature matching loss
+                        # if self.config["use_feat_match_loss"]:
+                        #     # no need to track gradients
+                        #     with torch.no_grad():
+                        #         p = self.model["discriminator"](y)
+                        #     fm_loss = self.criterion["feat_match"](p_, p)
+                        #     self.total_train_loss[
+                        #         "train/feature_matching_loss"
+                        #     ] += fm_loss.item()
+                        #     adv_loss += self.config["lambda_feat_match"] * fm_loss
+
+                        # add adversarial loss to generator loss
+                        gen_loss += vocoder_hparams.lambda_adv * adv_loss
+
+                    total_train_loss["train/generator_loss"] += gen_loss.item()
+
+                    # update generator
+                    optimizer["generator"].zero_grad()
+                    accelerator.backward(gen_loss)
+                    if vocoder_hparams.generator_grad_norm > 0:
+                        torch.nn.utils.clip_grad_norm_(
+                            model["generator"].parameters(),
+                            vocoder_hparams.generator_grad_norm,
+                        )
+                    optimizer["generator"].step()
 
                 #######################
                 #    Discriminator    #
                 #######################
                 if current_step > vocoder_hparams.generator_train_start_after_steps:
+                    # re-compute y_ which leads better quality
+                    with torch.no_grad():
+                        y_ = model["generator"](*x)
+                    if vocoder_hparams.generator_out_channels > 1:
+                        y_ = criterion["pqmf"].synthesis(y_)
 
+                    # discriminator loss
+                    p = model["discriminator"](y)
+                    p_ = model["discriminator"](y_.detach())
+                    real_loss, fake_loss = criterion["dis_adv"](p_, p)
+                    dis_loss = real_loss + fake_loss
+                    total_train_loss["train/real_loss"] += real_loss.item()
+                    total_train_loss["train/fake_loss"] += fake_loss.item()
+                    total_train_loss["train/discriminator_loss"] += dis_loss.item()
+
+                    # update discriminator
+                    optimizer["discriminator"].zero_grad()
+                    accelerator.backward(dis_loss)
+                    if vocoder_hparams.discriminator_grad_norm > 0:
+                        torch.nn.utils.clip_grad_norm_(
+                            model["discriminator"].parameters(),
+                            vocoder_hparams.discriminator_grad_norm,
+                        )
+                    optimizer["discriminator"].step()
 
                 # Update visualizations
-                vis.update(loss.item(), step)
+                vis.update(total_train_loss, step)
 
                 # Save visdom values
                 if accelerator.is_local_main_process and vis_every != 0 and step % vis_every == 0:
@@ -215,18 +314,16 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
 
                 # Update Metrics
                 time_window.append(time.time() - start_time)
-                loss_window.append(loss.item())
+                generator_loss_window.append(total_train_loss["train/generator_loss"])
+                discriminator_loss_window.append(total_train_loss["train/discriminator_loss"])
 
                 if accelerator.is_local_main_process:
-                    epoch_step = step - epoch_steps
-                    epoch_max_step = max_step - epoch_steps
+                    gen_epoch_step = step - gen_epoch_steps
+                    gen_epoch_max_step = gen_max_step - gen_epoch_steps
+                    dis_epoch_step = step - gen_epoch_steps
+                    dis_epoch_max_step = dis_max_step - gen_epoch_steps
 
-                    if pruner is not None:
-                        if torch.is_tensor(z):
-                            z = z.item()
-                        msg = f"| Epoch: {epoch} ({epoch_step}/{epoch_max_step}) | LR: {lr:#.6} | Loss: {loss_window.average:#.6} | {1. / time_window.average:#.2}steps/s | Step: {step} | Pruned: {num_pruned} ({(round(z * 100, 2))}%) |"
-                    else:
-                        msg = f"| Epoch: {epoch} ({epoch_step}/{epoch_max_step}) | LR: {lr:#.6} | Loss: {loss_window.average:#.6} | {1. / time_window.average:#.2}steps/s | Step: {step} |"
+                    msg = f"| Epoch (Generator | Discriminator): ({gen_epoch} - {gen_epoch_step}/{gen_epoch_max_step} | {dis_epoch} - {dis_epoch_step}/{dis_epoch_max_step}) | LR (Generator | Discriminator): ({gen_lr:#.6}, {dis_lr:#.6}) | Loss (Generator | Discriminator): ({generator_loss_window.average:#.6} | {discriminator_loss_window.average:#.6}) | {1. / time_window.average:#.2}steps/s | Step: {step} |"
                     stream(msg)
 
                 # Break out of loop to update training schedule

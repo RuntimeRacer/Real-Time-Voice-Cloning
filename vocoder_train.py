@@ -2,7 +2,9 @@ import argparse
 from pathlib import Path
 
 from utils.argutils import print_args
-from vocoder.train_wavernn import train
+from vocoder import base
+from vocoder.train_wavernn import train as train_wavernn
+from vocoder.train_melgan import train as train_melgan
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -62,5 +64,9 @@ if __name__ == "__main__":
 
     # Run the training
     print_args(args, parser)
-    train(**vars(args))
+
+    if args.model_type == base.MODEL_TYPE_MULTIBAND_MELGAN:
+        train_melgan(**vars(args))
+    else:
+        train_wavernn(**vars(args))
     

@@ -14,7 +14,7 @@ from vocoder.display import simple_table, stream
 from vocoder.distribution import discretized_mix_logistic_loss
 from vocoder.wavernn.testset import gen_testset
 from vocoder import base
-from vocoder.visualizations import Visualizations
+from vocoder.visualizations_wavernn import Visualizations
 from vocoder.vocoder_dataset import VocoderDataset, collate_wavernn
 from vocoder.utils import ValueWindow
 
