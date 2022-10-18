@@ -10,7 +10,7 @@ from collections import defaultdict
 
 from config.hparams import multiband_melgan
 from vocoder.display import simple_table, stream
-from vocoder.wavernn.testset import gen_testset
+from vocoder.wavernn.testset import gen_testset_melgan
 from vocoder import base
 from vocoder.visualizations_melgan import Visualizations
 from vocoder.vocoder_dataset import VocoderDataset, collate_melgan
@@ -151,7 +151,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
 
         # Training loop
         while current_step < max_step:
-            for step, x, y in enumerate(data_loader, current_step):
+            for step, (x, y) in enumerate(data_loader, current_step):
                 current_step = step
                 start_time = time.time()
                 total_train_loss = defaultdict(float)
@@ -309,8 +309,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                 # Evaluate model to generate samples
                 # Accelerator: Only in main process
                 if accelerator.is_local_main_process and testset_every != 0 and step % testset_every == 0:
-                    eval_model = accelerator.unwrap_model(model)
-                    gen_testset(eval_model, test_loader, model_dir, vocoder_hparams)
+                    gen_testset_melgan(accelerator, device, step, model, criterion, test_loader, model_dir, vocoder_hparams)
 
                 # Update Metrics
                 time_window.append(time.time() - start_time)
@@ -341,8 +340,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                 save(accelerator, model, backup_fpath, current_step, optimizer)
 
                 # Generate a testset after each epoch
-                eval_model = accelerator.unwrap_model(model)
-                gen_testset(eval_model, test_loader, model_dir, vocoder_hparams)
+                gen_testset_melgan(accelerator, device, step, model, criterion, test_loader, model_dir, vocoder_hparams)
 
 
 def save(accelerator, model, path, steps, optimizer=None):

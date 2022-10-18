@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from config.hparams import wavernn_fatchord, wavernn_geneing, wavernn_runtimeracer
 from vocoder.display import simple_table, stream
 from vocoder.distribution import discretized_mix_logistic_loss
-from vocoder.wavernn.testset import gen_testset
+from vocoder.wavernn.testset import gen_testset_wavernn
 from vocoder import base
 from vocoder.visualizations_wavernn import Visualizations
 from vocoder.vocoder_dataset import VocoderDataset, collate_wavernn
@@ -267,7 +267,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                 # Accelerator: Only in main process
                 if accelerator.is_local_main_process and testset_every != 0 and step % testset_every == 0:
                     eval_model = accelerator.unwrap_model(model)
-                    gen_testset(eval_model, test_loader, model_dir, vocoder_hparams)
+                    gen_testset_wavernn(eval_model, test_loader, model_dir, vocoder_hparams)
 
                 # Update Metrics
                 time_window.append(time.time() - start_time)
@@ -301,7 +301,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
 
                 # Generate a testset after each epoch
                 eval_model = accelerator.unwrap_model(model)
-                gen_testset(eval_model, test_loader, model_dir, vocoder_hparams)
+                gen_testset_wavernn(eval_model, test_loader, model_dir, vocoder_hparams)
 
 
 def save(accelerator, model, path, optimizer=None):
