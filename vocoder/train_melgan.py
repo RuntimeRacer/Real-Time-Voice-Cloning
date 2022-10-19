@@ -134,7 +134,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
         if gen_max_step > 0 and dis_max_step > 0:
             max_step = min(gen_max_step, dis_max_step)
         else:
-            max_step = max(gen_max_step, dis_max_step)
+            max_step = min(gen_max_step, vocoder_hparams.discriminator_train_start_after_steps)
 
         # Begin the training
         if accelerator.is_local_main_process:
