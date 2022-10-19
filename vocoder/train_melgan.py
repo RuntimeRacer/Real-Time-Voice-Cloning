@@ -132,7 +132,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
         # Determine which Model will finish it's current epoch earlier.
         # This is the boundary for our loop here.
         if gen_max_step > 0 and dis_max_step > 0:
-            max_step = min(gen_max_step, dis_max_step)
+            max_step = min(gen_max_step, (dis_max_step+vocoder_hparams.discriminator_train_start_after_steps))
         else:
             max_step = min(gen_max_step, vocoder_hparams.discriminator_train_start_after_steps)
 
@@ -161,7 +161,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
 
                 # Update lr
                 gen_lr = gen_init_lr - (gen_lr_stepping * ((current_step-1) - gen_epoch_steps))
-                dis_lr = dis_init_lr - (dis_lr_stepping * ((current_step - 1) - dis_epoch_steps))
+                dis_lr = dis_init_lr - (dis_lr_stepping * ((current_step - vocoder_hparams.discriminator_train_start_after_steps - 1) - dis_epoch_steps))
                 for p in optimizer["generator"].param_groups:
                     p["lr"] = gen_lr
                 for p in optimizer["discriminator"].param_groups:
@@ -317,7 +317,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                 if accelerator.is_local_main_process:
                     gen_epoch_step = step - gen_epoch_steps
                     gen_epoch_max_step = gen_max_step - gen_epoch_steps
-                    dis_epoch_step = step - dis_epoch_steps if dis_epoch > 0 else 0
+                    dis_epoch_step = step - vocoder_hparams.discriminator_train_start_after_steps - dis_epoch_steps if dis_epoch > 0 else 0
                     dis_epoch_max_step = dis_max_step - dis_epoch_steps  if dis_epoch > 0 else 0
 
                     msg = f"| Epoch (Generator | Discriminator): ({gen_epoch} - {gen_epoch_step}/{gen_epoch_max_step} | {dis_epoch} - {dis_epoch_step}/{dis_epoch_max_step}) | LR (Generator | Discriminator): ({gen_lr:#.6}, {dis_lr:#.6}) | Loss (Generator | Discriminator): ({generator_loss_window.average:#.6} | {discriminator_loss_window.average:#.6}) | {1. / time_window.average:#.2}steps/s | Step: {step} |"

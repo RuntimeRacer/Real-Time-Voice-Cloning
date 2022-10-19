@@ -20,10 +20,10 @@ class VocoderDataset(Dataset):
             for line in metadata_dict.values():
                 metadata.extend([line.split("|")])
 
-        gta_fnames = [x[0] for x in metadata if int(x[2])]
-        gta_fpaths = [mel_dir.joinpath("%s.npy" % fname) for fname in gta_fnames]
-        wav_fnames = [x[0] for x in metadata if int(x[2])]
-        wav_fpaths = [wav_dir.joinpath("audio-%s.npy" % fname) for fname in wav_fnames]
+        gta_fnames = [x[1] for x in metadata if int(x[4])]
+        gta_fpaths = [mel_dir.joinpath(fname) for fname in gta_fnames]
+        wav_fnames = [x[0] for x in metadata if int(x[4])]
+        wav_fpaths = [wav_dir.joinpath(fname) for fname in wav_fnames]
         self.vocoder_hparams = vocoder_hparams
         self.samples_fpaths = list(zip(gta_fpaths, wav_fpaths))
         self.metadata = metadata
