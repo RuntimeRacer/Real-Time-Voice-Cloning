@@ -61,7 +61,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
 
     # Model has been initialized - Load the weights
     print("{0} - Loading weights at {1}".format(device, weights_fpath))
-    current_step = load(model, device, weights_fpath, optimizer)
+    current_step = (load(model, device, weights_fpath, optimizer) + 1)
 
     # Determine a couple of params based on model type
     if model_type == base.MODEL_TYPE_MULTIBAND_MELGAN:
@@ -81,6 +81,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                              shuffle=True,
                              pin_memory=True)
     test_loader = DataLoader(dataset,
+                             collate_fn=lambda batch: collate_melgan(batch, vocoder_hparams),
                              batch_size=1,
                              shuffle=True,
                              pin_memory=True)
@@ -90,12 +91,6 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
     if accelerator.is_local_main_process:
         vis.log_dataset(dataset)
         vis.log_params(vocoder_hparams)
-        # FIXME: Print all device names in case we got multiple GPUs or CPUs
-        if accelerator.state.num_processes > 1:
-            vis.log_implementation({"Devices": str(accelerator.state.num_processes)})
-        else:
-            device_name = str(torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU")
-            vis.log_implementation({"Device": device_name})
 
     # Accelerator code - optimize and prepare dataloader, model and optimizer
     data_loader = accelerator.prepare(data_loader)
@@ -136,7 +131,10 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
 
         # Determine which Model will finish it's current epoch earlier.
         # This is the boundary for our loop here.
-        max_step = min(gen_max_step, dis_max_step)
+        if gen_max_step > 0 and dis_max_step > 0:
+            max_step = min(gen_max_step, dis_max_step)
+        else:
+            max_step = max(gen_max_step, dis_max_step)
 
         # Begin the training
         if accelerator.is_local_main_process:
@@ -256,7 +254,7 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                 #######################
                 #    Discriminator    #
                 #######################
-                if current_step > vocoder_hparams.generator_train_start_after_steps:
+                if current_step > vocoder_hparams.discriminator_train_start_after_steps:
                     # re-compute y_ which leads better quality
                     with torch.no_grad():
                         y_ = model["generator"](*x)
@@ -319,8 +317,8 @@ def train(run_id: str, model_type: str, syn_dir: Path, voc_dir: Path, models_dir
                 if accelerator.is_local_main_process:
                     gen_epoch_step = step - gen_epoch_steps
                     gen_epoch_max_step = gen_max_step - gen_epoch_steps
-                    dis_epoch_step = step - gen_epoch_steps
-                    dis_epoch_max_step = dis_max_step - gen_epoch_steps
+                    dis_epoch_step = step - dis_epoch_steps if dis_epoch > 0 else 0
+                    dis_epoch_max_step = dis_max_step - dis_epoch_steps  if dis_epoch > 0 else 0
 
                     msg = f"| Epoch (Generator | Discriminator): ({gen_epoch} - {gen_epoch_step}/{gen_epoch_max_step} | {dis_epoch} - {dis_epoch_step}/{dis_epoch_max_step}) | LR (Generator | Discriminator): ({gen_lr:#.6}, {dis_lr:#.6}) | Loss (Generator | Discriminator): ({generator_loss_window.average:#.6} | {discriminator_loss_window.average:#.6}) | {1. / time_window.average:#.2}steps/s | Step: {step} |"
                     stream(msg)
@@ -400,7 +398,7 @@ def get_epoch_boundaries(schedule, model_step, total_samples, batch_size):
     max_epoch = len(schedule)
     max_step = 0
     remaining_training_steps = 0
-    loops = 0
+    loops = 1
     init_lr = 1e-3
     final_lr = 1e-3
 

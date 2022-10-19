@@ -66,7 +66,7 @@ class VocoderDataset(Dataset):
             return mel.astype(np.float32), quant, index
         else:
             # MelGAN result
-            return wav.astype(np.float32), mel.astype(np.float32)
+            return wav.astype(np.float32), mel.T.astype(np.float32)
 
     def __len__(self):
         return len(self.samples_fpaths)

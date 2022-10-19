@@ -429,7 +429,7 @@ multiband_melgan = HParams(
     generator_out_channels=4,  # Number of output channels.
     generator_kernel_size=7,  # Kernel size of initial and final conv layers.
     generator_channels=384,  # Initial number of channels for conv layers.
-    generator_upsample_scales=[5, 5, 3],  # List of Upsampling scales.
+    generator_upsample_scales=[5, 5, 2],  # List of Upsampling scales.
     generator_stack_kernel_size=3,  # Kernel size of dilated conv layers in residual stack.
     generator_stacks=4,  # Number of stacks in a single residual stack module.
     generator_use_weight_norm=True,  # Whether to use weight normalization.
@@ -441,7 +441,7 @@ multiband_melgan = HParams(
     discriminator_out_channels=1,  # Number of output channels.
     discriminator_scales=3,  # Number of multi-scales.
     discriminator_downsample_pooling="AvgPool1d",  # Pooling type for the input downsampling.
-    dicriminator_downsample_pooling_params={  # Parameters of the above pooling function.
+    discriminator_downsample_pooling_params={  # Parameters of the above pooling function.
         "kernel_size": 4,
         "stride": 2,
         "padding": 1,
@@ -456,6 +456,22 @@ multiband_melgan = HParams(
     discriminator_use_weight_norm=True,  # Whether to use weight norm.
 
     # STFT Loss settings
+    # use_stft_loss=True,
+    # stft_loss_params={
+    #     "fft_sizes": [512, 1024, 256],  # List of FFT size for STFT-based loss.
+    #     "hop_sizes": [60, 120, 25],  # List of hop size for STFT-based loss
+    #     "win_lengths": [300, 600, 120],  # List of window length for STFT-based loss.
+    #     "window": "hann_window",  # Window function for STFT-based loss
+    # },
+    # use_subband_stft_loss=True,
+    # subband_stft_loss_params={
+    #     "fft_sizes": [192, 342, 86],  # List of FFT size for STFT-based loss.
+    #     "hop_sizes": [15, 30, 5],  # List of hop size for STFT-based loss
+    #     "win_lengths": [75, 150, 30],  # List of window length for STFT-based loss.
+    #     "window": "hann_window",  # Window function for STFT-based loss
+    # },
+
+    # DEFAULT VALUES for 24-khz vocode
     use_stft_loss=True,
     stft_loss_params={
         "fft_sizes": [1024, 2048, 512],  # List of FFT size for STFT-based loss.
@@ -477,7 +493,7 @@ multiband_melgan = HParams(
 
     # Training Settings
     batch_size=64, # Size of the batches used for training.
-    aux_context_window=2,  # this will pad the input so that the resnet can 'see' wider than input length
+    aux_context_window=0,  # this will pad the input so that the resnet can 'see' wider than input length
     seq_len=sp.hop_size * 40,  # Batch max steps (8000) - must be a multiple of hop_length
     # seq_len can be adjusted to increase training sequence length (will increase GPU usage)
     remove_short_samples=True,  # Whether to remove samples the length of which are less than batch_max_steps.

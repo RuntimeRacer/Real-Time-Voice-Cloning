@@ -13,10 +13,10 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from parallel_wavegan.layers import CausalConv1d
-from parallel_wavegan.layers import CausalConvTranspose1d
-from parallel_wavegan.layers import HiFiGANResidualBlock as ResidualBlock
-from parallel_wavegan.utils import read_hdf5
+from vocoder.parallel_wavegan.layers import CausalConv1d
+from vocoder.parallel_wavegan.layers import CausalConvTranspose1d
+from vocoder.parallel_wavegan.layers import HiFiGANResidualBlock as ResidualBlock
+from vocoder.parallel_wavegan.utils import read_hdf5
 
 
 class HiFiGANGenerator(torch.nn.Module):

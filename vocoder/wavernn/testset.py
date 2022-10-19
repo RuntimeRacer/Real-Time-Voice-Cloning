@@ -46,8 +46,8 @@ def gen_testset_wavernn(model, test_set, save_path, vocoder_hparams):
 @torch.no_grad()
 def gen_testset_melgan(accelerator, device, step, model, criterion, test_set, save_path, vocoder_hparams):
     # change mode
-    for key in model.keys():
-        model[key].eval()
+    model["generator"].eval()
+    model["discriminator"].eval()
 
     # Generate from test dataset
     for i, (x_batch, y_batch) in enumerate(test_set, 1):
@@ -66,14 +66,12 @@ def gen_testset_melgan(accelerator, device, step, model, criterion, test_set, sa
         if vocoder_hparams.generator_out_channels > 1:
             y_batch_ = criterion["pqmf"].synthesis(y_batch_)
 
-        save_str = save_path.joinpath("steps_%d_" % (step))
-
-        for idx, (y, y_) in enumerate(zip(y_batch, y_batch_), 1):
+        for _, (y, y_) in enumerate(zip(y_batch, y_batch_), 1):
             # convert to ndarray
             y, y_ = y.view(-1).cpu().numpy(), y_.view(-1).cpu().numpy()
 
             # plot figure and save it
-            figname = os.path.join(save_str, f"{idx}.png")
+            figname = str(save_path.joinpath("steps_%d_%d.png" % (step, i)))
             plt.subplot(2, 1, 1)
             plt.plot(y)
             plt.title("groundtruth speech")
@@ -101,5 +99,5 @@ def gen_testset_melgan(accelerator, device, step, model, criterion, test_set, sa
             )
 
     # restore mode
-    for key in model.keys():
-        model[key].train()
+    model["generator"].train()
+    model["discriminator"].train()

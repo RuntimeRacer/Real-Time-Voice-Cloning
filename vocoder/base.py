@@ -146,14 +146,14 @@ def init_voc_model(
                 out_channels=hparams.discriminator_out_channels,
                 scales=hparams.discriminator_scales,
                 downsample_pooling=hparams.discriminator_downsample_pooling,
-                downsample_pooling_params=hparams.dicriminator_downsample_pooling_params,
-                kernel_sizes=hparams.dicriminator_kernel_sizes,
-                channels=hparams.dicriminator_channels,
-                max_downsample_channels=hparams.dicriminator_max_downsample_channels,
-                downsample_scales=hparams.dicriminator_downsample_scales,
-                nonlinear_activation=hparams.dicriminator_nonlinear_activation,
-                nonlinear_activation_params=hparams.dicriminator_nonlinear_activation_params,
-                use_weight_norm=hparams.dicriminator_use_weight_norm,
+                downsample_pooling_params=hparams.discriminator_downsample_pooling_params,
+                kernel_sizes=hparams.discriminator_kernel_sizes,
+                channels=hparams.discriminator_channels,
+                max_downsample_channels=hparams.discriminator_max_downsample_channels,
+                downsample_scales=hparams.discriminator_downsample_scales,
+                nonlinear_activation=hparams.discriminator_nonlinear_activation,
+                nonlinear_activation_params=hparams.discriminator_nonlinear_activation_params,
+                use_weight_norm=hparams.discriminator_use_weight_norm,
             ).to(device)
         else:
             raise NotImplementedError("Invalid discriminator of type '%s' provided. Aborting..." % hparams.discriminator_type)

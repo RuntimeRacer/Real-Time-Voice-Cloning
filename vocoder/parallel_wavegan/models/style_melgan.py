@@ -10,10 +10,10 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from parallel_wavegan.layers import PQMF
-from parallel_wavegan.layers import TADEResBlock
-from parallel_wavegan.models import MelGANDiscriminator as BaseDiscriminator
-from parallel_wavegan.utils import read_hdf5
+from vocoder.parallel_wavegan.layers import PQMF
+from vocoder.parallel_wavegan.layers import TADEResBlock
+from vocoder.parallel_wavegan.models import MelGANDiscriminator as BaseDiscriminator
+from vocoder.parallel_wavegan.utils import read_hdf5
 
 
 class StyleMelGANGenerator(torch.nn.Module):

@@ -73,7 +73,7 @@ class Visualizations:
         self._print_mean_losses(step)
 
         if not self.disabled:
-            self._update_windows()
+            self._update_windows(step)
 
         # Reset the tracking
         self.losses.clear()
@@ -84,7 +84,7 @@ class Visualizations:
             self.vis.save([self.env_name])
 
     def _append_losses(self, loss_dict):
-        for k, v in loss_dict:
+        for k, v in loss_dict.items():
             if k not in self.losses:
                 self.losses[k] = []
             self.losses[k].append(v)
@@ -93,13 +93,13 @@ class Visualizations:
         time_string = "Step time:  mean: %5dms  std: %5dms" % (
             int(np.mean(self.step_times)), int(np.std(self.step_times))
         )
-        for k, v in self.losses:
+        for k, v in self.losses.items():
             print("\nStep %6d %s: %.6f  %s" % (step, k, np.mean(v), time_string))
 
     def _update_windows(self, step):
-        for k, v in self.losses:
+        for k, v in self.losses.items():
             self.loss_wins[k] = self.vis.line(
-                [np.mean(self.losses)],
+                [np.mean(v)],
                 [step],
                 win=self.loss_wins[k] if k in self.loss_wins else None,
                 update="append" if k in self.loss_wins else None,
