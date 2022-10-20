@@ -23,3 +23,5 @@ webvtt-py
 accelerate==0.4.0
 # pybind11
 psutil
+h5py
+filelock
