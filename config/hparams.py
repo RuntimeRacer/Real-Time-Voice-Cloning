@@ -456,36 +456,37 @@ multiband_melgan = HParams(
     discriminator_use_weight_norm=True,  # Whether to use weight norm.
 
     # STFT Loss settings
-    # use_stft_loss=True,
-    # stft_loss_params={
-    #     "fft_sizes": [512, 1024, 256],  # List of FFT size for STFT-based loss.
-    #     "hop_sizes": [60, 120, 25],  # List of hop size for STFT-based loss
-    #     "win_lengths": [300, 600, 120],  # List of window length for STFT-based loss.
-    #     "window": "hann_window",  # Window function for STFT-based loss
-    # },
-    # use_subband_stft_loss=True,
-    # subband_stft_loss_params={
-    #     "fft_sizes": [192, 342, 86],  # List of FFT size for STFT-based loss.
-    #     "hop_sizes": [15, 30, 5],  # List of hop size for STFT-based loss
-    #     "win_lengths": [75, 150, 30],  # List of window length for STFT-based loss.
-    #     "window": "hann_window",  # Window function for STFT-based loss
-    # },
-
-    # DEFAULT VALUES for 24-khz vocode
+    # DEFAULT VALUES for 16-khz vocode
     use_stft_loss=True,
     stft_loss_params={
-        "fft_sizes": [1024, 2048, 512],  # List of FFT size for STFT-based loss.
-        "hop_sizes": [120, 240, 50],  # List of hop size for STFT-based loss
-        "win_lengths": [600, 1200, 240],  # List of window length for STFT-based loss.
+        "fft_sizes": [512, 1024, 256],  # List of FFT size for STFT-based loss.
+        "hop_sizes": [60, 120, 25],  # List of hop size for STFT-based loss
+        "win_lengths": [300, 600, 120],  # List of window length for STFT-based loss.
         "window": "hann_window",  # Window function for STFT-based loss
     },
     use_subband_stft_loss=True,
     subband_stft_loss_params={
-        "fft_sizes": [384, 683, 171],  # List of FFT size for STFT-based loss.
-        "hop_sizes": [30, 60, 10],  # List of hop size for STFT-based loss
-        "win_lengths": [150, 300, 60],  # List of window length for STFT-based loss.
+        "fft_sizes": [192, 342, 86],  # List of FFT size for STFT-based loss.
+        "hop_sizes": [15, 30, 5],  # List of hop size for STFT-based loss
+        "win_lengths": [75, 150, 30],  # List of window length for STFT-based loss.
         "window": "hann_window",  # Window function for STFT-based loss
     },
+
+    # DEFAULT VALUES for 24-khz vocode
+    # use_stft_loss=True,
+    # stft_loss_params={
+    #     "fft_sizes": [1024, 2048, 512],  # List of FFT size for STFT-based loss.
+    #     "hop_sizes": [120, 240, 50],  # List of hop size for STFT-based loss
+    #     "win_lengths": [600, 1200, 240],  # List of window length for STFT-based loss.
+    #     "window": "hann_window",  # Window function for STFT-based loss
+    # },
+    # use_subband_stft_loss=True,
+    # subband_stft_loss_params={
+    #     "fft_sizes": [384, 683, 171],  # List of FFT size for STFT-based loss.
+    #     "hop_sizes": [30, 60, 10],  # List of hop size for STFT-based loss
+    #     "win_lengths": [150, 300, 60],  # List of window length for STFT-based loss.
+    #     "window": "hann_window",  # Window function for STFT-based loss
+    # },
 
     # Adversarial Loss Setting
     use_feat_match_loss=False,  # Whether to use feature matching loss.
