@@ -12,7 +12,7 @@ from config.hparams import multiband_melgan
 from vocoder.display import simple_table, stream
 from vocoder.wavernn.testset import gen_testset_melgan
 from vocoder import base
-from vocoder.visualizations_melgan import Visualizations
+from utils.visualizations import Visualizations
 from vocoder.vocoder_dataset import VocoderDataset, collate_melgan
 from vocoder.utils import ValueWindow
 
