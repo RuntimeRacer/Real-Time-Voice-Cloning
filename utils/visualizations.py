@@ -1,4 +1,3 @@
-from vocoder.vocoder_dataset import VocoderDataset
 from datetime import datetime
 from time import perf_counter as timer
 import numpy as np
@@ -39,20 +38,20 @@ class Visualizations:
         self.loss_wins = {}
         # self.lr_win = None
 
-    def log_params(self, vocoder_hparams):
+    def log_params(self, hparams):
         if self.disabled:
             return
         param_string = "<b>Training parameters</b>:<br>"
-        for param_name in (p for p in dir(vocoder_hparams) if not p.startswith("__")):
-            value = getattr(vocoder_hparams, param_name)
+        for param_name in (p for p in dir(hparams) if not p.startswith("__")):
+            value = getattr(hparams, param_name)
             param_string += "\t%s: %s<br>" % (param_name, value)
         self.vis.text(param_string, opts={"title": "Parameters"})
 
-    def log_dataset(self, dataset: VocoderDataset):
+    def log_dataset(self, dataset):
         if self.disabled:
             return
         dataset_string = ""
-        dataset_string += "<b>Samples</b>: %s\n" % len(dataset.samples_fpaths)
+        dataset_string += "<b>Samples</b>: %s\n" % dataset.get_len()
         dataset_string += "\n" + dataset.get_logs()
         dataset_string = dataset_string.replace("\n", "<br>")
         self.vis.text(dataset_string, opts={"title": "Dataset"})

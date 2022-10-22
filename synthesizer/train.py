@@ -7,6 +7,8 @@ from accelerate import Accelerator
 from torch import optim
 from torch.utils.data import DataLoader
 
+from collections import defaultdict
+
 from config.hparams import forward_tacotron as hp_forward_tacotron
 from config.hparams import sp
 from config.hparams import tacotron as hp_tacotron
@@ -18,7 +20,7 @@ from synthesizer.utils import ValueWindow
 from synthesizer.utils.plot import plot_spectrogram
 from synthesizer.utils.symbols import symbols
 from synthesizer.utils.text import sequence_to_text
-from synthesizer.visualizations import Visualizations
+from utils.visualizations import Visualizations
 from utils.display import *
 from vocoder.display import *
 
@@ -136,12 +138,6 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
     if accelerator.is_local_main_process:
         vis.log_dataset(dataset)
         vis.log_params(synthesizer_hparams)
-        # FIXME: Print all device names in case we got multiple GPUs or CPUs
-        if accelerator.state.num_processes > 1:
-            vis.log_implementation({"Devices": str(accelerator.state.num_processes)})
-        else:
-            device_name = str(torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU")
-            vis.log_implementation({"Device": device_name})
 
     # Init epoch information
     epoch = 0
@@ -257,7 +253,7 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
 
                 # Backward pass
                 optimizer.zero_grad()
-                accelerator.backward(loss)
+                accelerator.backward(loss["global_loss"])
 
                 if synthesizer_hparams.tts_clip_grad_norm is not None:
                     accelerator.clip_grad_norm_(model.parameters(), synthesizer_hparams.tts_clip_grad_norm)
@@ -265,7 +261,7 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
                 optimizer.step()
 
                 time_window.append(time.time() - start_time)
-                loss_window.append(loss.item())
+                loss_window.append(loss["global_loss"].item())
 
                 # Stream update on training progress
                 if accelerator.is_local_main_process:
@@ -275,7 +271,10 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
                     stream(msg)
 
                 # Update visualizations
-                vis.update(loss.item(), step)
+                total_train_loss = defaultdict(float)
+                for k, v in loss.items():
+                    total_train_loss[k] = v.item()
+                vis.update(total_train_loss, step)
 
                 # Save visdom values
                 if accelerator.is_local_main_process and vis_every != 0 and step % vis_every == 0:
@@ -399,7 +398,14 @@ def tacotron_forward_pass(model, device, texts, mels, embeds, stop):
 
     loss = m1_loss + m2_loss + stop_loss
 
-    return loss, attention, m2_hat, texts, mels, embeds
+    loss_dict = {
+        "m1_loss": m1_loss,
+        "m2_loss": m2_loss,
+        "stop_loss": stop_loss,
+        "global_loss": loss
+    }
+
+    return loss_dict, attention, m2_hat, texts, mels, embeds
 
 
 def forward_tacotron_forward_pass(model, device, texts, text_lens, mels, embeds, durations, mel_lens, phoneme_pitchs, phoneme_energies):
@@ -439,7 +445,16 @@ def forward_tacotron_forward_pass(model, device, texts, text_lens, mels, embeds,
            + hp_forward_tacotron.pitch_loss_factor * pitch_loss \
            + hp_forward_tacotron.energy_loss_factor * energy_loss
 
-    return loss, mel_hat, mel_post, pitch_hat, energy_hat, texts, mels, embeds, durations, mel_lens, phoneme_pitchs, phoneme_energies
+    loss_dict = {
+        "m1_loss": m1_loss,
+        "m2_loss": m2_loss,
+        "dur_loss": dur_loss,
+        "pitch_loss": pitch_loss,
+        "energy_loss": energy_loss,
+        "global_loss": loss
+    }
+
+    return loss_dict, mel_hat, mel_post, pitch_hat, energy_hat, texts, mels, embeds, durations, mel_lens, phoneme_pitchs, phoneme_energies
 
 
 def save(accelerator, model, path, optimizer=None):

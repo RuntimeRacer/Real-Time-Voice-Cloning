@@ -71,6 +71,9 @@ class VocoderDataset(Dataset):
     def __len__(self):
         return len(self.samples_fpaths)
 
+    def get_len(self):
+        return len(self.samples_fpaths)
+
     def get_logs(self):
         samples = len(self.samples_fpaths)
         log_string = "Samples: {0}\n".format(samples)

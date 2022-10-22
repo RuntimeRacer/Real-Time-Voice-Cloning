@@ -96,6 +96,9 @@ class SynthesizerDataset(Dataset):
     def __len__(self):
         return len(self.samples_fnames)
 
+    def get_len(self):
+        return len(self.samples_fnames)
+
     def get_logs(self):
         speakers = 0
         utterances = 0
