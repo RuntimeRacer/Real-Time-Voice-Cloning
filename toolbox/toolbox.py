@@ -238,12 +238,12 @@ class Toolbox:
             self.ui.log("Using seed: %d" % seed)
             print("Using seed: %d" % seed)
 
+        # Init Synthesizer
+        if not synthesizer.is_loaded():
+            self.init_synthesizer()
+
         if seed is not None:
             torch.manual_seed(seed)
-
-        # Init Synthesizer
-        if not synthesizer.is_loaded() or seed is not None:
-            self.init_synthesizer()
 
         # Synthesize the spectrogram
         texts = self.ui.text_prompt.toPlainText().split("\n")
@@ -281,14 +281,13 @@ class Toolbox:
         else:
             seed = None
 
-        if seed is not None:
-            torch.manual_seed(seed)
-
-        # Vocode the waveform
-        if not vocoder.is_loaded() or seed is not None:
+        # Ensure everything is properly set up
+        if not vocoder.is_loaded():
             self.init_vocoder()
-            vocoder.set_seed(seed) # Fixme: This is Hacky and we don't have evidence seed even works for CPP variant...
+        if seed is not None:
+            vocoder.set_seed(seed)
 
+        # Progress function
         def vocoder_progress(i, seq_len, b_size, gen_rate):
             real_time_factor = (gen_rate / sp.sample_rate) * 1000
             line = "Waveform generation: %d/%d (batch size: %d, rate: %.1fkHz - %.2fx real time)" \
@@ -296,6 +295,7 @@ class Toolbox:
             self.ui.log(line, "overwrite")
             self.ui.set_loading(i, seq_len)
 
+        # Vocode the waveform
         if self.ui.current_vocoder_fpath is not None:
             self.ui.log("")
             wav = vocoder.infer_waveform(spec, progress_callback=vocoder_progress)
