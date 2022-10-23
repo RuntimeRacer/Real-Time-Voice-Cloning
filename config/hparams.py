@@ -132,7 +132,7 @@ tacotron = HParams(
         (1, 16, 22, 2e-4, 1e-7)
     ],
 
-    tts_clip_grad_norm=1.0,  # clips the gradient norm to prevent explosion - set to None if not needed
+    clip_grad_norm=1.0,  # clips the gradient norm to prevent explosion - set to None if not needed
 
     eval_interval=500,
     # Number of steps between model evaluation (sample generation). Set to -1 to generate after completing epoch, or 0 to disable

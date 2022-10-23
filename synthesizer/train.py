@@ -255,8 +255,8 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
                 optimizer.zero_grad()
                 accelerator.backward(loss["global_loss"])
 
-                if synthesizer_hparams.tts_clip_grad_norm is not None:
-                    accelerator.clip_grad_norm_(model.parameters(), synthesizer_hparams.tts_clip_grad_norm)
+                if synthesizer_hparams.clip_grad_norm is not None:
+                    accelerator.clip_grad_norm_(model.parameters(), synthesizer_hparams.clip_grad_norm)
 
                 optimizer.step()
 
