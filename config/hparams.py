@@ -194,6 +194,7 @@ forward_tacotron = HParams(
                   (8, 40, 5e-4, 5e-4),
                   (16, 48, 5e-4, 5e-4),
                   (32, 48, 5e-4, 5e-4),
+                  (64, 48, 5e-4, 5e-4),
                   (64, 48, 5e-4, 5e-4)],
 
     duration_loss_factor=0.1,
