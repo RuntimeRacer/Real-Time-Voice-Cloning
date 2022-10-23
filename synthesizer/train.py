@@ -224,6 +224,7 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
                 current_step = step
                 start_time = time.time()
                 model.train() # TODO: Verify this works as intended
+                total_train_loss = defaultdict(float)
 
                 # Break out of loop to update training schedule
                 if current_step > max_step:
@@ -253,7 +254,7 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
 
                 # Backward pass
                 optimizer.zero_grad()
-                accelerator.backward(loss["global_loss"])
+                accelerator.backward(loss["train/global_loss"])
 
                 if synthesizer_hparams.clip_grad_norm is not None:
                     accelerator.clip_grad_norm_(model.parameters(), synthesizer_hparams.clip_grad_norm)
@@ -261,7 +262,7 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
                 optimizer.step()
 
                 time_window.append(time.time() - start_time)
-                loss_window.append(loss["global_loss"].item())
+                loss_window.append(loss["train/global_loss"].item())
 
                 # Stream update on training progress
                 if accelerator.is_local_main_process:
@@ -271,9 +272,8 @@ def train(run_id: str, model_type: str, syn_dir: str, models_dir: str, save_ever
                     stream(msg)
 
                 # Update visualizations
-                total_train_loss = defaultdict(float)
                 for k, v in loss.items():
-                    total_train_loss[k] = v.item()
+                    total_train_loss[k] += v.item()
                 vis.update(total_train_loss, step)
 
                 # Save visdom values
@@ -399,10 +399,10 @@ def tacotron_forward_pass(model, device, texts, mels, embeds, stop):
     loss = m1_loss + m2_loss + stop_loss
 
     loss_dict = {
-        "m1_loss": m1_loss,
-        "m2_loss": m2_loss,
-        "stop_loss": stop_loss,
-        "global_loss": loss
+        "train/m1_loss": m1_loss,
+        "train/m2_loss": m2_loss,
+        "train/stop_loss": stop_loss,
+        "train/global_loss": loss
     }
 
     return loss_dict, attention, m2_hat, texts, mels, embeds
@@ -446,12 +446,12 @@ def forward_tacotron_forward_pass(model, device, texts, text_lens, mels, embeds,
            + hp_forward_tacotron.energy_loss_factor * energy_loss
 
     loss_dict = {
-        "m1_loss": m1_loss,
-        "m2_loss": m2_loss,
-        "dur_loss": dur_loss,
-        "pitch_loss": pitch_loss,
-        "energy_loss": energy_loss,
-        "global_loss": loss
+        "train/m1_loss": m1_loss,
+        "train/m2_loss": m2_loss,
+        "train/dur_loss": dur_loss,
+        "train/pitch_loss": pitch_loss,
+        "train/energy_loss": energy_loss,
+        "train/global_loss": loss
     }
 
     return loss_dict, mel_hat, mel_post, pitch_hat, energy_hat, texts, mels, embeds, durations, mel_lens, phoneme_pitchs, phoneme_energies
