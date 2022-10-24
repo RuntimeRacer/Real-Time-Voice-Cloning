@@ -246,7 +246,10 @@ class Toolbox:
             torch.manual_seed(seed)
 
         # Synthesize the spectrogram
-        texts = self.ui.text_prompt.toPlainText().split("\n")
+        if synthesizer.get_model_type() == syn_base.MODEL_TYPE_TACOTRON:
+            texts = self.ui.text_prompt.toPlainText().split("\n")
+        elif synthesizer.get_model_type() == syn_base.MODEL_TYPE_FORWARD_TACOTRON:
+            texts = [self.ui.text_prompt.toPlainText()]
         embed = self.ui.selected_utterance.embed
         embeds = [embed] * len(texts)
 

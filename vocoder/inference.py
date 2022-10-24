@@ -1,3 +1,5 @@
+import time
+
 from config.hparams import sp, wavernn_fatchord, wavernn_geneing, wavernn_runtimeracer, multiband_melgan
 from vocoder import base
 import vocoder.wavernn.libwavernn.inference as libwavernn
@@ -104,7 +106,12 @@ def infer_waveform(mel, normalize=True,  batched=True, target=None, overlap=None
             if normalize:
                 mel = mel / sp.max_abs_value
             with torch.no_grad():
+                start = time.time()
                 wav = _model["generator"].inference(mel.T)
+                wav_len = len(wav)
+                b_size = hparams.seq_len / sp.hop_size
+                gen_rate = wav_len / (time.time() - start) * b_size / 1000
+                progress_callback(wav_len, wav_len, b_size, gen_rate)
             return wav.squeeze(1)
         else:
             if target is None:
