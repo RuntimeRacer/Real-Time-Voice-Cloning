@@ -1,3 +1,6 @@
+import os
+import random
+
 from toolbox.ui import UI
 from config.hparams import sp
 from encoder import inference as encoder
@@ -205,6 +208,14 @@ class Toolbox:
         # Compute the embedding
         if not encoder.is_loaded():
             self.init_encoder()
+
+        # Set Default Encoder Seed to 111
+        torch.manual_seed(111)
+        np.random.seed(111)
+        os.environ["PYTHONHASHSEED"] = "111"
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
         encoder_wav = encoder.preprocess_wav(wav)
         embed, partial_embeds, _ = encoder.embed_utterance(encoder_wav, return_partials=True)
 
@@ -234,7 +245,7 @@ class Toolbox:
             self.ui.populate_gen_options(seed, self.trim_silences)
         else:
             # Generate random seed
-            seed = torch.seed()
+            seed = random.randint(0, 4294967295)
             self.ui.log("Using seed: %d" % seed)
             print("Using seed: %d" % seed)
 
@@ -242,8 +253,13 @@ class Toolbox:
         if not synthesizer.is_loaded():
             self.init_synthesizer()
 
+        # Ensure everything is properly set up
         if seed is not None:
             torch.manual_seed(seed)
+            np.random.seed(seed)
+            os.environ["PYTHONHASHSEED"] = str(seed)
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
 
         # Synthesize the spectrogram
         if synthesizer.get_model_type() == syn_base.MODEL_TYPE_TACOTRON:
@@ -282,13 +298,22 @@ class Toolbox:
             seed = int(self.ui.seed_textbox.text())
             self.ui.populate_gen_options(seed, self.trim_silences)
         else:
-            seed = None
+            # Generate random seed
+            seed = random.randint(0, 4294967295)
+            self.ui.log("Using seed: %d" % seed)
+            print("Using seed: %d" % seed)
 
-        # Ensure everything is properly set up
+        # Init vocoder
         if not vocoder.is_loaded():
             self.init_vocoder()
+
+        # Ensure everything is properly set up
         if seed is not None:
             vocoder.set_seed(seed)
+            np.random.seed(seed)
+            os.environ["PYTHONHASHSEED"] = str(seed)
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
 
         # Progress function
         def vocoder_progress(i, seq_len, b_size, gen_rate):
