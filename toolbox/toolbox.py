@@ -205,16 +205,16 @@ class Toolbox:
         spec = synthesizer.make_spectrogram(wav)
         self.ui.draw_spec(spec, "current")
 
-        # Compute the embedding
-        if not encoder.is_loaded():
-            self.init_encoder()
-
         # Set Default Encoder Seed to 111
         torch.manual_seed(111)
         np.random.seed(111)
         os.environ["PYTHONHASHSEED"] = "111"
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
+
+        # Compute the embedding
+        if not encoder.is_loaded():
+            self.init_encoder()
 
         encoder_wav = encoder.preprocess_wav(wav)
         embed, partial_embeds, _ = encoder.embed_utterance(encoder_wav, return_partials=True)
@@ -249,10 +249,6 @@ class Toolbox:
             self.ui.log("Using seed: %d" % seed)
             print("Using seed: %d" % seed)
 
-        # Init Synthesizer
-        if not synthesizer.is_loaded():
-            self.init_synthesizer()
-
         # Ensure everything is properly set up
         if seed is not None:
             torch.manual_seed(seed)
@@ -260,6 +256,10 @@ class Toolbox:
             os.environ["PYTHONHASHSEED"] = str(seed)
             torch.backends.cudnn.deterministic = True
             torch.backends.cudnn.benchmark = False
+
+        # Init Synthesizer
+        if not synthesizer.is_loaded():
+            self.init_synthesizer()
 
         # Synthesize the spectrogram
         if synthesizer.get_model_type() == syn_base.MODEL_TYPE_TACOTRON:
@@ -303,10 +303,6 @@ class Toolbox:
             self.ui.log("Using seed: %d" % seed)
             print("Using seed: %d" % seed)
 
-        # Init vocoder
-        if not vocoder.is_loaded():
-            self.init_vocoder()
-
         # Ensure everything is properly set up
         if seed is not None:
             vocoder.set_seed(seed)
@@ -314,6 +310,10 @@ class Toolbox:
             os.environ["PYTHONHASHSEED"] = str(seed)
             torch.backends.cudnn.deterministic = True
             torch.backends.cudnn.benchmark = False
+
+        # Init vocoder
+        if not vocoder.is_loaded():
+            self.init_vocoder()
 
         # Progress function
         def vocoder_progress(i, seq_len, b_size, gen_rate):
