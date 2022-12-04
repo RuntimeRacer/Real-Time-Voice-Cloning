@@ -1,3 +1,5 @@
+import hashlib
+
 import torch
 from synthesizer import audio
 from config.hparams import tacotron as hp_tacotron, sp, preprocessing
@@ -204,8 +206,14 @@ def load_preprocess_wav(fpath):
     train the synthesizer.
     """
     wav = librosa.load(str(fpath), sr=sp.sample_rate)[0]
+    wav_md5 = hashlib.md5(wav)
+    print("MD5 Checks - Wav: {0}".format(wav_md5.hexdigest()))
+
     if preprocessing.rescale:
         wav = wav / np.abs(wav).max() * preprocessing.rescaling_max
+
+    prep_wav_md5 = hashlib.md5(wav)
+    print("MD5 Checks - Preprocessed Wav: {0}".format(prep_wav_md5.hexdigest()))
     return wav
 
 

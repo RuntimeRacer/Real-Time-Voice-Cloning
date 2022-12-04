@@ -1,3 +1,4 @@
+import hashlib
 import os
 import random
 
@@ -218,6 +219,11 @@ class Toolbox:
 
         encoder_wav = encoder.preprocess_wav(wav)
         embed, partial_embeds, _ = encoder.embed_utterance(encoder_wav, return_partials=True)
+
+        # Check embedding generation using MD5
+        encoder_wav_md5 = hashlib.md5(encoder_wav)
+        embed_md5 = hashlib.md5(embed)
+        print("MD5 Checks - Encoded Wav: {0} Embed: {1}".format(encoder_wav_md5.hexdigest(), embed_md5.hexdigest()))
 
         # Add the utterance
         utterance = Utterance(name, speaker_name, wav, spec, embed, partial_embeds, False)
