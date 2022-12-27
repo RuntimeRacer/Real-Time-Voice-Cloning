@@ -29,6 +29,8 @@ if __name__ == '__main__':
         "Optional random number seed value to make toolbox deterministic.")
     parser.add_argument("--no_mp3_support", action="store_true", help=\
         "If True, no mp3 files are allowed.")
+    parser.add_argument("-vf", "--voicefixer_models_dir", type=Path, default="voicefixer/checkpoints",
+                        help="Directory containing saved voicefixer models")
     args = parser.parse_args()
     print_args(args, parser)
 

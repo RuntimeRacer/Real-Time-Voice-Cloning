@@ -8,6 +8,7 @@ from encoder import inference as encoder
 from synthesizer.models import base as syn_base
 from synthesizer import inference as synthesizer
 from vocoder import inference as vocoder, base as voc_base
+from voicefixer.base import VoiceFixer
 from pathlib import Path
 from time import perf_counter as timer
 from toolbox.utterance import Utterance
@@ -47,7 +48,17 @@ MAX_WAVES = 15
 
 
 class Toolbox:
-    def __init__(self, datasets_root, enc_models_dir, syn_models_dir, voc_models_dir, voc_binary_models_dir, seed, no_mp3_support):
+    def __init__(
+            self,
+            datasets_root,
+            enc_models_dir,
+            syn_models_dir,
+            voc_models_dir,
+            voc_binary_models_dir,
+            seed,
+            no_mp3_support,
+            voicefixer_models_dir
+    ):
         if not no_mp3_support:
             try:
                 librosa.load("samples/6829_00000.mp3")
@@ -72,6 +83,7 @@ class Toolbox:
         self.syn_models_dir = syn_models_dir
         self.voc_models_dir = voc_models_dir
         self.voc_binary_models_dir = voc_binary_models_dir
+        self.voicefixer_models_dir = voicefixer_models_dir
 
         # Autotune
         self.autotune_active = False
@@ -183,6 +195,27 @@ class Toolbox:
         if fpath.suffix.lower() == ".mp3" and self.no_mp3_support:
             self.ui.log("Error: No mp3 file argument was passed but an mp3 file was used")
             return
+
+        # If we want to enhance the wav prior to processing, we need to use the voicefixer lib
+        if self.ui.encoder_enhancer_toggle.isChecked():
+            try:
+                # Init the model
+                vf = VoiceFixer(
+                    analysis_model_path=os.path.join(self.voicefixer_models_dir, "vf_analyzer.pt"),
+                    synthesis_model_path=os.path.join(self.voicefixer_models_dir, "vf_vocoder.pt"),
+                )
+                # An enhanced wav file will be created with '_enhanced' in it's name.
+                enhance_fpath = Path(str(fpath).replace(fpath.stem, fpath.stem + "_enhanced").replace(fpath.suffix, '.wav'))
+                vf.restore(fpath, enhance_fpath)
+
+                # Update fpath and file names
+                fpath = enhance_fpath
+                name = fpath.name
+                speaker_name = fpath.parent.name
+            except RuntimeError as e:
+                self.ui.log(e)
+                self.ui.log("Cannot enhance input audio due to model error")
+                pass
 
         # Get the wav from the disk. We take the wav with the vocoder/synthesizer format for
         # playback, so as to have a fair comparison with the generated audio

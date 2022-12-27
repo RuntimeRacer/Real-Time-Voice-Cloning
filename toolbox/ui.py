@@ -551,21 +551,26 @@ class UI(QDialog):
         browser_layout.addWidget(self.stop_button, i, 3)
         i += 1
 
-
         # Model and audio output selection
+        # Encoder
         self.encoder_box = QComboBox()
+        self.encoder_enhancer_toggle = QCheckBox("Enhance reference Audio")
+        self.encoder_enhancer_toggle.setToolTip("When checked, the toolbox tries to use the voicefixer lib to enhance the input audio.")
         browser_layout.addWidget(QLabel("<b>Encoder</b>"), i, 0)
         browser_layout.addWidget(self.encoder_box, i + 1, 0)
+        browser_layout.addWidget(self.encoder_enhancer_toggle, i + 2, 0)
+        # Synthesizer
         self.synthesizer_box = QComboBox()
         browser_layout.addWidget(QLabel("<b>Synthesizer</b>"), i, 1)
         browser_layout.addWidget(self.synthesizer_box, i + 1, 1)
+        # Vocoder
         self.vocoder_box = QComboBox()
         self.vocoder_libwavernn_toggle = QCheckBox("Toggle LibWaveRNN")
-        self.vocoder_libwavernn_toggle.setToolTip("When checked, makes the synthesizer and vocoder deterministic.")
+        self.vocoder_libwavernn_toggle.setToolTip("When checked, the toolbox tries to use the C++ LibWaveRNN vocoder.")
         browser_layout.addWidget(QLabel("<b>Vocoder</b>"), i, 2)
         browser_layout.addWidget(self.vocoder_box, i + 1, 2)
         browser_layout.addWidget(self.vocoder_libwavernn_toggle, i + 2, 2)
-        
+        # Output device
         self.audio_out_devices_cb=QComboBox()
         browser_layout.addWidget(QLabel("<b>Audio Output</b>"), i, 3)
         browser_layout.addWidget(self.audio_out_devices_cb, i + 1, 3)
